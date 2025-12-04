@@ -1,0 +1,61 @@
+.patient-data-viewer .viewer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.patient-data-viewer .data-display {
+  margin-top: 20px;
+  border-top: 2px solid #e0e0e0;
+  padding-top: 20px;
+}
+
+.patient-data-viewer .data-display h3 {
+  color: #667eea;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+}
+
+.json-display {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.patient-summary {
+  margin-top: 20px;
+  border-top: 2px solid #e0e0e0;
+  padding-top: 20px;
+}
+
+.patient-summary h3 {
+  color: #667eea;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.summary-item {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #667eea;
+}
+
+.summary-item strong {
+  color: #667eea;
+  margin-right: 5px;
+}
+

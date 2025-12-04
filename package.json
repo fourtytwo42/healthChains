@@ -1,0 +1,26 @@
+{
+  "name": "blockchain-healthcare-assessment",
+  "version": "1.0.0",
+  "description": "Assessment project for Senior Blockchain & Web3 Developer position",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "compile:contract": "cd backend && npm run compile:contract"
+  },
+  "keywords": [
+    "blockchain",
+    "web3",
+    "healthcare",
+    "solidity",
+    "ethereum"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

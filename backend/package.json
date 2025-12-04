@@ -1,0 +1,38 @@
+{
+  "name": "healthcare-blockchain-backend",
+  "version": "1.0.0",
+  "description": "Backend server for healthcare blockchain assessment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "compile:contract": "npx hardhat compile",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "deploy:hardhat": "npx hardhat run scripts/deploy-hardhat.js --network hardhat",
+    "test:contract": "npx hardhat test"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1",
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.9.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "web3": "^4.3.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.4",
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "blockchain",
+    "web3",
+    "express",
+    "healthcare"
+  ],
+  "author": "",
+  "license": "MIT"
+}
