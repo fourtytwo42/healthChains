@@ -1,0 +1,65 @@
+# Cursor IDE
+.cursor/
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+*.lcov
+
+# Production builds
+/build
+/dist
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Hardhat / Blockchain
+backend/cache/
+backend/artifacts/
+backend/typechain-types/
+backend/deployments/
+backend/deployment.json
+backend/.openzeppelin/
+*.sol.js
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.iml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
