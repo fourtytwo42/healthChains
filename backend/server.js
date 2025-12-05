@@ -550,7 +550,26 @@ app.get('/api/patient/:patientAddress/consents', async (req, res, next) => {
       includeExpired === 'true'
     );
     
-    const result = paginateArray(consents, page, limit);
+    // Enrich with provider info
+    const enrichedConsents = consents.map(consent => {
+      const provider = mockProviders.mockProviders.providers.find(
+        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+      );
+      
+      return {
+        ...consent,
+        provider: provider ? {
+          providerId: provider.providerId,
+          organizationName: provider.organizationName,
+          providerType: provider.providerType,
+          address: provider.address,
+          contact: provider.contact,
+          specialties: provider.specialties
+        } : null
+      };
+    });
+    
+    const result = paginateArray(enrichedConsents, page, limit);
     
     res.json({
       success: true,

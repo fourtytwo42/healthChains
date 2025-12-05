@@ -309,7 +309,7 @@ class ApiClient {
     toBlock?: number
   ) {
     const params = new URLSearchParams();
-    if (patientAddress) params.set('patientAddress', patientAddress);
+    if (patientAddress) params.set('patientAddress', patientAddress.toLowerCase());
     if (fromBlock !== undefined) params.set('fromBlock', fromBlock.toString());
     if (toBlock !== undefined) params.set('toBlock', toBlock.toString());
 
@@ -322,7 +322,7 @@ class ApiClient {
     toBlock?: number
   ) {
     const params = new URLSearchParams();
-    if (patientAddress) params.set('patientAddress', patientAddress);
+    if (patientAddress) params.set('patientAddress', patientAddress.toLowerCase());
     if (fromBlock !== undefined) params.set('fromBlock', fromBlock.toString());
     if (toBlock !== undefined) params.set('toBlock', toBlock.toString());
 
@@ -390,11 +390,14 @@ class ApiClient {
     page = 1,
     limit = 10
   ) {
+    // Normalize address to lowercase for consistent API calls
+    const normalizedAddress = providerAddress.toLowerCase();
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString(),
     });
-    return this.request<{
+    console.log('[apiClient.getProviderPatients] Fetching for provider:', normalizedAddress);
+    const response = await this.request<{
       data: Array<Patient & { consents: Array<{
         consentId: number;
         dataType: string;
@@ -409,7 +412,9 @@ class ApiClient {
         total: number;
         totalPages: number;
       };
-    }>(`/api/provider/${providerAddress}/patients?${params}`);
+    }>(`/api/provider/${normalizedAddress}/patients?${params}`);
+    console.log('[apiClient.getProviderPatients] Response:', response);
+    return response;
   }
 
   async getProviderPatientData(providerAddress: string, patientId: string) {

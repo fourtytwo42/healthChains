@@ -224,13 +224,23 @@ export default function ProviderDashboardPage() {
               <CardDescription>View patients who have granted you access to their data</CardDescription>
             </CardHeader>
             <CardContent>
-              {grantedPatientsLoading ? (
-                <div className="space-y-2">
-                  {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : grantedPatientsData?.data && grantedPatientsData.data.length > 0 ? (
+              {(() => {
+                console.log('[ProviderDashboard] Granted Consent Tab - Loading:', grantedPatientsLoading);
+                console.log('[ProviderDashboard] Granted Consent Tab - Data:', grantedPatientsData);
+                
+                if (grantedPatientsLoading) {
+                  return (
+                    <div className="space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                      ))}
+                    </div>
+                  );
+                }
+                
+                const patientsData = grantedPatientsData as { data: any[]; pagination: any } | undefined;
+                if (patientsData?.data && Array.isArray(patientsData.data) && patientsData.data.length > 0) {
+                  return (
                 <>
                   <Table>
                     <TableHeader>
@@ -243,7 +253,7 @@ export default function ProviderDashboardPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {grantedPatientsData.data.map((patient: any) => (
+                      {patientsData.data.map((patient: any) => (
                         <TableRow
                           key={patient.patientId}
                           className="cursor-pointer hover:bg-muted/50"
@@ -287,22 +297,26 @@ export default function ProviderDashboardPage() {
                       ))}
                     </TableBody>
                   </Table>
-                  {grantedPatientsData.pagination && grantedPatientsData.pagination.totalPages > 1 && (
+                  {patientsData.pagination && patientsData.pagination.totalPages > 1 && (
                     <div className="mt-4">
                       <Pagination
-                        page={grantedPatientsData.pagination.page}
-                        totalPages={grantedPatientsData.pagination.totalPages}
+                        page={patientsData.pagination.page}
+                        totalPages={patientsData.pagination.totalPages}
                         onPageChange={setPage}
-                        totalItems={grantedPatientsData.pagination.total}
+                        totalItems={patientsData.pagination.total}
                       />
                     </div>
                   )}
                 </>
-              ) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No patients with granted consent
-                </div>
-              )}
+                  );
+                }
+                
+                return (
+                  <div className="text-center text-muted-foreground py-8">
+                    No patients with granted consent
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

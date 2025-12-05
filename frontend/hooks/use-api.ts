@@ -537,6 +537,9 @@ export function useGrantConsent() {
       );
       // Invalidate relevant queries to refetch data
       queryClient.invalidateQueries({ queryKey: ['consents'] });
+      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents
+      queryClient.invalidateQueries({ queryKey: ['providerPatients'] }); // Invalidate provider patients list
+      queryClient.invalidateQueries({ queryKey: ['providerConsents'] }); // Invalidate provider consents
       queryClient.invalidateQueries({ queryKey: ['consentStatus'] });
       queryClient.invalidateQueries({ queryKey: ['consentEvents'] });
     },
@@ -603,6 +606,9 @@ export function useRevokeConsent() {
         description: `Transaction: ${data.transactionHash.slice(0, 10)}...`,
       });
       queryClient.invalidateQueries({ queryKey: ['consents'] });
+      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents
+      queryClient.invalidateQueries({ queryKey: ['providerPatients'] }); // Invalidate provider patients list
+      queryClient.invalidateQueries({ queryKey: ['providerConsents'] }); // Invalidate provider consents
       queryClient.invalidateQueries({ queryKey: ['consentStatus'] });
       queryClient.invalidateQueries({ queryKey: ['consentEvents'] });
     },
@@ -733,6 +739,10 @@ export function useApproveRequest() {
       });
       queryClient.invalidateQueries({ queryKey: ['requests'] });
       queryClient.invalidateQueries({ queryKey: ['consents'] });
+      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents
+      queryClient.invalidateQueries({ queryKey: ['providerPatients'] }); // Invalidate provider patients list
+      queryClient.invalidateQueries({ queryKey: ['providerConsents'] }); // Invalidate provider consents
+      queryClient.invalidateQueries({ queryKey: ['patientPendingRequests'] }); // Remove from pending
       queryClient.invalidateQueries({ queryKey: ['accessRequestEvents'] });
     },
     onError: (error: Error) => {
@@ -851,15 +861,36 @@ export function useProviderPatients(
   enabled = true
 ) {
   return useQuery({
-    queryKey: ['providerPatients', providerAddress, page, limit],
+    queryKey: ['providerPatients', providerAddress?.toLowerCase(), page, limit],
     queryFn: async () => {
-      const response = await apiClient.getProviderPatients(providerAddress, page, limit);
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = providerAddress.toLowerCase();
+      console.log('[useProviderPatients] Fetching for provider:', normalizedAddress, 'enabled:', enabled);
+      const response = await apiClient.getProviderPatients(normalizedAddress, page, limit);
+      console.log('[useProviderPatients] Response:', response);
       if (!response.success || !response.data) {
+        console.error('[useProviderPatients] Failed response:', response);
         throw new Error('Failed to fetch provider patients');
       }
-      return response.data;
+      
+      // Return the data with pagination info (similar to usePatientPendingRequests)
+      const dataArray = Array.isArray(response.data) ? response.data : [];
+      const result = {
+        data: dataArray,
+        pagination: response.pagination || {
+          page: Number(page),
+          limit: Number(limit),
+          total: dataArray.length,
+          totalPages: Math.ceil(dataArray.length / Number(limit))
+        }
+      };
+      
+      console.log('[useProviderPatients] Returning result:', result);
+      return result;
     },
     enabled: enabled && !!providerAddress,
+    staleTime: 0, // Always refetch to get latest consents
+    refetchInterval: 10000, // Refetch every 10 seconds to catch new consents
   });
 }
 
@@ -925,10 +956,12 @@ export function usePatientConsentsPaginated(
   enabled = true
 ) {
   return useQuery({
-    queryKey: ['patientConsents', patientAddress, page, limit, includeExpired],
+    queryKey: ['patientConsents', patientAddress?.toLowerCase(), page, limit, includeExpired],
     queryFn: async () => {
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = patientAddress.toLowerCase();
       const response = await apiClient.getPatientConsentsPaginated(
-        patientAddress,
+        normalizedAddress,
         page,
         limit,
         includeExpired
@@ -936,9 +969,24 @@ export function usePatientConsentsPaginated(
       if (!response.success || !response.data) {
         throw new Error('Failed to fetch patient consents');
       }
-      return response.data;
+      
+      // Return the data with pagination info (similar to usePatientPendingRequests)
+      const dataArray = Array.isArray(response.data) ? response.data : [];
+      const result = {
+        data: dataArray,
+        pagination: response.pagination || {
+          page: Number(page),
+          limit: Number(limit),
+          total: dataArray.length,
+          totalPages: Math.ceil(dataArray.length / Number(limit))
+        }
+      };
+      
+      return result;
     },
     enabled: enabled && !!patientAddress,
+    staleTime: 0, // Always refetch to get latest consents
+    refetchInterval: 10000, // Refetch every 10 seconds to catch new consents
   });
 }
 
@@ -989,6 +1037,124 @@ export function usePatientPendingRequests(
     enabled: enabled && !!patientAddress,
     staleTime: 0, // Always refetch to get latest requests
     refetchInterval: 10000, // Refetch every 10 seconds to catch new requests
+  });
+}
+
+/**
+ * Hook for getting patient consent history (all events)
+ */
+export function usePatientConsentHistory(
+  patientAddress: string,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['patientConsentHistory', patientAddress?.toLowerCase()],
+    queryFn: async () => {
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = patientAddress.toLowerCase();
+      
+      // Fetch both consent events and access request events
+      const [consentEventsResponse, requestEventsResponse] = await Promise.all([
+        apiClient.getConsentEvents(normalizedAddress),
+        apiClient.getAccessRequestEvents(normalizedAddress),
+      ]);
+
+      // Combine events
+      const allEvents = [
+        ...(consentEventsResponse.success && consentEventsResponse.data ? consentEventsResponse.data : []),
+        ...(requestEventsResponse.success && requestEventsResponse.data ? requestEventsResponse.data : []),
+      ];
+
+      // Fetch provider info for enrichment
+      const providersResponse = await apiClient.getProviders();
+      const providers = providersResponse.success && providersResponse.data ? providersResponse.data : [];
+
+      // Enrich events with provider info and check for expired consents
+      const enrichedEvents = allEvents.map((event: any) => {
+        // Find provider by address
+        const provider = event.provider || event.requester 
+          ? providers.find((p: any) => 
+              p.blockchainIntegration?.walletAddress?.toLowerCase() === (event.provider || event.requester)?.toLowerCase()
+            )
+          : null;
+
+        // Check if consent expired (for ConsentGranted events)
+        const isExpired = event.type === 'ConsentGranted' && 
+          event.expirationTime && 
+          new Date(event.expirationTime) < new Date();
+
+        return {
+          ...event,
+          providerInfo: provider ? {
+            organizationName: provider.organizationName,
+            providerType: provider.providerType,
+          } : null,
+          isExpired,
+        };
+      });
+
+      // Add expired consent events for consents that expired but weren't revoked
+      // Get all current consents to check for expired ones
+      try {
+        const consentsResponse = await apiClient.getPatientConsentsPaginated(normalizedAddress, 1, 100, true);
+        if (consentsResponse.success && consentsResponse.data) {
+          // The response.data is { data: ConsentRecord[], pagination: {...} }
+          const consentsArray = Array.isArray(consentsResponse.data) 
+            ? consentsResponse.data 
+            : (consentsResponse.data as any)?.data || [];
+          
+          const expiredConsents = consentsArray.filter((c: any) => 
+            c.isExpired && c.isActive
+          );
+
+          // For each expired consent, check if there's already a revocation event
+          expiredConsents.forEach((consent: any) => {
+          const hasRevocationEvent = enrichedEvents.some((e: any) => 
+            e.type === 'ConsentRevoked' && e.consentId === consent.consentId
+          );
+
+          // If no revocation event exists, add an "expired" event
+          if (!hasRevocationEvent) {
+            const provider = providers.find((p: any) => 
+              p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+            );
+
+            enrichedEvents.push({
+              type: 'ConsentExpired',
+              blockNumber: 0, // Not a blockchain event
+              transactionHash: '',
+              consentId: consent.consentId,
+              patient: normalizedAddress,
+              provider: consent.providerAddress,
+              dataType: consent.dataType,
+              purpose: consent.purpose,
+              expirationTime: consent.expirationTime,
+              timestamp: consent.expirationTime || consent.timestamp,
+              providerInfo: provider ? {
+                organizationName: provider.organizationName,
+                providerType: provider.providerType,
+              } : null,
+              isExpired: true,
+            });
+          }
+        });
+      } catch (error) {
+        // If fetching consents fails, just continue without expired events
+        console.warn('Failed to fetch consents for expired event detection:', error);
+      }
+
+      // Sort by timestamp (most recent first)
+      enrichedEvents.sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+
+      return enrichedEvents;
+    },
+    enabled: enabled && !!patientAddress,
+    staleTime: 0, // Always refetch to get latest history
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 }
 

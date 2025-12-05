@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 
 /**
- * Theme Toggle - Switches between light, dark, and system themes
+ * Theme Toggle - Switches between light and dark themes
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -25,27 +25,22 @@ export function ThemeToggle() {
     );
   }
 
+  // Normalize theme - if it's 'system' or anything else, default to 'light'
+  const currentTheme = theme === 'dark' ? 'dark' : 'light';
+
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={() => {
-        if (theme === 'light') {
-          setTheme('dark');
-        } else if (theme === 'dark') {
-          setTheme('system');
-        } else {
-          setTheme('light');
-        }
+        setTheme(currentTheme === 'light' ? 'dark' : 'light');
       }}
       aria-label="Toggle theme"
     >
-      {theme === 'light' ? (
+      {currentTheme === 'light' ? (
         <Sun className="h-5 w-5" />
-      ) : theme === 'dark' ? (
-        <Moon className="h-5 w-5" />
       ) : (
-        <Sun className="h-5 w-5 opacity-50" />
+        <Moon className="h-5 w-5" />
       )}
     </Button>
   );

@@ -4,21 +4,14 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { WalletConnector } from '@/components/wallet-connector';
 import { useContractInfo } from '@/hooks/use-api';
 import { useWallet } from '@/contexts/wallet-context';
-import { useRole } from '@/hooks/use-role';
-import { NotificationDropdown } from '@/components/patient/notification-dropdown';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
- * Header Component with theme toggle, wallet connector, network status, and notifications
+ * Header Component with theme toggle, wallet connector, and network status
  */
 export function Header() {
   const { data: contractInfo, isLoading } = useContractInfo();
-  const { account } = useWallet();
-  // Only fetch role when account is available
-  const { role } = useRole(account);
-
-  const isPatient = account && (role?.role === 'patient' || role?.role === 'both');
 
   return (
     <header role="banner" className="flex h-16 items-center justify-between border-b bg-background px-6">
@@ -37,9 +30,6 @@ export function Header() {
         )}
       </div>
       <div className="flex items-center gap-4">
-        {isPatient && account && (
-          <NotificationDropdown patientAddress={account} />
-        )}
         <WalletConnector />
         <ThemeToggle />
       </div>
