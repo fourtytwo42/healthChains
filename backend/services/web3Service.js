@@ -18,6 +18,8 @@ class Web3Service {
   constructor() {
     this.provider = null;
     this.contract = null;
+    this.signer = null;
+    this.signedContract = null; // Contract instance with signer for write operations
     this.contractAddress = null;
     this.networkName = null;
     this.chainId = null;
@@ -84,12 +86,30 @@ class Web3Service {
       );
     }
 
-    // Create contract instance
+    // Create contract instance (read-only)
     this.contract = new ethers.Contract(
       this.contractAddress,
       abi,
       this.provider
     );
+
+    // Create signer and signed contract instance for write operations (if private key provided)
+    const privateKey = process.env.PRIVATE_KEY;
+    if (privateKey) {
+      try {
+        this.signer = new ethers.Wallet(privateKey, this.provider);
+        this.signedContract = new ethers.Contract(
+          this.contractAddress,
+          abi,
+          this.signer
+        );
+        console.log(`✅ Signer configured for write operations: ${this.signer.address}`);
+      } catch (error) {
+        console.warn('⚠️  Warning: Failed to create signer. Write operations will not be available:', error.message);
+      }
+    } else {
+      console.warn('⚠️  Warning: PRIVATE_KEY not set. Write operations will not be available.');
+    }
 
     this.isInitialized = true;
     console.log(`✅ Contract instance created at ${this.contractAddress}`);
@@ -98,7 +118,7 @@ class Web3Service {
   /**
    * Get the contract instance (lazy initialization)
    * 
-   * @returns {Promise<ethers.Contract>} Contract instance
+   * @returns {Promise<ethers.Contract>} Contract instance (read-only)
    * @throws {ConfigurationError} If service not initialized
    */
   async getContract() {
@@ -106,6 +126,36 @@ class Web3Service {
       await this.initialize();
     }
     return this.contract;
+  }
+
+  /**
+   * Get the signed contract instance for write operations
+   * 
+   * @returns {Promise<ethers.Contract>} Signed contract instance
+   * @throws {ConfigurationError} If service not initialized or signer not available
+   */
+  async getSignedContract() {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    if (!this.signedContract) {
+      throw new ConfigurationError(
+        'Signed contract not available. Set PRIVATE_KEY environment variable for write operations.'
+      );
+    }
+    return this.signedContract;
+  }
+
+  /**
+   * Get the signer address
+   * 
+   * @returns {Promise<string|null>} Signer address or null if not available
+   */
+  async getSignerAddress() {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    return this.signer ? this.signer.address : null;
   }
 
   /**

@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the REST API endpoints for the Healthcare Blockchain Backend. The API provides access to patient and provider data, as well as blockchain-based consent management functionality.
+This document describes the REST API endpoints for the Healthcare Blockchain Backend. The API provides **read-only** access to patient and provider data, as well as blockchain-based consent management data.
+
+**Important**: Write operations (grant, revoke, approve, deny) are handled directly by the frontend via MetaMask signing. The backend does not sign user transactions. See [frontend/README.md](../frontend/README.md) for information on direct contract calls.
 
 ## Base URL
 
@@ -135,7 +137,9 @@ Get provider by ID.
 
 ---
 
-### Consent Management (Web3)
+### Consent Management (Web3 - Read-Only)
+
+> **Note**: All endpoints in this section are **read-only**. They query blockchain data but do not modify the blockchain state. Write operations (grant, revoke, approve, deny) are handled directly by the frontend via MetaMask signing.
 
 #### GET /api/consent/status
 Check if active consent exists between patient and provider.
@@ -234,7 +238,9 @@ Get all consents for a provider.
 
 ---
 
-### Access Requests
+### Access Requests (Read-Only)
+
+> **Note**: All endpoints in this section are **read-only**. Write operations (create request, approve, deny) are handled directly by the frontend via MetaMask signing.
 
 #### GET /api/requests/:requestId
 Get access request by ID.
@@ -284,7 +290,9 @@ Get all access requests for a patient.
 
 ---
 
-### Event Queries
+### Event Queries (Read-Only)
+
+> **Note**: These endpoints query blockchain events. They are read-only and do not modify blockchain state.
 
 #### GET /api/events/consent
 Query consent events (ConsentGranted, ConsentRevoked).
@@ -417,6 +425,33 @@ Currently, no rate limiting is implemented. Consider implementing rate limiting 
 
 Currently, no authentication is required. All endpoints are publicly accessible. Consider implementing authentication for production deployments.
 
+## Write Operations (POST/PUT) - DEPRECATED
+
+> **⚠️ IMPORTANT**: These write endpoints are **deprecated**. The frontend now signs transactions directly via MetaMask. These endpoints are kept for backward compatibility but should not be used in production.
+
+### Architecture Change
+
+**Current Architecture (Recommended)**:
+- **Reads**: Frontend → Backend API → Smart Contract (read-only)
+- **Writes**: Frontend → MetaMask Signer → Smart Contract (direct, user signs)
+
+**Old Architecture (Deprecated)**:
+- **Writes**: Frontend → Backend API → Backend Signer → Smart Contract
+
+The old architecture required the backend to have user private keys, which is a security risk. The new architecture follows Web3 best practices where users sign their own transactions via MetaMask.
+
+### Deprecated Endpoints
+
+The following endpoints are deprecated and should not be used:
+
+- `POST /api/consent/grant` - Use direct contract call from frontend
+- `PUT /api/consent/:consentId/revoke` - Use direct contract call from frontend
+- `POST /api/requests` - Use direct contract call from frontend
+- `PUT /api/requests/:requestId/approve` - Use direct contract call from frontend
+- `PUT /api/requests/:requestId/deny` - Use direct contract call from frontend
+
+See [frontend/README.md](../frontend/README.md) for information on direct contract calls.
+
 ## Examples
 
 ### Check Consent Status
@@ -427,6 +462,12 @@ curl "http://localhost:3001/api/consent/status?patientAddress=0x123...&providerA
 ### Get Patient Consents
 ```bash
 curl "http://localhost:3001/api/consent/patient/0x123..."
+```
+
+### Grant Consent (Deprecated - Use Frontend Direct Contract Call)
+```bash
+# ⚠️ This endpoint is deprecated. Use frontend MetaMask signing instead.
+# See frontend/README.md for direct contract call instructions.
 ```
 
 ### Query Consent Events

@@ -788,6 +788,370 @@ class ConsentService {
       );
     }
   }
+
+  /**
+   * Grant consent to a provider (write operation)
+   * 
+   * @param {string} patientAddress - Ethereum address of patient (must match signer)
+   * @param {string} providerAddress - Ethereum address of provider
+   * @param {string} dataType - Type of data
+   * @param {number} expirationTime - Unix timestamp (0 for no expiration)
+   * @param {string} purpose - Purpose for data use
+   * @returns {Promise<Object>} Transaction result with consentId and transaction hash
+   * @throws {ValidationError} If inputs are invalid
+   * @throws {ContractError} If contract call fails
+   * @throws {ConfigurationError} If signer not available
+   */
+  async grantConsent(patientAddress, providerAddress, dataType, expirationTime, purpose) {
+    // Validate inputs
+    validateAddress(patientAddress, 'patientAddress');
+    validateAddress(providerAddress, 'providerAddress');
+    
+    if (!dataType || typeof dataType !== 'string' || dataType.trim().length === 0) {
+      throw new ValidationError('dataType is required and must be a non-empty string', 'dataType', dataType);
+    }
+    
+    if (!purpose || typeof purpose !== 'string' || purpose.trim().length === 0) {
+      throw new ValidationError('purpose is required and must be a non-empty string', 'purpose', purpose);
+    }
+
+    if (!Number.isInteger(expirationTime) || expirationTime < 0) {
+      throw new ValidationError('expirationTime must be a non-negative integer', 'expirationTime', expirationTime);
+    }
+
+    // Normalize addresses
+    const normalizedPatient = normalizeAddress(patientAddress);
+    const normalizedProvider = normalizeAddress(providerAddress);
+
+    try {
+      const signedContract = await web3Service.getSignedContract();
+      
+      // Verify signer matches patient (for security)
+      const signerAddress = await web3Service.getSignerAddress();
+      if (signerAddress && normalizeAddress(signerAddress) !== normalizedPatient) {
+        throw new ValidationError(
+          'Signer address does not match patient address. Patient must sign their own transactions.',
+          'patientAddress',
+          patientAddress
+        );
+      }
+
+      // Call contract with timeout
+      const tx = await Promise.race([
+        signedContract.grantConsent(
+          normalizedProvider,
+          dataType,
+          expirationTime,
+          purpose
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction timeout')), 60000)
+        )
+      ]);
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait();
+
+      // Extract consent ID from event
+      let consentId = null;
+      try {
+        for (const log of receipt.logs) {
+          try {
+            const parsed = signedContract.interface.parseLog(log);
+            if (parsed && parsed.name === 'ConsentGranted') {
+              consentId = Number(parsed.args.consentId);
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse ConsentGranted event:', parseError);
+      }
+
+      return {
+        success: true,
+        consentId: consentId,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      };
+    } catch (error) {
+      if (error.message === 'Transaction timeout') {
+        throw new Web3ConnectionError('Transaction timed out');
+      }
+      if (error.code === 'ACTION_REJECTED' || error.reason?.includes('user rejected')) {
+        throw new ContractError('Transaction was rejected by user', 'grantConsent', error);
+      }
+      throw new ContractError(
+        'Failed to grant consent',
+        'grantConsent',
+        error
+      );
+    }
+  }
+
+  /**
+   * Revoke consent (write operation)
+   * 
+   * @param {string} patientAddress - Ethereum address of patient (must match signer)
+   * @param {number} consentId - Consent ID to revoke
+   * @returns {Promise<Object>} Transaction result with transaction hash
+   * @throws {ValidationError} If inputs are invalid
+   * @throws {ContractError} If contract call fails
+   * @throws {NotFoundError} If consent not found
+   */
+  async revokeConsent(patientAddress, consentId) {
+    // Validate inputs
+    validateAddress(patientAddress, 'patientAddress');
+    
+    if (!Number.isInteger(consentId) || consentId < 0) {
+      throw new InvalidIdError(consentId, 'consentId');
+    }
+
+    // Verify consent exists and belongs to patient
+    const consent = await this.getConsentRecord(consentId);
+    const normalizedPatient = normalizeAddress(patientAddress);
+    
+    if (normalizeAddress(consent.patientAddress) !== normalizedPatient) {
+      throw new ValidationError(
+        'Consent does not belong to this patient',
+        'patientAddress',
+        patientAddress
+      );
+    }
+
+    try {
+      const signedContract = await web3Service.getSignedContract();
+      
+      // Verify signer matches patient
+      const signerAddress = await web3Service.getSignerAddress();
+      if (signerAddress && normalizeAddress(signerAddress) !== normalizedPatient) {
+        throw new ValidationError(
+          'Signer address does not match patient address',
+          'patientAddress',
+          patientAddress
+        );
+      }
+
+      // Call contract
+      const tx = await Promise.race([
+        signedContract.revokeConsent(consentId),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction timeout')), 60000)
+        )
+      ]);
+
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        consentId: consentId,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      };
+    } catch (error) {
+      if (error.message === 'Transaction timeout') {
+        throw new Web3ConnectionError('Transaction timed out');
+      }
+      if (error.code === 'ACTION_REJECTED' || error.reason?.includes('user rejected')) {
+        throw new ContractError('Transaction was rejected', 'revokeConsent', error);
+      }
+      throw new ContractError(
+        'Failed to revoke consent',
+        'revokeConsent',
+        error
+      );
+    }
+  }
+
+  /**
+   * Request access to patient data (write operation)
+   * 
+   * @param {string} requesterAddress - Ethereum address of requester (must match signer)
+   * @param {string} patientAddress - Ethereum address of patient
+   * @param {string} dataType - Type of data requested
+   * @param {string} purpose - Purpose for data use
+   * @param {number} expirationTime - Unix timestamp (0 for no expiration)
+   * @returns {Promise<Object>} Transaction result with requestId and transaction hash
+   * @throws {ValidationError} If inputs are invalid
+   * @throws {ContractError} If contract call fails
+   */
+  async requestAccess(requesterAddress, patientAddress, dataType, purpose, expirationTime) {
+    // Validate inputs
+    validateAddress(requesterAddress, 'requesterAddress');
+    validateAddress(patientAddress, 'patientAddress');
+    
+    if (!dataType || typeof dataType !== 'string' || dataType.trim().length === 0) {
+      throw new ValidationError('dataType is required and must be a non-empty string', 'dataType', dataType);
+    }
+    
+    if (!purpose || typeof purpose !== 'string' || purpose.trim().length === 0) {
+      throw new ValidationError('purpose is required and must be a non-empty string', 'purpose', purpose);
+    }
+
+    if (!Number.isInteger(expirationTime) || expirationTime < 0) {
+      throw new ValidationError('expirationTime must be a non-negative integer', 'expirationTime', expirationTime);
+    }
+
+    // Normalize addresses
+    const normalizedRequester = normalizeAddress(requesterAddress);
+    const normalizedPatient = normalizeAddress(patientAddress);
+
+    if (normalizedRequester === normalizedPatient) {
+      throw new ValidationError('Requester cannot request access from themselves', 'patientAddress', patientAddress);
+    }
+
+    try {
+      const signedContract = await web3Service.getSignedContract();
+      
+      // Verify signer matches requester
+      const signerAddress = await web3Service.getSignerAddress();
+      if (signerAddress && normalizeAddress(signerAddress) !== normalizedRequester) {
+        throw new ValidationError(
+          'Signer address does not match requester address',
+          'requesterAddress',
+          requesterAddress
+        );
+      }
+
+      // Call contract
+      const tx = await Promise.race([
+        signedContract.requestAccess(
+          normalizedPatient,
+          dataType,
+          purpose,
+          expirationTime
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction timeout')), 60000)
+        )
+      ]);
+
+      const receipt = await tx.wait();
+
+      // Extract request ID from event
+      let requestId = null;
+      try {
+        for (const log of receipt.logs) {
+          try {
+            const parsed = signedContract.interface.parseLog(log);
+            if (parsed && parsed.name === 'AccessRequested') {
+              requestId = Number(parsed.args.requestId);
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse AccessRequested event:', parseError);
+      }
+
+      return {
+        success: true,
+        requestId: requestId,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      };
+    } catch (error) {
+      if (error.message === 'Transaction timeout') {
+        throw new Web3ConnectionError('Transaction timed out');
+      }
+      if (error.code === 'ACTION_REJECTED' || error.reason?.includes('user rejected')) {
+        throw new ContractError('Transaction was rejected', 'requestAccess', error);
+      }
+      throw new ContractError(
+        'Failed to request access',
+        'requestAccess',
+        error
+      );
+    }
+  }
+
+  /**
+   * Respond to access request - approve or deny (write operation)
+   * 
+   * @param {string} patientAddress - Ethereum address of patient (must match signer)
+   * @param {number} requestId - Request ID to respond to
+   * @param {boolean} approved - True to approve, false to deny
+   * @returns {Promise<Object>} Transaction result with transaction hash
+   * @throws {ValidationError} If inputs are invalid
+   * @throws {ContractError} If contract call fails
+   * @throws {NotFoundError} If request not found
+   */
+  async respondToAccessRequest(patientAddress, requestId, approved) {
+    // Validate inputs
+    validateAddress(patientAddress, 'patientAddress');
+    
+    if (!Number.isInteger(requestId) || requestId < 0) {
+      throw new InvalidIdError(requestId, 'requestId');
+    }
+
+    if (typeof approved !== 'boolean') {
+      throw new ValidationError('approved must be a boolean', 'approved', approved);
+    }
+
+    // Verify request exists and belongs to patient
+    const request = await this.getAccessRequest(requestId);
+    const normalizedPatient = normalizeAddress(patientAddress);
+    
+    if (normalizeAddress(request.patientAddress) !== normalizedPatient) {
+      throw new ValidationError(
+        'Request does not belong to this patient',
+        'patientAddress',
+        patientAddress
+      );
+    }
+
+    try {
+      const signedContract = await web3Service.getSignedContract();
+      
+      // Verify signer matches patient
+      const signerAddress = await web3Service.getSignerAddress();
+      if (signerAddress && normalizeAddress(signerAddress) !== normalizedPatient) {
+        throw new ValidationError(
+          'Signer address does not match patient address',
+          'patientAddress',
+          patientAddress
+        );
+      }
+
+      // Call contract
+      const tx = await Promise.race([
+        signedContract.respondToAccessRequest(requestId, approved),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction timeout')), 60000)
+        )
+      ]);
+
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        requestId: requestId,
+        approved: approved,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      };
+    } catch (error) {
+      if (error.message === 'Transaction timeout') {
+        throw new Web3ConnectionError('Transaction timed out');
+      }
+      if (error.code === 'ACTION_REJECTED' || error.reason?.includes('user rejected')) {
+        throw new ContractError('Transaction was rejected', 'respondToAccessRequest', error);
+      }
+      throw new ContractError(
+        'Failed to respond to access request',
+        'respondToAccessRequest',
+        error
+      );
+    }
+  }
 }
 
 // Export singleton instance

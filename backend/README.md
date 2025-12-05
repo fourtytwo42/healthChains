@@ -7,12 +7,14 @@ Express.js backend server with Web3 integration for the Healthcare Blockchain As
 ## Features
 
 - **REST API** for patient and provider data
-- **Web3 Integration** using ethers.js v6
-- **Consent Management** endpoints for blockchain interactions
+- **Web3 Integration** using ethers.js v6 (read-only operations)
+- **Consent Management** endpoints for blockchain data queries
 - **Event Querying** for consent and access request events
 - **Comprehensive Error Handling** with structured error responses
 - **Input Validation** for all endpoints
 - **Comprehensive Testing** (unit and integration tests)
+
+**Note**: The backend performs **read-only** blockchain operations. Write operations (grant, revoke, approve, deny) are handled directly by the frontend via MetaMask signing. This follows Web3 best practices where users control their own transactions.
 
 ## Project Structure
 
@@ -225,12 +227,15 @@ Centralized error handling:
 ## Security Considerations
 
 - ✅ **No private keys in code** - All secrets via environment variables
-- ✅ **Read-only operations** - Backend performs read operations only
+- ✅ **Read-only operations** - Backend performs read operations only (no write transactions)
+- ✅ **No user private keys** - Users sign transactions directly via MetaMask in frontend
 - ✅ **Input validation** - All user inputs validated and sanitized
 - ✅ **Error sanitization** - Internal errors not exposed to clients
 - ✅ **Connection resilience** - RPC failures handled with retries
 - ✅ **Block range limits** - Prevents DoS from large queries
 - ✅ **Request timeouts** - Prevents hanging requests
+
+**Architecture**: The backend never signs user transactions. All write operations are handled by the frontend with MetaMask, ensuring users maintain full control of their private keys.
 
 ## Development
 

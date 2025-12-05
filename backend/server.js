@@ -212,8 +212,8 @@ app.get('/api/contract/info', async (req, res, next) => {
 
 // Consent management routes (Web3 integration)
 app.use('/api/consent', consentRoutes);
-app.use('/api/requests', consentRoutes); // Alias for backward compatibility
-app.use('/api/events', consentRoutes); // Alias for backward compatibility
+app.use('/api/requests', consentRoutes); // Access request routes
+app.use('/api/events', consentRoutes); // Event query routes
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

@@ -10,15 +10,51 @@ This assessment project is designed to evaluate candidates for the **Senior Bloc
 .
 ├── backend/                 # Node.js backend server
 │   ├── contracts/          # Solidity smart contracts
+│   ├── services/           # Business logic services (Web3, Consent)
+│   ├── routes/             # Express API routes
+│   ├── middleware/         # Validation and error handling
 │   ├── data/               # Complex mockup data files (auto-loads on startup)
 │   ├── scripts/            # Deployment scripts
-│   └── server.js           # Express server
-├── frontend/               # React frontend application
-│   └── src/
-│       ├── components/     # React components
-│       └── App.js          # Main application
-└── README.md
+│   ├── test/              # Unit and integration tests
+│   ├── server.js           # Express server
+│   ├── API.md             # Complete API documentation
+│   └── README.md          # Backend setup guide
+├── frontend/               # Next.js App Router frontend
+│   ├── app/               # Next.js App Router pages
+│   ├── components/        # React components
+│   ├── contexts/          # React contexts (Wallet)
+│   ├── hooks/             # Custom hooks (API, mutations)
+│   ├── lib/               # Utilities (API client, theme)
+│   └── README.md          # Frontend setup guide
+├── docs/                   # Documentation
+│   ├── SMART_CONTRACT.md  # Smart contract documentation
+│   └── ...
+└── README.md              # This file
 ```
+
+## Architecture
+
+```
+┌─────────────┐      ┌──────────────┐      ┌─────────────┐
+│   Frontend  │──────▶│   Backend    │──────▶│   Smart     │
+│  (Next.js)  │ REST  │  (Express)   │ Web3  │  Contract   │
+│             │◀──────│  (Read-only) │◀──────│  (Solidity) │
+│             │       └──────────────┘       └─────────────┘
+│             │              │                      │
+│             │              │                      │
+│  MetaMask ──┼──────────────┼──────────────────────┘
+│  (Signer)   │              │
+└─────────────┘         Blockchain
+                         (Hardhat)
+```
+
+### Data Flow
+
+1. **Read Operations**: Frontend → Backend API → Smart Contract (read-only via backend)
+2. **Write Operations**: Frontend → MetaMask Signer → Smart Contract (direct, user signs)
+3. **Wallet Integration**: Frontend connects MetaMask for signing transactions
+4. **Transaction Status**: Frontend waits for transaction confirmation, displays via toasts
+5. **Security**: Private keys never leave MetaMask; backend never signs user transactions
 
 ## Assessment Requirements
 
@@ -139,14 +175,23 @@ npm run dev
 
 The backend will start on `http://localhost:3001` and automatically load all mockup data.
 
-4. **Start the frontend (in a new terminal):**
+4. **Copy contract ABI to frontend (required for direct contract calls):**
+
+```bash
+cp backend/artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json \
+   frontend/public/contract-abi.json
+```
+
+5. **Start the frontend (in a new terminal):**
 
 ```bash
 cd frontend
-npm start
+npm run dev
 ```
 
 The frontend will start on `http://localhost:3000`
+
+**Important**: Make sure to copy the contract ABI to `frontend/public/contract-abi.json` (see step 4 above) before starting the frontend. The ABI is required for direct contract calls via MetaMask.
 
 ### Connecting MetaMask
 
@@ -188,11 +233,12 @@ Enhance the backend to:
 
 Improve the frontend:
 
-1. **Load contract ABI** properly from backend or artifacts
-2. **Display consent history** from the blockchain
-3. **Show access requests** and allow approval/denial
+1. **Load contract ABI** from artifacts (copied to `public/contract-abi.json`)
+2. **Display consent history** from the blockchain (via backend API)
+3. **Show access requests** and allow approval/denial (via direct MetaMask signing)
 4. **Add transaction status** indicators (pending, confirmed, failed)
 5. **Improve error handling** and user feedback
+6. **Integrate MetaMask** for signing transactions directly (users sign their own transactions)
 
 ### Task 4: Additional Features (Bonus)
 

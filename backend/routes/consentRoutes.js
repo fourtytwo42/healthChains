@@ -235,7 +235,8 @@ router.get(
 );
 
 /**
- * GET /api/requests/:requestId
+ * GET /api/requests/:requestId (when mounted at /api/requests)
+ * GET /api/consent/requests/:requestId (when mounted at /api/consent)
  * Get access request by ID
  * 
  * Path parameters:
@@ -420,6 +421,362 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/consent/grant
+ * Grant consent to a provider
+ * 
+ * @deprecated This endpoint is deprecated. Frontend now signs transactions directly via MetaMask.
+ *            This endpoint is kept for backward compatibility but should not be used in production.
+ *            Use direct contract calls from the frontend instead.
+ * 
+ * Body:
+ * - patientAddress (required): Ethereum address of patient
+ * - providerAddress (required): Ethereum address of provider
+ * - dataType (required): Type of data
+ * - purpose (required): Purpose for data use
+ * - expirationTime (optional): Unix timestamp (0 for no expiration)
+ * 
+ * Returns: Transaction result with consentId and transaction hash
+ */
+router.post('/grant', async (req, res, next) => {
+  try {
+    const { patientAddress, providerAddress, dataType, purpose, expirationTime } = req.body;
+
+    // Validate required fields
+    if (!patientAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'patientAddress is required',
+          details: { field: 'patientAddress' }
+        }
+      });
+    }
+
+    if (!providerAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'providerAddress is required',
+          details: { field: 'providerAddress' }
+        }
+      });
+    }
+
+    if (!dataType) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'dataType is required',
+          details: { field: 'dataType' }
+        }
+      });
+    }
+
+    if (!purpose) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'purpose is required',
+          details: { field: 'purpose' }
+        }
+      });
+    }
+
+    // Validate addresses
+    validateAddress(patientAddress, 'patientAddress');
+    validateAddress(providerAddress, 'providerAddress');
+
+    // Default expirationTime to 0 (no expiration) if not provided
+    const expTime = expirationTime !== undefined ? parseInt(expirationTime, 10) : 0;
+
+    // Grant consent
+    const result = await consentService.grantConsent(
+      patientAddress,
+      providerAddress,
+      dataType,
+      expTime,
+      purpose
+    );
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/consent/:consentId/revoke
+ * Revoke a consent
+ * 
+ * @deprecated This endpoint is deprecated. Frontend now signs transactions directly via MetaMask.
+ * 
+ * Path parameters:
+ * - consentId (required): Consent ID to revoke
+ * 
+ * Body:
+ * - patientAddress (required): Ethereum address of patient
+ * 
+ * Returns: Transaction result with transaction hash
+ */
+router.put('/:consentId/revoke', validateConsentId(), async (req, res, next) => {
+  try {
+    const { consentId } = req.params;
+    const { patientAddress } = req.body;
+
+    if (!patientAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'patientAddress is required',
+          details: { field: 'patientAddress' }
+        }
+      });
+    }
+
+    validateAddress(patientAddress, 'patientAddress');
+
+    const result = await consentService.revokeConsent(patientAddress, consentId);
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/requests (when mounted at /api/requests)
+ * POST /api/consent/requests (when mounted at /api/consent)
+ * Create an access request
+ * 
+ * @deprecated This endpoint is deprecated. Frontend now signs transactions directly via MetaMask.
+ * 
+ * Body:
+ * - requesterAddress (required): Ethereum address of requester
+ * - patientAddress (required): Ethereum address of patient
+ * - dataType (required): Type of data requested
+ * - purpose (required): Purpose for data use
+ * - expirationTime (optional): Unix timestamp (0 for no expiration)
+ * 
+ * Returns: Transaction result with requestId and transaction hash
+ */
+router.post('/requests', async (req, res, next) => {
+  try {
+    const { requesterAddress, patientAddress, dataType, purpose, expirationTime } = req.body;
+
+    // Validate required fields
+    if (!requesterAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'requesterAddress is required',
+          details: { field: 'requesterAddress' }
+        }
+      });
+    }
+
+    if (!patientAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'patientAddress is required',
+          details: { field: 'patientAddress' }
+        }
+      });
+    }
+
+    if (!dataType) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'dataType is required',
+          details: { field: 'dataType' }
+        }
+      });
+    }
+
+    if (!purpose) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'purpose is required',
+          details: { field: 'purpose' }
+        }
+      });
+    }
+
+    // Validate addresses
+    validateAddress(requesterAddress, 'requesterAddress');
+    validateAddress(patientAddress, 'patientAddress');
+
+    // Default expirationTime to 0 if not provided
+    const expTime = expirationTime !== undefined ? parseInt(expirationTime, 10) : 0;
+
+    const result = await consentService.requestAccess(
+      requesterAddress,
+      patientAddress,
+      dataType,
+      purpose,
+      expTime
+    );
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/requests/:requestId/approve (when mounted at /api/requests)
+ * PUT /api/consent/requests/:requestId/approve (when mounted at /api/consent)
+ * Approve an access request
+ * 
+ * @deprecated This endpoint is deprecated. Frontend now signs transactions directly via MetaMask.
+ * 
+ * Path parameters:
+ * - requestId (required): Request ID to approve
+ * 
+ * Body:
+ * - patientAddress (required): Ethereum address of patient
+ * 
+ * Returns: Transaction result with transaction hash
+ */
+router.put('/requests/:requestId/approve', validateRequestId(), async (req, res, next) => {
+  try {
+    const { requestId } = req.params;
+    const { patientAddress } = req.body;
+
+    if (!patientAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'patientAddress is required',
+          details: { field: 'patientAddress' }
+        }
+      });
+    }
+
+    validateAddress(patientAddress, 'patientAddress');
+
+    const result = await consentService.respondToAccessRequest(patientAddress, requestId, true);
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/requests/:requestId/deny (when mounted at /api/requests)
+ * PUT /api/consent/requests/:requestId/deny (when mounted at /api/consent)
+ * Deny an access request
+ * 
+ * @deprecated This endpoint is deprecated. Frontend now signs transactions directly via MetaMask.
+ * 
+ * Path parameters:
+ * - requestId (required): Request ID to deny
+ * 
+ * Body:
+ * - patientAddress (required): Ethereum address of patient
+ * 
+ * Returns: Transaction result with transaction hash
+ */
+router.put('/requests/:requestId/deny', validateRequestId(), async (req, res, next) => {
+  try {
+    const { requestId } = req.params;
+    const { patientAddress } = req.body;
+
+    if (!patientAddress) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'patientAddress is required',
+          details: { field: 'patientAddress' }
+        }
+      });
+    }
+
+    validateAddress(patientAddress, 'patientAddress');
+
+    const result = await consentService.respondToAccessRequest(patientAddress, requestId, false);
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports = router;
 

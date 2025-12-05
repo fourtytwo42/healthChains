@@ -662,11 +662,13 @@ for (uint256 i = 0; i < consentIds.length; i++) {
 
 ### Security Considerations
 
-1. **Never Store Private Keys**: Never store private keys in frontend code
+1. **Never Store Private Keys**: Never store private keys in frontend code. Users sign transactions via MetaMask.
 2. **Validate Addresses**: Always validate addresses before sending transactions
 3. **Check Consent Status**: Always verify consent is active before accessing data
 4. **Handle Reverts**: Gracefully handle transaction reverts
 5. **Monitor Events**: Use events to track all consent changes
+6. **Direct Signing**: Frontend signs transactions directly via MetaMask (users control their keys)
+7. **Backend Read-Only**: Backend only performs read operations, never signs user transactions
 
 ## Deployment Guide
 
@@ -713,9 +715,15 @@ npx hardhat run scripts/deploy.js --network <network-name>
 ### Post-Deployment
 
 1. Verify contract address
-2. Save ABI and deployment info
-3. Update frontend/backend with contract address
-4. Test all functions on deployed contract
+2. Save ABI and deployment info:
+   ```bash
+   cp backend/artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json \
+      frontend/public/contract-abi.json
+   ```
+3. Update frontend with contract address (loaded from backend `/api/contract/info`)
+4. Frontend uses direct contract calls with MetaMask for write operations
+5. Backend provides read-only API endpoints
+6. Test all functions on deployed contract
 
 ## Testing
 
