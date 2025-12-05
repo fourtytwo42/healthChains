@@ -32,7 +32,7 @@ export function Sidebar() {
         <HeartPulse className="h-6 w-6 text-primary" />
         <span className="ml-2 text-lg font-semibold">HealthChains</span>
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav aria-label="Sidebar Navigation" className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           return (

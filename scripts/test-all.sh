@@ -39,10 +39,10 @@ run_test() {
 
     if eval "$command"; then
         echo -e "${GREEN}✓ $name passed${NC}"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     else
         echo -e "${RED}✗ $name failed${NC}"
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
         if [ -n "$dir" ]; then
             cd - > /dev/null || exit 1
         fi
@@ -77,9 +77,9 @@ run_test "Backend Tests" "npm run test:backend" "backend"
 run_test "Frontend Unit Tests" "npm test -- --coverage=false" "frontend"
 
 # 5. Frontend E2E Tests (optional - can be skipped if Playwright not set up)
-if command -v playwright &> /dev/null; then
+if [ -x "node_modules/.bin/playwright" ]; then
     run_test "Frontend E2E Tests" "npm run test:e2e" "frontend" || {
-        echo -e "${YELLOW}⚠ E2E tests skipped or failed (Playwright may need setup)${NC}"
+        echo -e "${YELLOW}⚠ E2E tests failed (see output above)${NC}"
     }
 else
     echo -e "${YELLOW}⚠ Playwright not found - skipping E2E tests${NC}"

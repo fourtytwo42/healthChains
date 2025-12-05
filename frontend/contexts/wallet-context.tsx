@@ -239,7 +239,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const account = await getAccount();
       const chainId = await getChainId();
 
-      if (account && chainId) {
+      if (account && chainId !== null) {
         setState({
           isConnected: true,
           account,
@@ -247,6 +247,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           isConnecting: false,
           error: null,
         });
+      } else if (chainId !== null) {
+        setState((prev) => ({
+          ...prev,
+          chainId,
+        }));
       }
     };
 

@@ -72,8 +72,9 @@ test.describe('Wallet Connection', () => {
 
     await page.reload();
     await page.getByText('Connect Wallet').click();
-    
-    await expect(page.getByText(/network mismatch/i)).toBeVisible();
+    await page.getByRole('button', { name: /connect metamask/i }).click();
+
+    await expect(page.getByText(/network mismatch\. current: 1/i)).toBeVisible();
   });
 });
 

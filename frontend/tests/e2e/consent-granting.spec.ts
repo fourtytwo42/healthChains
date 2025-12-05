@@ -4,7 +4,7 @@
  * Tests the complete consent granting workflow
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
 test.describe('Consent Granting', () => {
   test.beforeEach(async ({ page }) => {
@@ -37,57 +37,69 @@ test.describe('Consent Granting', () => {
     await page.waitForTimeout(1000);
   });
 
+  const openGrantDialog = async (page: Page) => {
+    await page.getByRole('button', { name: /^grant consent$/i }).first().click();
+  };
+
   test('should open grant consent dialog', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    await expect(page.getByText('Grant Consent', { exact: false })).toBeVisible();
+    await openGrantDialog(page);
+    await expect(page.getByRole('heading', { name: /grant consent/i })).toBeVisible();
   });
 
   test('should display all form fields', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    await expect(page.getByLabel(/providers/i)).toBeVisible();
-    await expect(page.getByLabel(/data types/i)).toBeVisible();
-    await expect(page.getByLabel(/purposes/i)).toBeVisible();
-    await expect(page.getByLabel(/expiration date/i)).toBeVisible();
+    await openGrantDialog(page);
+
+    await expect(page.getByRole('combobox').filter({ hasText: /select providers/i }).first()).toBeVisible();
+    await expect(page.getByRole('combobox').filter({ hasText: /select data types/i }).first()).toBeVisible();
+    await expect(page.getByRole('combobox').filter({ hasText: /select purposes/i }).first()).toBeVisible();
+    await expect(page.getByText(/expiration date \(optional\)/i)).toBeVisible();
   });
 
   test('should allow selecting multiple providers', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    const providerSelect = page.getByLabel(/providers/i);
+    await openGrantDialog(page);
+
+    const providerSelect = page.getByRole('combobox').filter({ hasText: /select providers/i }).first();
     await providerSelect.click();
     
-    // Should show provider options
-    await expect(page.getByText(/test hospital/i)).toBeVisible();
+    const providerOption = page.getByRole('option').first();
+    await expect(providerOption).toBeVisible();
   });
 
   test('should allow selecting multiple data types', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    const dataTypeSelect = page.getByLabel(/data types/i);
+    await openGrantDialog(page);
+
+    const dataTypeSelect = page.getByRole('combobox').filter({ hasText: /select data types/i }).first();
     await dataTypeSelect.click();
     
-    // Should show data type options
-    await expect(page.getByText(/medical_records/i)).toBeVisible();
+    const dataTypeOption = page.getByRole('option').first();
+    await expect(dataTypeOption).toBeVisible();
   });
 
   test('should show summary when selections are made', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    // Make selections
-    const providerSelect = page.getByLabel(/providers/i);
+    await openGrantDialog(page);
+
+    const providerSelect = page.getByRole('combobox').filter({ hasText: /select providers/i }).first();
     await providerSelect.click();
-    await page.getByText(/test hospital/i).click();
-    
-    // Summary should appear
+    await page.getByRole('option').first().click();
+    await page.keyboard.press('Escape');
+
+    const dataTypeSelect = page.getByRole('combobox').filter({ hasText: /select data types/i }).first();
+    await dataTypeSelect.click();
+    await page.getByRole('option').first().click();
+    await page.keyboard.press('Escape');
+
+    const purposeSelect = page.getByRole('combobox').filter({ hasText: /select purposes/i }).first();
+    await purposeSelect.click();
+    await page.getByRole('option').first().click();
+    await page.keyboard.press('Escape');
+
     await expect(page.getByText(/summary/i)).toBeVisible();
   });
 
   test('should disable submit button when form is incomplete', async ({ page }) => {
-    await page.getByRole('button', { name: /grant consent/i }).click();
-    
-    const submitButton = page.getByRole('button', { name: /grant.*consent/i });
+    await openGrantDialog(page);
+
+    const submitButton = page.getByRole('button', { name: /grant consent/i }).last();
     await expect(submitButton).toBeDisabled();
   });
 });

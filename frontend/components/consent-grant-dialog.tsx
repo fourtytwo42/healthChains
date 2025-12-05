@@ -33,6 +33,7 @@ interface GrantConsentDialogProps {
 function MultiSelect({
   id,
   labelId,
+  ariaLabel,
   options,
   selected,
   onSelectionChange,
@@ -44,6 +45,7 @@ function MultiSelect({
 }: {
   id?: string;
   labelId?: string;
+  ariaLabel?: string;
   options: any[];
   selected: string[];
   onSelectionChange: (values: string[]) => void;
@@ -76,6 +78,7 @@ function MultiSelect({
         <Button
           id={id}
           aria-labelledby={labelId}
+          aria-label={ariaLabel}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -260,10 +263,11 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Providers Selection */}
             <div className="space-y-2">
-              <Label id="providers-label">Providers</Label>
+              <Label id="providers-label" htmlFor="providers">Providers</Label>
               <MultiSelect
                 id="providers"
                 labelId="providers-label"
+                ariaLabel="Providers"
                 options={providersWithWallets}
                 selected={selectedProviders}
                 onSelectionChange={setSelectedProviders}
@@ -282,10 +286,11 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
 
             {/* Data Types Selection */}
             <div className="space-y-2">
-              <Label id="dataTypes-label">Data Types</Label>
+              <Label id="dataTypes-label" htmlFor="dataTypes">Data Types</Label>
               <MultiSelect
                 id="dataTypes"
                 labelId="dataTypes-label"
+                ariaLabel="Data Types"
                 options={dataTypes || []}
                 selected={selectedDataTypes}
                 onSelectionChange={setSelectedDataTypes}
@@ -304,10 +309,11 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
 
             {/* Purposes Selection */}
             <div className="space-y-2">
-              <Label id="purposes-label">Purposes</Label>
+              <Label id="purposes-label" htmlFor="purposes">Purposes</Label>
               <MultiSelect
                 id="purposes"
                 labelId="purposes-label"
+                ariaLabel="Purposes"
                 options={purposes || []}
                 selected={selectedPurposes}
                 onSelectionChange={setSelectedPurposes}
