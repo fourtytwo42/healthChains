@@ -161,8 +161,12 @@ app.get('/api/contract/info', (req, res) => {
   let deploymentInfo = null;
   try {
     const fs = require('fs');
-    if (fs.existsSync('./deployment.json')) {
-      deploymentInfo = JSON.parse(fs.readFileSync('./deployment.json', 'utf8'));
+    const path = require('path');
+    // deployment.json is in the backend directory (same directory as server.js)
+    const deploymentPath = path.join(__dirname, 'deployment.json');
+    
+    if (fs.existsSync(deploymentPath)) {
+      deploymentInfo = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
     }
   } catch (error) {
     console.error('Error reading deployment info:', error.message);
