@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useWallet } from '@/contexts/wallet-context';
@@ -12,8 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageSquare, FileCheck, Clock, X, Loader2, History } from 'lucide-react';
+import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { RequestResponseCard } from '@/components/patient/request-response-card';
 import { ConsentDetailsCard } from '@/components/patient/consent-details-card';
+import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
 import { Pagination } from '@/components/ui/pagination';
 import { format } from 'date-fns';
 import {
@@ -48,6 +50,7 @@ export default function PatientDashboardPage() {
     purpose: string;
     isExpired: boolean;
   } | null>(null);
+  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'granted' | 'history'>('pending');
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -205,11 +208,19 @@ export default function PatientDashboardPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {request.dataType && (
-                              <Badge variant="outline">{request.dataType}</Badge>
+                            {request.dataTypes && request.dataTypes.length > 0 ? (
+                              <ColoredBadgeList type="dataType" values={request.dataTypes} size="sm" maxDisplay={2} />
+                            ) : (
+                              <span className="text-muted-foreground">N/A</span>
                             )}
                           </TableCell>
-                          <TableCell>{request.purpose || 'N/A'}</TableCell>
+                          <TableCell>
+                            {request.purposes && request.purposes.length > 0 ? (
+                              <ColoredBadgeList type="purpose" values={request.purposes} size="sm" maxDisplay={2} />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">N/A</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm">
                               <Clock className="h-3 w-3" />
@@ -323,14 +334,7 @@ export default function PatientDashboardPage() {
                                 {providerName}
                               </TableCell>
                               <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {dataTypes.slice(0, 2).map((dt: string, idx: number) => (
-                                    <Badge key={idx} variant="outline" className="text-xs">{dt}</Badge>
-                                  ))}
-                                  {dataTypes.length > 2 && (
-                                    <Badge variant="secondary" className="text-xs">+{dataTypes.length - 2}</Badge>
-                                  )}
-                                </div>
+                                <ColoredBadgeList type="dataType" values={dataTypes} size="sm" maxDisplay={2} />
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-1 text-sm">
@@ -413,90 +417,173 @@ export default function PatientDashboardPage() {
                   ))}
                 </div>
               ) : historyData && historyData.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {historyData.map((event: any, index: number) => {
-                    // Determine event type and icon
+                    // Determine event type and styling
                     let eventType = '';
                     let eventIcon = null;
                     let eventColor = '';
-                    let eventDescription = '';
+                    let eventBgColor = '';
+                    let eventBorderColor = '';
+                    let statusBadge = null;
 
                     if (event.type === 'ConsentGranted') {
                       eventType = 'Consent Granted';
-                      eventIcon = <FileCheck className="h-4 w-4 text-green-500" />;
-                      eventColor = 'text-green-600';
-                      eventDescription = `Granted access to ${event.dataType} for ${event.purpose}`;
+                      eventIcon = <FileCheck className="h-5 w-5" />;
+                      eventColor = 'text-green-700 dark:text-green-400';
+                      eventBgColor = 'bg-green-50 dark:bg-green-950/20';
+                      eventBorderColor = 'border-green-200 dark:border-green-800';
+                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Active</Badge>;
                     } else if (event.type === 'ConsentRevoked') {
                       eventType = 'Consent Revoked';
-                      eventIcon = <X className="h-4 w-4 text-red-500" />;
-                      eventColor = 'text-red-600';
-                      eventDescription = `Revoked consent ID ${event.consentId}`;
+                      eventIcon = <X className="h-5 w-5" />;
+                      eventColor = 'text-red-700 dark:text-red-400';
+                      eventBgColor = 'bg-red-50 dark:bg-red-950/20';
+                      eventBorderColor = 'border-red-200 dark:border-red-800';
+                      statusBadge = <Badge variant="destructive">Revoked</Badge>;
                     } else if (event.type === 'ConsentExpired') {
                       eventType = 'Consent Expired';
-                      eventIcon = <Clock className="h-4 w-4 text-orange-500" />;
-                      eventColor = 'text-orange-600';
-                      eventDescription = `Consent expired for ${event.dataType} (${event.purpose})`;
+                      eventIcon = <Clock className="h-5 w-5" />;
+                      eventColor = 'text-orange-700 dark:text-orange-400';
+                      eventBgColor = 'bg-orange-50 dark:bg-orange-950/20';
+                      eventBorderColor = 'border-orange-200 dark:border-orange-800';
+                      statusBadge = <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">Expired</Badge>;
                     } else if (event.type === 'AccessRequested') {
                       eventType = 'Request Received';
-                      eventIcon = <MessageSquare className="h-4 w-4 text-blue-500" />;
-                      eventColor = 'text-blue-600';
-                      eventDescription = `Request for ${event.dataType} for ${event.purpose}`;
+                      eventIcon = <MessageSquare className="h-5 w-5" />;
+                      eventColor = 'text-blue-700 dark:text-blue-400';
+                      eventBgColor = 'bg-blue-50 dark:bg-blue-950/20';
+                      eventBorderColor = 'border-blue-200 dark:border-blue-800';
+                      statusBadge = <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">Pending</Badge>;
                     } else if (event.type === 'AccessApproved') {
                       eventType = 'Request Approved';
-                      eventIcon = <FileCheck className="h-4 w-4 text-green-500" />;
-                      eventColor = 'text-green-600';
-                      eventDescription = `Approved request ID ${event.requestId}`;
+                      eventIcon = <FileCheck className="h-5 w-5" />;
+                      eventColor = 'text-green-700 dark:text-green-400';
+                      eventBgColor = 'bg-green-50 dark:bg-green-950/20';
+                      eventBorderColor = 'border-green-200 dark:border-green-800';
+                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Approved</Badge>;
                     } else if (event.type === 'AccessDenied') {
                       eventType = 'Request Denied';
-                      eventIcon = <X className="h-4 w-4 text-red-500" />;
-                      eventColor = 'text-red-600';
-                      eventDescription = `Denied request ID ${event.requestId}`;
+                      eventIcon = <X className="h-5 w-5" />;
+                      eventColor = 'text-red-700 dark:text-red-400';
+                      eventBgColor = 'bg-red-50 dark:bg-red-950/20';
+                      eventBorderColor = 'border-red-200 dark:border-red-800';
+                      statusBadge = <Badge variant="destructive">Denied</Badge>;
                     }
 
-                    // Check if consent expired (for granted consents)
                     const isExpired = event.isExpired || (event.type === 'ConsentGranted' && event.expirationTime && 
                       new Date(event.expirationTime) < new Date());
 
                     return (
-                      <div
+                      <Card
                         key={`${event.type}-${event.consentId || event.requestId}-${index}`}
-                        className="flex gap-4 pb-4 border-b last:border-0"
+                        className={`cursor-pointer transition-all hover:shadow-sm hover:border-opacity-80 border-l-4 ${eventBorderColor} ${eventBgColor}`}
+                        onClick={() => setSelectedHistoryEvent(event)}
                       >
-                        <div className="flex-shrink-0 mt-1">
-                          {eventIcon}
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-medium ${eventColor}`}>{eventType}</span>
-                              {isExpired && (
-                                <Badge variant="destructive" className="text-xs">Expired</Badge>
-                              )}
+                        <CardContent className="p-3">
+                          <div className="flex items-start gap-3">
+                            {/* Icon */}
+                            {eventIcon && (
+                              <div className={`flex-shrink-0 p-1.5 rounded-md ${eventBgColor} ${eventColor}`}>
+                                {React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
+                              </div>
+                            )}
+                            
+                            {/* Main Content */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              {/* Header */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h3 className={`font-semibold text-sm ${eventColor}`}>
+                                    {eventType}
+                                  </h3>
+                                  {statusBadge}
+                                  {isExpired && event.type === 'ConsentGranted' && (
+                                    <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {format(new Date(event.timestamp), 'MMM d, yyyy • h:mm a')}
+                                </p>
+                              </div>
+
+                              {/* Details Grid - Compact */}
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+                                {/* Provider Info */}
+                                {event.providerInfo?.organizationName ? (
+                                  <div>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Provider</p>
+                                    <p className="text-xs font-semibold truncate">{event.providerInfo.organizationName}</p>
+                                  </div>
+                                ) : event.provider ? (
+                                  <div>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Provider</p>
+                                    <p className="text-xs font-mono truncate">{event.provider.slice(0, 8)}...{event.provider.slice(-6)}</p>
+                                  </div>
+                                ) : null}
+
+                                {/* Data Type & Purpose */}
+                                {((event.dataTypes && event.dataTypes.length > 0) || (event.dataType || event.purpose)) && (
+                                  <div>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Access</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {event.dataTypes && event.dataTypes.length > 0 ? (
+                                        <>
+                                          {event.dataTypes.slice(0, 2).map((dt: string, idx: number) => (
+                                            <ColoredBadge key={idx} type="dataType" value={dt} size="sm" />
+                                          ))}
+                                          {event.dataTypes.length > 2 && (
+                                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.dataTypes.length - 2}</Badge>
+                                          )}
+                                        </>
+                                      ) : event.dataType ? (
+                                        <ColoredBadge type="dataType" value={event.dataType} size="sm" />
+                                      ) : null}
+                                      {event.purposes && event.purposes.length > 0 ? (
+                                        <>
+                                          {event.purposes.slice(0, 2).map((p: string, idx: number) => (
+                                            <ColoredBadge key={idx} type="purpose" value={p} size="sm" />
+                                          ))}
+                                          {event.purposes.length > 2 && (
+                                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.purposes.length - 2}</Badge>
+                                          )}
+                                        </>
+                                      ) : event.purpose ? (
+                                        <ColoredBadge type="purpose" value={event.purpose} size="sm" />
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Expiration */}
+                                {event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
+                                  <div>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Expires</p>
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-2.5 w-2.5 text-muted-foreground flex-shrink-0" />
+                                      <p className="text-xs truncate">
+                                        {format(new Date(event.expirationTime), 'MMM d, yyyy')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* IDs */}
+                                {(event.consentId !== undefined || event.requestId !== undefined) && (
+                                  <div>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                                      {event.consentId !== undefined ? 'Consent ID' : 'Request ID'}
+                                    </p>
+                                    <p className="text-xs font-mono font-semibold">
+                                      #{event.consentId ?? event.requestId}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(event.timestamp), 'MMM d, yyyy HH:mm')}
-                            </span>
                           </div>
-                          <p className="text-sm text-muted-foreground">{eventDescription}</p>
-                          {event.providerInfo?.organizationName ? (
-                            <p className="text-xs text-muted-foreground">
-                              Provider: {event.providerInfo.organizationName}
-                            </p>
-                          ) : event.provider && (
-                            <p className="text-xs text-muted-foreground">
-                              Provider: {event.provider.slice(0, 6)}...{event.provider.slice(-4)}
-                            </p>
-                          )}
-                          {event.expirationTime && event.type === 'ConsentGranted' && (
-                            <p className="text-xs text-muted-foreground">
-                              Expires: {format(new Date(event.expirationTime), 'MMM d, yyyy HH:mm')}
-                            </p>
-                          )}
-                          <p className="text-xs font-mono text-muted-foreground">
-                            TX: {event.transactionHash?.slice(0, 10)}...
-                          </p>
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     );
                   })}
                 </div>
@@ -524,6 +611,15 @@ export default function PatientDashboardPage() {
         <ConsentDetailsCard
           consent={selectedConsent}
           onClose={handleCloseConsentCard}
+        />
+      )}
+
+      {/* History Event Details Card */}
+      {selectedHistoryEvent !== null && (
+        <ConsentHistoryEventCard
+          event={selectedHistoryEvent}
+          onClose={() => setSelectedHistoryEvent(null)}
+          userRole="patient"
         />
       )}
     </div>

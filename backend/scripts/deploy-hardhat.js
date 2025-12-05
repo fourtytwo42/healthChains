@@ -3,8 +3,12 @@ const hre = require("hardhat");
 async function main() {
   console.log("Deploying PatientConsentManager contract to Hardhat network...");
 
+  // Get the first account (account[0]) for deterministic deployment
+  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying with account:", deployer.address);
+
   const PatientConsentManager = await hre.ethers.getContractFactory("PatientConsentManager");
-  const consentManager = await PatientConsentManager.deploy();
+  const consentManager = await PatientConsentManager.connect(deployer).deploy();
 
   await consentManager.waitForDeployment();
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { Button } from '@/components/ui/button';
 import { Building2, Clock, FileCheck, X, Loader2, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -131,11 +132,7 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
                   {providerInfo.specialties && providerInfo.specialties.length > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground">Specialties</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {providerInfo.specialties.map((s: string, i: number) => (
-                          <Badge key={i} variant="outline">{s}</Badge>
-                        ))}
-                      </div>
+                      <ColoredBadgeList type="specialty" values={providerInfo.specialties} size="md" />
                     </div>
                   )}
                   {providerInfo.contact?.email && (
@@ -177,20 +174,20 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
                 <>
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Data Types</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set(consent.allConsents.map(c => c.dataType))).map((dataType, idx) => (
-                        <Badge key={idx} variant="outline" className="text-sm">{dataType}</Badge>
-                      ))}
-                    </div>
+                    <ColoredBadgeList
+                      type="dataType"
+                      values={Array.from(new Set(consent.allConsents.map(c => c.dataType)))}
+                      size="md"
+                    />
                   </div>
 
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Purposes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set(consent.allConsents.map(c => c.purpose))).map((purpose, idx) => (
-                        <Badge key={idx} variant="outline" className="text-sm">{purpose}</Badge>
-                      ))}
-                    </div>
+                    <ColoredBadgeList
+                      type="purpose"
+                      values={Array.from(new Set(consent.allConsents.map(c => c.purpose)))}
+                      size="md"
+                    />
                   </div>
 
                   <div>
@@ -240,45 +237,50 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
                     </div>
                   </div>
 
-                  {/* Show detailed breakdown */}
-                  <div className="pt-4 border-t">
-                    <p className="text-sm font-medium mb-2">Consent Breakdown</p>
-                    <div className="space-y-2">
-                      {consent.allConsents.map((c, idx) => (
-                        <div key={idx} className="p-2 bg-muted/50 rounded-md">
-                          <div className="flex items-center justify-between">
-                            <div className="flex gap-2">
-                              <Badge variant="outline" className="text-xs">{c.dataType}</Badge>
-                              <Badge variant="outline" className="text-xs">{c.purpose}</Badge>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {c.expirationTime && (
-                                <span className="text-xs text-muted-foreground">
-                                  {format(new Date(c.expirationTime), 'MMM d, yyyy')}
-                                </span>
-                              )}
-                              {c.isActive && !c.isExpired ? (
-                                <Badge variant="default" className="text-xs">Active</Badge>
-                              ) : (
-                                <Badge variant="destructive" className="text-xs">Expired</Badge>
-                              )}
+                  {/* Show detailed breakdown - all consents from batch approval */}
+                  {consent.allConsents && consent.allConsents.length > 1 && (
+                    <div className="pt-4 border-t">
+                      <p className="text-sm font-medium mb-1">Consent Breakdown</p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        All {consent.allConsents.length} consents granted in one batch approval
+                      </p>
+                      <div className="space-y-2">
+                        {consent.allConsents.map((c, idx) => (
+                          <div key={idx} className="p-2 bg-muted/50 rounded-md">
+                            <div className="flex items-center justify-between">
+                              <div className="flex gap-2">
+                                <ColoredBadge type="dataType" value={c.dataType} size="sm" />
+                                <ColoredBadge type="purpose" value={c.purpose} size="sm" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {c.expirationTime && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(new Date(c.expirationTime), 'MMM d, yyyy')}
+                                  </span>
+                                )}
+                                {c.isActive && !c.isExpired ? (
+                                  <Badge variant="default" className="text-xs">Active</Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="text-xs">Expired</Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               ) : (
                 <>
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Data Type</p>
-                    <Badge variant="outline" className="text-sm">{consent.dataType}</Badge>
+                    <ColoredBadge type="dataType" value={consent.dataType} size="md" />
                   </div>
 
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Purpose</p>
-                    <Badge variant="outline" className="text-sm">{consent.purpose}</Badge>
+                    <ColoredBadge type="purpose" value={consent.purpose} size="md" />
                   </div>
 
                   <div>

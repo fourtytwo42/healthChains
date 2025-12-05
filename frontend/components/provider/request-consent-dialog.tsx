@@ -178,19 +178,16 @@ export function RequestConsentDialog({
       return;
     }
 
-    // For now, request access for each data type/purpose combination
-    // In a real implementation, you might want to batch these or handle them differently
     try {
       const expirationTime = expirationDate
         ? Math.floor(new Date(expirationDate.setHours(23, 59, 59, 999)).getTime() / 1000)
         : 0;
 
-      // Request access for the first data type and purpose combination
-      // Note: The contract's requestAccess function takes single dataType and purpose
+      // Send arrays - contract will handle batch request automatically
       await requestAccess.mutateAsync({
         patientAddress,
-        dataType: selectedDataTypes[0],
-        purpose: selectedPurposes[0],
+        dataTypes: selectedDataTypes,
+        purposes: selectedPurposes,
         expirationTime,
       });
 

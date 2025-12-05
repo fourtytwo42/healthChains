@@ -624,16 +624,18 @@ consentRouter.put('/:consentId/revoke', validateConsentId(), async (req, res, ne
  * Body:
  * - requesterAddress (required): Ethereum address of requester
  * - patientAddress (required): Ethereum address of patient
- * - dataType (required): Type of data requested
- * - purpose (required): Purpose for data use
+ * - dataTypes (required): Array of data types requested
+ * - purposes (required): Array of purposes for data use
  * - expirationTime (optional): Unix timestamp (0 for no expiration)
+ * 
+ * Note: All combinations (cartesian product) will be granted on approval.
  * 
  * Returns: Transaction result with requestId and transaction hash
  */
 requestRouter.post('/', async (req, res, next) => {
   try {
-    const { requesterAddress, patientAddress, dataType, purpose, expirationTime } = req.body;
-
+    const { requesterAddress, patientAddress, dataTypes, purposes, expirationTime } = req.body;
+    
     // Validate required fields
     if (!requesterAddress) {
       return res.status(400).json({
@@ -657,24 +659,24 @@ requestRouter.post('/', async (req, res, next) => {
       });
     }
 
-    if (!dataType) {
+    if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'MISSING_PARAMETER',
-          message: 'dataType is required',
-          details: { field: 'dataType' }
+          message: 'dataTypes is required and must be a non-empty array',
+          details: { field: 'dataTypes' }
         }
       });
     }
 
-    if (!purpose) {
+    if (!Array.isArray(purposes) || purposes.length === 0) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'MISSING_PARAMETER',
-          message: 'purpose is required',
-          details: { field: 'purpose' }
+          message: 'purposes is required and must be a non-empty array',
+          details: { field: 'purposes' }
         }
       });
     }
@@ -689,8 +691,8 @@ requestRouter.post('/', async (req, res, next) => {
     const result = await consentService.requestAccess(
       requesterAddress,
       patientAddress,
-      dataType,
-      purpose,
+      dataTypes,
+      purposes,
       expTime
     );
 

@@ -74,8 +74,8 @@ export interface AccessRequest {
   expirationTime: string | null;
   isProcessed: boolean;
   status: 'pending' | 'approved' | 'denied';
-  dataType: string;
-  purpose: string;
+  dataTypes: string[];      // Array of data types
+  purposes: string[];        // Array of purposes
   isExpired: boolean;
 }
 
@@ -106,8 +106,8 @@ export interface AccessRequestEvent {
   requestId: number;
   requester?: string;
   patient: string;
-  dataType?: string;
-  purpose?: string;
+  dataTypes?: string[];      // Array of data types
+  purposes?: string[];        // Array of purposes
   expirationTime?: string | null;
   timestamp: string;
 }

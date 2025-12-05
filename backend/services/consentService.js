@@ -96,9 +96,11 @@ class ConsentService {
    * @private
    * @param {Object} request - Contract access request
    * @param {number} requestId - Request ID
+   * @param {string[]} dataTypes - Array of data types (from mapping)
+   * @param {string[]} purposes - Array of purposes (from mapping)
    * @returns {Object} Transformed access request
    */
-  _transformAccessRequest(request, requestId) {
+  _transformAccessRequest(request, requestId, dataTypes, purposes) {
     return {
       requestId: Number(requestId),
       requester: ethers.getAddress(request.requester),
@@ -109,8 +111,8 @@ class ConsentService {
         : new Date(Number(request.expirationTime) * 1000).toISOString(),
       isProcessed: request.isProcessed,
       status: this._mapRequestStatus(request.status),
-      dataType: request.dataType,
-      purpose: request.purpose,
+      dataTypes: dataTypes && dataTypes.length > 0 ? dataTypes : [],
+      purposes: purposes && purposes.length > 0 ? purposes : [],
       isExpired: request.expirationTime !== 0n && 
                  Number(request.expirationTime) < Math.floor(Date.now() / 1000)
     };
@@ -271,47 +273,125 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      const result = await Promise.race([
-        contract.getConsentRecord(consentId),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 30000)
-        )
-      ]);
-
-      // Handle ethers v6 return format (may be object with named properties or array)
-      let record;
-      if (result && typeof result === 'object') {
-        if (result.patientAddress !== undefined) {
-          // Named struct return
-          record = result;
-        } else if (Array.isArray(result)) {
-          // Array return - convert to object
-          record = {
-            patientAddress: result[0],
-            providerAddress: result[1],
-            timestamp: result[2],
-            expirationTime: result[3],
-            isActive: result[4],
-            dataType: result[5],
-            purpose: result[6]
-          };
-        } else {
-          // Try indexed access
-          record = {
-            patientAddress: result[0] || result.patientAddress,
-            providerAddress: result[1] || result.providerAddress,
-            timestamp: result[2] || result.timestamp,
-            expirationTime: result[3] || result.expirationTime,
-            isActive: result[4] !== undefined ? result[4] : result.isActive,
-            dataType: result[5] || result.dataType,
-            purpose: result[6] || result.purpose
-          };
-        }
+      // Check if it's a batch consent
+      const isBatch = await contract.isBatchConsent(consentId);
+      
+      let result;
+      if (isBatch) {
+        // Fetch batch consent record
+        result = await Promise.race([
+          contract.getBatchConsentRecord(consentId),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 30000)
+          )
+        ]);
+        
+        // Transform batch consent
+        const batchRecord = result;
+        
+        // Look up strings from hashes for all data types and purposes
+        const dataTypes = await Promise.all(
+          batchRecord.dataTypeHashes.map(async (hash) => {
+            try {
+              return await contract.dataTypeHashToString(hash);
+            } catch (error) {
+              console.warn('Failed to look up dataType from hash:', error.message);
+              return hash; // Fallback to hash as string
+            }
+          })
+        );
+        
+        const purposes = await Promise.all(
+          batchRecord.purposeHashes.map(async (hash) => {
+            try {
+              return await contract.purposeHashToString(hash);
+            } catch (error) {
+              console.warn('Failed to look up purpose from hash:', error.message);
+              return hash; // Fallback to hash as string
+            }
+          })
+        );
+        
+        return {
+          consentId: Number(consentId),
+          patientAddress: ethers.getAddress(batchRecord.patientAddress),
+          providerAddress: ethers.getAddress(batchRecord.providerAddress),
+          timestamp: new Date(Number(batchRecord.timestamp) * 1000).toISOString(),
+          expirationTime: batchRecord.expirationTime === 0n 
+            ? null 
+            : new Date(Number(batchRecord.expirationTime) * 1000).toISOString(),
+          isActive: batchRecord.isActive,
+          dataTypes: dataTypes,
+          purposes: purposes,
+          isBatch: true,
+          isExpired: batchRecord.expirationTime !== 0n && 
+                     Number(batchRecord.expirationTime) < Math.floor(Date.now() / 1000)
+        };
       } else {
-        throw new Error('Unexpected result format from getConsentRecord');
-      }
+        // Fetch regular consent record
+        result = await Promise.race([
+          contract.getConsentRecord(consentId),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 30000)
+          )
+        ]);
 
-      return this._transformConsentRecord(record, consentId);
+        // Handle ethers v6 return format (may be object with named properties or array)
+        let record;
+        if (result && typeof result === 'object') {
+          if (result.patientAddress !== undefined) {
+            // Named struct return
+            record = result;
+          } else if (Array.isArray(result)) {
+            // Array return - convert to object (new format with hashes)
+            record = {
+              patientAddress: result[0],
+              providerAddress: result[1],
+              timestamp: result[2],
+              expirationTime: result[3],
+              isActive: result[4],
+              dataTypeHash: result[5],  // bytes32 hash
+              purposeHash: result[6]   // bytes32 hash
+            };
+          } else {
+            // Try indexed access
+            record = {
+              patientAddress: result[0] || result.patientAddress,
+              providerAddress: result[1] || result.providerAddress,
+              timestamp: result[2] || result.timestamp,
+              expirationTime: result[3] || result.expirationTime,
+              isActive: result[4] !== undefined ? result[4] : result.isActive,
+              dataTypeHash: result[5] || result.dataTypeHash,
+              purposeHash: result[6] || result.purposeHash,
+              // Backward compatibility
+              dataType: result.dataType,
+              purpose: result.purpose
+            };
+          }
+        } else {
+          throw new Error('Unexpected result format from getConsentRecord');
+        }
+
+        // Look up strings from hashes if needed
+        if (record.dataTypeHash && !record.dataType) {
+          try {
+            record.dataType = await contract.dataTypeHashToString(record.dataTypeHash);
+          } catch (error) {
+            console.warn('Failed to look up dataType from hash:', error.message);
+            record.dataType = record.dataTypeHash; // Fallback to hash as string
+          }
+        }
+        if (record.purposeHash && !record.purpose) {
+          try {
+            record.purpose = await contract.purposeHashToString(record.purposeHash);
+          } catch (error) {
+            console.warn('Failed to look up purpose from hash:', error.message);
+            record.purpose = record.purposeHash; // Fallback to hash as string
+          }
+        }
+
+        return this._transformConsentRecord(record, consentId);
+      }
     } catch (error) {
       if (error.code === 'CALL_EXCEPTION' || error.reason === 'ConsentNotFound()') {
         throw new NotFoundError('Consent', consentId);
@@ -522,15 +602,83 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      const request = await Promise.race([
-        contract.getAccessRequest(requestId),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 30000)
-        )
-      ]);
+      // Try direct contract call first
+      try {
+        const request = await Promise.race([
+          contract.getAccessRequest(requestId),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 30000)
+          )
+        ]);
 
-      return this._transformAccessRequest(request, requestId);
+        // Read arrays from mappings
+        const dataTypes = await contract.requestDataTypes(requestId);
+        const purposes = await contract.requestPurposes(requestId);
+
+        return this._transformAccessRequest(request, requestId, dataTypes, purposes);
+      } catch (contractError) {
+        console.warn('Contract getAccessRequest failed, using event-based fallback:', contractError.message);
+        
+        // Fallback to event-based query
+        try {
+          const events = await this.getAccessRequestEvents(null); // Get all events
+          
+          // Find the AccessRequested event for this requestId
+          const requestedEvent = events.find(
+            e => e.type === 'AccessRequested' && e.requestId === requestId
+          );
+          
+          if (!requestedEvent) {
+            throw new NotFoundError('Access request', requestId);
+          }
+          
+          // Check if request was approved or denied
+          const approvedEvent = events.find(
+            e => e.type === 'AccessApproved' && e.requestId === requestId
+          );
+          const deniedEvent = events.find(
+            e => e.type === 'AccessDenied' && e.requestId === requestId
+          );
+          
+          // Determine status
+          let status = 'pending';
+          let isProcessed = false;
+          if (approvedEvent) {
+            status = 'approved';
+            isProcessed = true;
+          } else if (deniedEvent) {
+            status = 'denied';
+            isProcessed = true;
+          }
+          
+          // Build request object from event
+          return {
+            requestId: requestId,
+            requester: requestedEvent.requester,
+            patientAddress: requestedEvent.patient,
+            timestamp: requestedEvent.timestamp,
+            expirationTime: requestedEvent.expirationTime,
+            dataTypes: requestedEvent.dataTypes || [],
+            purposes: requestedEvent.purposes || [],
+            isProcessed: isProcessed,
+            status: status,
+            isExpired: requestedEvent.expirationTime && new Date(requestedEvent.expirationTime) < new Date()
+          };
+        } catch (eventError) {
+          if (eventError instanceof NotFoundError) {
+            throw eventError;
+          }
+          throw new ContractError(
+            'Failed to fetch access request using both contract call and event-based fallback',
+            'getAccessRequest',
+            { contractError, eventError }
+          );
+        }
+      }
     } catch (error) {
+      if (error instanceof NotFoundError || error instanceof ContractError) {
+        throw error;
+      }
       if (error.code === 'CALL_EXCEPTION' || error.reason === 'RequestNotFound()') {
         throw new NotFoundError('Access request', requestId);
       }
@@ -570,26 +718,83 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      const requestIds = await Promise.race([
-        contract.getPatientRequests(normalizedAddress),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 30000)
-        )
-      ]);
+      // Try direct contract call first
+      let requests = [];
+      try {
+        const requestIds = await Promise.race([
+          contract.getPatientRequests(normalizedAddress),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 30000)
+          )
+        ]);
 
-      // Fetch full records for each request ID
-      const requests = await Promise.all(
-        Array.from(requestIds).map(async (id) => {
-          try {
-            return await this.getAccessRequest(Number(id));
-          } catch (error) {
-            if (error instanceof NotFoundError) {
-              return null;
+        // Fetch full records for each request ID
+        requests = await Promise.all(
+          Array.from(requestIds).map(async (id) => {
+            try {
+              return await this.getAccessRequest(Number(id));
+            } catch (error) {
+              if (error instanceof NotFoundError) {
+                return null;
+              }
+              throw error;
             }
-            throw error;
-          }
-        })
-      );
+          })
+        );
+      } catch (contractError) {
+        console.warn('Contract getPatientRequests failed, using event-based fallback:', contractError.message);
+        
+        // Fallback to event-based query - build requests directly from events
+        try {
+          const events = await this.getAccessRequestEvents(normalizedAddress);
+          
+          // Group events by requestId to determine status
+          const requestMap = new Map();
+          
+          events.forEach(event => {
+            const requestId = event.requestId;
+            if (requestId === undefined) return;
+            
+            if (event.type === 'AccessRequested') {
+              // Create request object from AccessRequested event
+              if (!requestMap.has(requestId)) {
+                requestMap.set(requestId, {
+                  requestId: requestId,
+                  requester: event.requester,
+                  patientAddress: event.patient,
+                  timestamp: event.timestamp,
+                  expirationTime: event.expirationTime,
+                  dataTypes: event.dataTypes || [],
+                  purposes: event.purposes || [],
+                  isProcessed: false,
+                  status: 'pending',
+                  isExpired: event.expirationTime && new Date(event.expirationTime) < new Date()
+                });
+              }
+            } else if (event.type === 'AccessApproved') {
+              // Mark as approved
+              if (requestMap.has(requestId)) {
+                requestMap.get(requestId).isProcessed = true;
+                requestMap.get(requestId).status = 'approved';
+              }
+            } else if (event.type === 'AccessDenied') {
+              // Mark as denied
+              if (requestMap.has(requestId)) {
+                requestMap.get(requestId).isProcessed = true;
+                requestMap.get(requestId).status = 'denied';
+              }
+            }
+          });
+          
+          requests = Array.from(requestMap.values());
+        } catch (eventError) {
+          throw new ContractError(
+            'Failed to fetch patient requests using both contract call and event-based fallback',
+            'getPatientRequests',
+            { contractError, eventError }
+          );
+        }
+      }
 
       // Filter out nulls and by status
       let filtered = requests.filter(r => r !== null);
@@ -722,20 +927,49 @@ class ConsentService {
 
       // Transform and combine events
       const events = [
-        ...grantedEvents.map(event => ({
-          type: 'ConsentGranted',
-          blockNumber: event.blockNumber,
-          transactionHash: event.transactionHash,
-          consentId: Number(event.args.consentId),
-          patient: ethers.getAddress(event.args.patient),
-          provider: ethers.getAddress(event.args.provider),
-          dataType: event.args.dataType,
-          expirationTime: event.args.expirationTime === 0n 
-            ? null 
-            : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
-          purpose: event.args.purpose,
-          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-        })),
+        ...(await Promise.all(grantedEvents.map(async (event) => {
+          // Event now emits bytes32 hashes, need to look up strings
+          let dataType = event.args.dataTypeHash || event.args.dataType;
+          let purpose = event.args.purposeHash || event.args.purpose;
+          
+          // If we have hashes, look up the strings
+          if (event.args.dataTypeHash && typeof event.args.dataTypeHash === 'string' && event.args.dataTypeHash.startsWith('0x')) {
+            try {
+              const lookup = await contract.dataTypeHashToString(event.args.dataTypeHash);
+              if (lookup && lookup.length > 0) {
+                dataType = lookup;
+              }
+            } catch (error) {
+              console.warn('Failed to look up dataType from hash in event:', error.message);
+            }
+          }
+          
+          if (event.args.purposeHash && typeof event.args.purposeHash === 'string' && event.args.purposeHash.startsWith('0x')) {
+            try {
+              const lookup = await contract.purposeHashToString(event.args.purposeHash);
+              if (lookup && lookup.length > 0) {
+                purpose = lookup;
+              }
+            } catch (error) {
+              console.warn('Failed to look up purpose from hash in event:', error.message);
+            }
+          }
+          
+          return {
+            type: 'ConsentGranted',
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            consentId: Number(event.args.consentId),
+            patient: ethers.getAddress(event.args.patient),
+            provider: ethers.getAddress(event.args.provider),
+            dataType: dataType,
+            expirationTime: event.args.expirationTime === 0n 
+              ? null 
+              : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
+            purpose: purpose,
+            timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
+          };
+        }))),
         ...revokedEvents.map(event => ({
           type: 'ConsentRevoked',
           blockNumber: event.blockNumber,
@@ -885,8 +1119,8 @@ class ConsentService {
           requestId: Number(event.args.requestId),
           requester: ethers.getAddress(event.args.requester),
           patient: ethers.getAddress(event.args.patient),
-          dataType: event.args.dataType,
-          purpose: event.args.purpose,
+          dataTypes: Array.isArray(event.args.dataTypes) ? event.args.dataTypes : [],
+          purposes: Array.isArray(event.args.purposes) ? event.args.purposes : [],
           expirationTime: event.args.expirationTime === 0n 
             ? null 
             : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
@@ -1180,24 +1414,38 @@ class ConsentService {
    * 
    * @param {string} requesterAddress - Ethereum address of requester (must match signer)
    * @param {string} patientAddress - Ethereum address of patient
-   * @param {string} dataType - Type of data requested
-   * @param {string} purpose - Purpose for data use
+   * @param {string[]} dataTypes - Array of data types requested
+   * @param {string[]} purposes - Array of purposes for data use
    * @param {number} expirationTime - Unix timestamp (0 for no expiration)
    * @returns {Promise<Object>} Transaction result with requestId and transaction hash
    * @throws {ValidationError} If inputs are invalid
    * @throws {ContractError} If contract call fails
    */
-  async requestAccess(requesterAddress, patientAddress, dataType, purpose, expirationTime) {
+  async requestAccess(requesterAddress, patientAddress, dataTypes, purposes, expirationTime) {
     // Validate inputs
     validateAddress(requesterAddress, 'requesterAddress');
     validateAddress(patientAddress, 'patientAddress');
-    
-    if (!dataType || typeof dataType !== 'string' || dataType.trim().length === 0) {
-      throw new ValidationError('dataType is required and must be a non-empty string', 'dataType', dataType);
+
+    // Validate arrays
+    if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
+      throw new ValidationError('dataTypes is required and must be a non-empty array', 'dataTypes', dataTypes);
     }
     
-    if (!purpose || typeof purpose !== 'string' || purpose.trim().length === 0) {
-      throw new ValidationError('purpose is required and must be a non-empty string', 'purpose', purpose);
+    if (!Array.isArray(purposes) || purposes.length === 0) {
+      throw new ValidationError('purposes is required and must be a non-empty array', 'purposes', purposes);
+    }
+
+    // Validate all strings in arrays
+    for (const dt of dataTypes) {
+      if (!dt || typeof dt !== 'string' || dt.trim().length === 0) {
+        throw new ValidationError('All dataTypes must be non-empty strings', 'dataTypes', dataTypes);
+      }
+    }
+    
+    for (const p of purposes) {
+      if (!p || typeof p !== 'string' || p.trim().length === 0) {
+        throw new ValidationError('All purposes must be non-empty strings', 'purposes', purposes);
+      }
     }
 
     if (!Number.isInteger(expirationTime) || expirationTime < 0) {
@@ -1225,12 +1473,12 @@ class ConsentService {
         );
       }
 
-      // Call contract
+      // Call batch function
       const tx = await Promise.race([
         signedContract.requestAccess(
           normalizedPatient,
-          dataType,
-          purpose,
+          dataTypes,
+          purposes,
           expirationTime
         ),
         new Promise((_, reject) => 

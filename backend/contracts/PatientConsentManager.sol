@@ -73,7 +73,8 @@ contract PatientConsentManager is ReentrancyGuard {
     
     /// @notice Maximum number of consents that can be granted in a single batch operation
     /// @dev Prevents gas limit issues and potential DoS attacks
-    uint256 private constant MAX_BATCH_SIZE = 50;
+    ///      Increased to 200 to support larger data type/purpose combinations
+    uint256 private constant MAX_BATCH_SIZE = 200;
 
     // ==================== ENUMS ====================
     
@@ -93,7 +94,7 @@ contract PatientConsentManager is ReentrancyGuard {
      *      - addresses packed together (20 bytes each)
      *      - timestamp and expirationTime use uint128 (sufficient until year 584 billion)
      *      - bool fits in remaining space after uint128 values
-     *      - strings stored separately (dynamic storage)
+     *      - bytes32 hashes used instead of strings (saves ~40,000 gas per consent)
      */
     struct ConsentRecord {
         address patientAddress;      // Address of the patient granting consent
@@ -101,8 +102,23 @@ contract PatientConsentManager is ReentrancyGuard {
         uint128 timestamp;           // Unix timestamp when consent was granted (packed)
         uint128 expirationTime;      // Unix timestamp when consent expires, 0 = no expiration (packed)
         bool isActive;               // Whether consent is currently active (packed with timestamp)
-        string dataType;             // Type of data (e.g., "medical_records", "genetic_data")
-        string purpose;              // Purpose for data use (e.g., "treatment", "research")
+        bytes32 dataTypeHash;        // Hash of data type (e.g., keccak256("medical_records"))
+        bytes32 purposeHash;         // Hash of purpose (e.g., keccak256("treatment"))
+    }
+    
+    /**
+     * @notice Represents a batch consent record for multiple data types and purposes
+     * @dev Used for batch approvals - stores arrays instead of individual records
+     *      Saves massive gas by avoiding 56+ individual struct writes
+     */
+    struct BatchConsentRecord {
+        address patientAddress;      // Address of the patient granting consent
+        address providerAddress;     // Address of the healthcare provider receiving consent
+        uint128 timestamp;           // Unix timestamp when consent was granted (packed)
+        uint128 expirationTime;      // Unix timestamp when consent expires, 0 = no expiration (packed)
+        bool isActive;               // Whether consent is currently active (packed with timestamp)
+        bytes32[] dataTypeHashes;    // Array of data type hashes
+        bytes32[] purposeHashes;     // Array of purpose hashes
     }
     
     /**
@@ -122,9 +138,13 @@ contract PatientConsentManager is ReentrancyGuard {
 
     // ==================== STORAGE VARIABLES ====================
     
-    /// @notice Mapping from consent ID to consent record
+    /// @notice Mapping from consent ID to consent record (for single consents)
     /// @dev Consent IDs are sequential, starting from 0
     mapping(uint256 => ConsentRecord) public consentRecords;
+    
+    /// @notice Mapping from batch consent ID to batch consent record
+    /// @dev Batch consents store multiple data types/purposes in one struct
+    mapping(uint256 => BatchConsentRecord) public batchConsentRecords;
     
     /// @notice Mapping from patient address to array of consent IDs they have granted
     /// @dev Used for efficient lookup of all consents for a patient
@@ -134,6 +154,10 @@ contract PatientConsentManager is ReentrancyGuard {
     /// @dev Used for efficient lookup of all consents for a provider
     mapping(address => uint256[]) public providerConsents;
     
+    /// @notice Mapping to track if a consent ID is a batch consent
+    /// @dev Used to determine which mapping to query
+    mapping(uint256 => bool) public isBatchConsent;
+    
     /// @notice Mapping from request ID to access request
     /// @dev Request IDs are sequential, starting from 0
     mapping(uint256 => AccessRequest) public accessRequests;
@@ -142,13 +166,23 @@ contract PatientConsentManager is ReentrancyGuard {
     /// @dev Used for efficient lookup of all requests for a patient
     mapping(address => uint256[]) public patientRequests;
     
-    /// @notice Mapping to track if a consent ID has been created (for existence validation)
-    /// @dev Prevents access to uninitialized consent records
-    mapping(uint256 => bool) private _consentExists;
-    
     /// @notice Mapping to track if a request ID has been created (for existence validation)
     /// @dev Prevents access to uninitialized request records
     mapping(uint256 => bool) private _requestExists;
+
+    /// @notice Mapping from request ID to array of data types
+    mapping(uint256 => string[]) public requestDataTypes;
+    
+    /// @notice Mapping from request ID to array of purposes
+    mapping(uint256 => string[]) public requestPurposes;
+
+    /// @notice Mapping from bytes32 hash to original string (for dataType)
+    /// @dev Used to retrieve original strings from hashes stored in ConsentRecord
+    mapping(bytes32 => string) public dataTypeHashToString;
+    
+    /// @notice Mapping from bytes32 hash to original string (for purpose)
+    /// @dev Used to retrieve original strings from hashes stored in ConsentRecord
+    mapping(bytes32 => string) public purposeHashToString;
 
     /// @notice Counter for generating unique consent IDs
     /// @dev Increments on each consent grant, starting from 0
@@ -165,18 +199,18 @@ contract PatientConsentManager is ReentrancyGuard {
      * @param consentId Unique identifier for the consent record
      * @param patient Address of the patient granting consent
      * @param provider Address of the provider receiving consent
-     * @param dataType Type of data being consented to
+     * @param dataTypeHash Hash of data type (keccak256 of original string)
      * @param expirationTime When consent expires (0 = no expiration)
-     * @param purpose Purpose for which data will be used
+     * @param purposeHash Hash of purpose (keccak256 of original string)
      * @param timestamp Block timestamp when consent was granted
      */
     event ConsentGranted(
         uint256 indexed consentId,
         address indexed patient,
         address indexed provider,
-        string dataType,
+        bytes32 dataTypeHash,
         uint128 expirationTime,
-        string purpose,
+        bytes32 purposeHash,
         uint128 timestamp
     );
 
@@ -209,8 +243,8 @@ contract PatientConsentManager is ReentrancyGuard {
      * @param requestId Unique identifier for the access request
      * @param requester Address requesting access
      * @param patient Address of the patient whose data is requested
-     * @param dataType Type of data being requested
-     * @param purpose Purpose for which data is needed
+     * @param dataTypes Array of data types being requested
+     * @param purposes Array of purposes for which data is needed
      * @param expirationTime When request expires (0 = no expiration)
      * @param timestamp Block timestamp when request was created
      */
@@ -218,8 +252,8 @@ contract PatientConsentManager is ReentrancyGuard {
         uint256 indexed requestId,
         address indexed requester,
         address indexed patient,
-        string dataType,
-        string purpose,
+        string[] dataTypes,
+        string[] purposes,
         uint128 expirationTime,
         uint128 timestamp
     );
@@ -346,6 +380,18 @@ contract PatientConsentManager is ReentrancyGuard {
             consentId = consentCounter++;
         }
         
+        // Compute hashes for gas-efficient storage
+        bytes32 dataTypeHash = keccak256(bytes(dataType));
+        bytes32 purposeHash = keccak256(bytes(purpose));
+        
+        // Store string mappings (only if not already stored - saves gas on duplicates)
+        if (bytes(dataTypeHashToString[dataTypeHash]).length == 0) {
+            dataTypeHashToString[dataTypeHash] = dataType;
+        }
+        if (bytes(purposeHashToString[purposeHash]).length == 0) {
+            purposeHashToString[purposeHash] = purpose;
+        }
+        
         // Create consent record with optimized storage layout
         ConsentRecord storage consent = consentRecords[consentId];
         consent.patientAddress = msg.sender;
@@ -353,24 +399,24 @@ contract PatientConsentManager is ReentrancyGuard {
         consent.timestamp = uint128(block.timestamp);
         consent.expirationTime = uint128(expirationTime);
         consent.isActive = true;
-        consent.dataType = dataType;
-        consent.purpose = purpose;
+        consent.dataTypeHash = dataTypeHash;
+        consent.purposeHash = purposeHash;
         
-        // Mark consent as existing for validation
-        _consentExists[consentId] = true;
+        // Note: We don't need _consentExists mapping - we can check if patientAddress is non-zero
+        // This saves one storage write per consent
         
         // Update patient and provider consent arrays
         patientConsents[msg.sender].push(consentId);
         providerConsents[provider].push(consentId);
         
-        // Emit event with all relevant information
+        // Emit event with hashes (much cheaper than strings)
         emit ConsentGranted(
             consentId,
             msg.sender,
             provider,
-            dataType,
+            dataTypeHash,
             uint128(expirationTime),
-            purpose,
+            purposeHash,
             uint128(block.timestamp)
         );
         
@@ -474,11 +520,11 @@ contract PatientConsentManager is ReentrancyGuard {
      * - Protected by ReentrancyGuard
      */
     function revokeConsent(uint256 consentId) external nonReentrant {
-        // Validate consent exists
-        if (!_consentExists[consentId]) revert ConsentNotFound();
-        
         // Cache storage read for gas efficiency
         ConsentRecord storage consent = consentRecords[consentId];
+        
+        // Validate consent exists (check if patientAddress is non-zero)
+        if (consent.patientAddress == address(0)) revert ConsentNotFound();
         
         // Validate caller is the patient
         if (consent.patientAddress != msg.sender) revert UnauthorizedRevocation();
@@ -494,42 +540,72 @@ contract PatientConsentManager is ReentrancyGuard {
     }
 
     /**
-     * @notice Requests access to patient data
-     * @dev Creates an access request that the patient can approve or deny.
-     *      Request remains pending until processed by the patient.
+     * @notice Requests access to patient data with multiple data types and purposes
+     * @dev Creates a single access request that can request multiple data types and purposes.
+     *      When approved, grants all combinations (cartesian product) as consents.
+     *      More gas-efficient than multiple individual requests.
      * 
      * @param patient Address of the patient whose data is being requested
-     * @param dataType Type of data being requested
-     * @param purpose Purpose for which data is needed
+     * @param dataTypes Array of data types being requested (must not be empty)
+     * @param purposes Array of purposes for which data is needed (must not be empty)
      * @param expirationTime Unix timestamp when request expires; 0 means no expiration
      * @return requestId Unique identifier for the created request
      * 
      * @custom:security
      * - Validates patient address is not zero
      * - Validates patient is not the caller (cannot request from self)
-     * - Validates strings are not empty and within limits
+     * - Validates arrays are not empty and within MAX_BATCH_SIZE
+     * - Validates all strings are non-empty and within limits
      * - Validates expiration time is in the future if non-zero
+     * - Validates total combinations (dataTypes.length × purposes.length) don't exceed MAX_BATCH_SIZE
      * - Protected by ReentrancyGuard
+     * 
+     * @custom:gas-optimization
+     * - Single transaction for multiple data types/purposes
+     * - Arrays stored in mappings for efficient access
+     * - Batch consent granting on approval
      */
     function requestAccess(
         address patient,
-        string memory dataType,
-        string memory purpose,
+        string[] calldata dataTypes,
+        string[] calldata purposes,
         uint256 expirationTime
     )
         external
         nonReentrant
         validAddress(patient)
-        validString(dataType)
-        validString(purpose)
         returns (uint256 requestId)
     {
         // Validate cannot request from self
         if (patient == msg.sender) revert CannotRequestAccessFromSelf();
         
+        // Validate arrays are not empty
+        uint256 dataTypesLength = dataTypes.length;
+        uint256 purposesLength = purposes.length;
+        
+        if (dataTypesLength == 0) revert EmptyBatch();
+        if (purposesLength == 0) revert EmptyBatch();
+        
+        // Validate total combinations don't exceed MAX_BATCH_SIZE
+        uint256 totalCombinations = dataTypesLength * purposesLength;
+        if (totalCombinations > MAX_BATCH_SIZE) revert EmptyBatch();
+        
         // Validate expiration time
         if (expirationTime > 0 && expirationTime < block.timestamp) {
             revert ExpirationInPast();
+        }
+        
+        // Validate all data types and purposes
+        for (uint256 i = 0; i < dataTypesLength; ) {
+            if (bytes(dataTypes[i]).length == 0) revert EmptyString();
+            if (bytes(dataTypes[i]).length > MAX_STRING_LENGTH) revert StringTooLong();
+            unchecked { i++; }
+        }
+        
+        for (uint256 i = 0; i < purposesLength; ) {
+            if (bytes(purposes[i]).length == 0) revert EmptyString();
+            if (bytes(purposes[i]).length > MAX_STRING_LENGTH) revert StringTooLong();
+            unchecked { i++; }
         }
         
         // Generate request ID
@@ -537,7 +613,7 @@ contract PatientConsentManager is ReentrancyGuard {
             requestId = requestCounter++;
         }
         
-        // Create access request
+        // Create access request (store first dataType/purpose in struct for compatibility)
         AccessRequest storage request = accessRequests[requestId];
         request.requester = msg.sender;
         request.patientAddress = patient;
@@ -545,8 +621,24 @@ contract PatientConsentManager is ReentrancyGuard {
         request.expirationTime = uint128(expirationTime);
         request.isProcessed = false;
         request.status = RequestStatus.Pending;
-        request.dataType = dataType;
-        request.purpose = purpose;
+        request.dataType = dataTypes[0]; // Store first for struct compatibility
+        request.purpose = purposes[0];    // Store first for struct compatibility
+        
+        // Store arrays in mappings (copy from calldata to storage)
+        string[] storage storedDataTypes = requestDataTypes[requestId];
+        string[] storage storedPurposes = requestPurposes[requestId];
+        
+        // Copy dataTypes array
+        for (uint256 i = 0; i < dataTypes.length; ) {
+            storedDataTypes.push(dataTypes[i]);
+            unchecked { i++; }
+        }
+        
+        // Copy purposes array
+        for (uint256 i = 0; i < purposes.length; ) {
+            storedPurposes.push(purposes[i]);
+            unchecked { i++; }
+        }
         
         // Mark request as existing
         _requestExists[requestId] = true;
@@ -554,13 +646,13 @@ contract PatientConsentManager is ReentrancyGuard {
         // Add to patient's request list
         patientRequests[patient].push(requestId);
         
-        // Emit event
+        // Emit event with arrays
         emit AccessRequested(
             requestId,
             msg.sender,
             patient,
-            dataType,
-            purpose,
+            dataTypes,
+            purposes,
             uint128(expirationTime),
             uint128(block.timestamp)
         );
@@ -616,31 +708,64 @@ contract PatientConsentManager is ReentrancyGuard {
             request.status = RequestStatus.Approved;
             emit AccessApproved(requestId, msg.sender, uint128(block.timestamp));
             
-            // Automatically grant consent when request is approved
-            // This creates a seamless workflow
+            // Get arrays from mappings
+            string[] memory batchDataTypes = requestDataTypes[requestId];
+            string[] memory batchPurposes = requestPurposes[requestId];
+            
+            uint256 dataTypesLength = batchDataTypes.length;
+            uint256 purposesLength = batchPurposes.length;
+            
+            // Pre-compute all hashes and store string mappings (only once per unique string)
+            bytes32[] memory dataTypeHashes = new bytes32[](dataTypesLength);
+            bytes32[] memory purposeHashes = new bytes32[](purposesLength);
+            
+            for (uint256 i = 0; i < dataTypesLength; ) {
+                bytes32 hash = keccak256(bytes(batchDataTypes[i]));
+                dataTypeHashes[i] = hash;
+                // Store mapping only if not already stored
+                if (bytes(dataTypeHashToString[hash]).length == 0) {
+                    dataTypeHashToString[hash] = batchDataTypes[i];
+                }
+                unchecked { i++; }
+            }
+            
+            for (uint256 j = 0; j < purposesLength; ) {
+                bytes32 hash = keccak256(bytes(batchPurposes[j]));
+                purposeHashes[j] = hash;
+                // Store mapping only if not already stored
+                if (bytes(purposeHashToString[hash]).length == 0) {
+                    purposeHashToString[hash] = batchPurposes[j];
+                }
+                unchecked { j++; }
+            }
+            
+            // Create a SINGLE batch consent record instead of 56 individual records
+            // This saves massive gas - one struct write instead of 56!
             unchecked {
-                uint256 consentId = consentCounter++;
+                uint256 batchConsentId = consentCounter++;
+                isBatchConsent[batchConsentId] = true;
                 
-                ConsentRecord storage consent = consentRecords[consentId];
-                consent.patientAddress = msg.sender;
-                consent.providerAddress = request.requester;
-                consent.timestamp = uint128(block.timestamp);
-                consent.expirationTime = request.expirationTime; // Use same expiration as request
-                consent.isActive = true;
-                consent.dataType = request.dataType;
-                consent.purpose = request.purpose;
+                BatchConsentRecord storage batchConsent = batchConsentRecords[batchConsentId];
+                batchConsent.patientAddress = msg.sender;
+                batchConsent.providerAddress = request.requester;
+                batchConsent.timestamp = uint128(block.timestamp);
+                batchConsent.expirationTime = uint128(request.expirationTime);
+                batchConsent.isActive = true;
                 
-                _consentExists[consentId] = true;
-                patientConsents[msg.sender].push(consentId);
-                providerConsents[request.requester].push(consentId);
+                // Store arrays directly in the struct (one write per array)
+                batchConsent.dataTypeHashes = dataTypeHashes;
+                batchConsent.purposeHashes = purposeHashes;
                 
-                emit ConsentGranted(
-                    consentId,
+                // Add to patient and provider arrays (just one ID instead of 56)
+                patientConsents[msg.sender].push(batchConsentId);
+                providerConsents[request.requester].push(batchConsentId);
+                
+                // Emit batch event with single consent ID
+                uint256[] memory consentIds = new uint256[](1);
+                consentIds[0] = batchConsentId;
+                emit ConsentBatchGranted(
                     msg.sender,
-                    request.requester,
-                    request.dataType,
-                    request.expirationTime,
-                    request.purpose,
+                    consentIds,
                     uint128(block.timestamp)
                 );
             }
@@ -655,6 +780,7 @@ contract PatientConsentManager is ReentrancyGuard {
     /**
      * @notice Internal helper to create a consent record
      * @dev Reduces stack depth by encapsulating consent creation logic
+     *      Uses string storage (for backward compatibility with grantConsent)
      * 
      * @param provider Address of the provider
      * @param dataType Type of data
@@ -665,9 +791,9 @@ contract PatientConsentManager is ReentrancyGuard {
      */
     function _createConsentRecord(
         address provider,
-        string calldata dataType,
+        string memory dataType,
         uint256 expirationTime,
-        string calldata purpose,
+        string memory purpose,
         uint256 consentId
     ) internal returns (uint256) {
         // Validate provider address
@@ -685,6 +811,18 @@ contract PatientConsentManager is ReentrancyGuard {
             revert ExpirationInPast();
         }
         
+        // Compute hashes
+        bytes32 dataTypeHash = keccak256(bytes(dataType));
+        bytes32 purposeHash = keccak256(bytes(purpose));
+        
+        // Store string mappings (only if not already stored)
+        if (bytes(dataTypeHashToString[dataTypeHash]).length == 0) {
+            dataTypeHashToString[dataTypeHash] = dataType;
+        }
+        if (bytes(purposeHashToString[purposeHash]).length == 0) {
+            purposeHashToString[purposeHash] = purpose;
+        }
+        
         // Create consent record
         ConsentRecord storage consent = consentRecords[consentId];
         consent.patientAddress = msg.sender;
@@ -692,28 +830,29 @@ contract PatientConsentManager is ReentrancyGuard {
         consent.timestamp = uint128(block.timestamp);
         consent.expirationTime = uint128(expirationTime);
         consent.isActive = true;
-        consent.dataType = dataType;
-        consent.purpose = purpose;
+        consent.dataTypeHash = dataTypeHash;
+        consent.purposeHash = purposeHash;
         
-        _consentExists[consentId] = true;
+        // Note: We don't need _consentExists mapping - we can check if patientAddress is non-zero
         
         // Update arrays
         patientConsents[msg.sender].push(consentId);
         providerConsents[provider].push(consentId);
         
-        // Emit event
+        // Emit event with hashes
         emit ConsentGranted(
             consentId,
             msg.sender,
             provider,
-            dataType,
+            dataTypeHash,
             uint128(expirationTime),
-            purpose,
+            purposeHash,
             uint128(block.timestamp)
         );
         
         return consentId;
     }
+
 
     // ==================== VIEW FUNCTIONS ====================
     
@@ -744,22 +883,45 @@ contract PatientConsentManager is ReentrancyGuard {
         for (uint256 i = 0; i < consents.length; ) {
             uint256 id = consents[i];
             
-            // Skip non-existent consents
-            if (!_consentExists[id]) {
-                unchecked { i++; }
-                continue;
-            }
-            
-            ConsentRecord memory consent = consentRecords[id];
-            
-            // Check if consent matches criteria
-            if (
-                consent.providerAddress == provider &&
-                keccak256(bytes(consent.dataType)) == dataTypeHash &&
-                consent.isActive &&
-                (consent.expirationTime == 0 || consent.expirationTime > currentTime)
-            ) {
-                return (true, id);
+            // Check if it's a batch consent
+            if (isBatchConsent[id]) {
+                BatchConsentRecord memory batchConsent = batchConsentRecords[id];
+                
+                // Check if batch consent matches provider and is active
+                if (
+                    batchConsent.providerAddress == provider &&
+                    batchConsent.isActive &&
+                    (batchConsent.expirationTime == 0 || batchConsent.expirationTime > currentTime)
+                ) {
+                    // Check if dataTypeHash exists in the array
+                    bytes32[] memory dataTypeHashes = batchConsent.dataTypeHashes;
+                    for (uint256 j = 0; j < dataTypeHashes.length; ) {
+                        if (dataTypeHashes[j] == dataTypeHash) {
+                            return (true, id);
+                        }
+                        unchecked { j++; }
+                    }
+                }
+            } else {
+                // Regular single consent
+                ConsentRecord memory consent = consentRecords[id];
+                
+                // Skip non-existent consents (check if patientAddress is non-zero)
+                if (consent.patientAddress == address(0)) {
+                    unchecked { i++; }
+                    continue;
+                }
+                
+                // Check if consent matches criteria (compare hashes)
+                bytes32 consentDataTypeHash = consent.dataTypeHash;
+                if (
+                    consent.providerAddress == provider &&
+                    consentDataTypeHash == dataTypeHash &&
+                    consent.isActive &&
+                    (consent.expirationTime == 0 || consent.expirationTime > currentTime)
+                ) {
+                    return (true, id);
+                }
             }
             
             unchecked {
@@ -778,15 +940,23 @@ contract PatientConsentManager is ReentrancyGuard {
      * @return expired True if consent exists and has expired
      */
     function isConsentExpired(uint256 consentId) external view returns (bool expired) {
-        if (!_consentExists[consentId]) return false;
-        
-        ConsentRecord memory consent = consentRecords[consentId];
-        
-        // Consent never expires if expirationTime is 0
-        if (consent.expirationTime == 0) return false;
-        
-        // Check if current time is past expiration
-        return consent.expirationTime < block.timestamp;
+        if (isBatchConsent[consentId]) {
+            BatchConsentRecord memory batchConsent = batchConsentRecords[consentId];
+            // Check if consent exists (patientAddress is non-zero)
+            if (batchConsent.patientAddress == address(0)) return false;
+            // Consent never expires if expirationTime is 0
+            if (batchConsent.expirationTime == 0) return false;
+            // Check if current time is past expiration
+            return batchConsent.expirationTime < block.timestamp;
+        } else {
+            ConsentRecord memory consent = consentRecords[consentId];
+            // Check if consent exists (patientAddress is non-zero)
+            if (consent.patientAddress == address(0)) return false;
+            // Consent never expires if expirationTime is 0
+            if (consent.expirationTime == 0) return false;
+            // Check if current time is past expiration
+            return consent.expirationTime < block.timestamp;
+        }
     }
 
     /**
@@ -810,22 +980,44 @@ contract PatientConsentManager is ReentrancyGuard {
         for (uint256 i = 0; i < consents.length; ) {
             uint256 id = consents[i];
             
-            if (!_consentExists[id]) {
-                unchecked { i++; }
-                continue;
-            }
-            
-            ConsentRecord storage consent = consentRecords[id];
-            
-            // Check if consent is active and expired
-            if (consent.isActive && 
-                consent.expirationTime > 0 && 
-                consent.expirationTime < currentTime) {
+            if (isBatchConsent[id]) {
+                BatchConsentRecord storage batchConsent = batchConsentRecords[id];
                 
-                consent.isActive = false;
-                expiredCount++;
+                // Skip non-existent consents (check if patientAddress is non-zero)
+                if (batchConsent.patientAddress == address(0)) {
+                    unchecked { i++; }
+                    continue;
+                }
                 
-                emit ConsentExpired(id, patient, uint128(currentTime));
+                // Check if batch consent is active and expired
+                if (batchConsent.isActive && 
+                    batchConsent.expirationTime > 0 && 
+                    batchConsent.expirationTime < currentTime) {
+                    
+                    batchConsent.isActive = false;
+                    expiredCount++;
+                    
+                    emit ConsentExpired(id, patient, uint128(currentTime));
+                }
+            } else {
+                ConsentRecord storage consent = consentRecords[id];
+                
+                // Skip non-existent consents (check if patientAddress is non-zero)
+                if (consent.patientAddress == address(0)) {
+                    unchecked { i++; }
+                    continue;
+                }
+                
+                // Check if consent is active and expired
+                if (consent.isActive && 
+                    consent.expirationTime > 0 && 
+                    consent.expirationTime < currentTime) {
+                    
+                    consent.isActive = false;
+                    expiredCount++;
+                    
+                    emit ConsentExpired(id, patient, uint128(currentTime));
+                }
             }
             
             unchecked {
@@ -879,8 +1071,33 @@ contract PatientConsentManager is ReentrancyGuard {
         view 
         returns (ConsentRecord memory) 
     {
-        if (!_consentExists[consentId]) revert ConsentNotFound();
-        return consentRecords[consentId];
+        // Batch consents cannot be returned as ConsentRecord - use getBatchConsentRecord instead
+        if (isBatchConsent[consentId]) revert ConsentNotFound();
+        
+        ConsentRecord memory consent = consentRecords[consentId];
+        // Check if consent exists (patientAddress is non-zero)
+        if (consent.patientAddress == address(0)) revert ConsentNotFound();
+        return consent;
+    }
+    
+    /**
+     * @notice Gets detailed batch consent record information
+     * @dev Returns complete batch consent record including all fields
+     * 
+     * @param consentId Unique identifier of the batch consent
+     * @return Complete batch consent record struct
+     */
+    function getBatchConsentRecord(uint256 consentId) 
+        external 
+        view 
+        returns (BatchConsentRecord memory) 
+    {
+        if (!isBatchConsent[consentId]) revert ConsentNotFound();
+        
+        BatchConsentRecord memory batchConsent = batchConsentRecords[consentId];
+        // Check if consent exists (patientAddress is non-zero)
+        if (batchConsent.patientAddress == address(0)) revert ConsentNotFound();
+        return batchConsent;
     }
 
     /**
@@ -918,9 +1135,21 @@ contract PatientConsentManager is ReentrancyGuard {
         uint256 count = 0;
         for (uint256 i = 0; i < consents.length; ) {
             uint256 id = consents[i];
-            if (_consentExists[id]) {
+            
+            if (isBatchConsent[id]) {
+                BatchConsentRecord memory batchConsent = batchConsentRecords[id];
+                // Check if consent exists (patientAddress is non-zero)
+                if (batchConsent.patientAddress != address(0) &&
+                    batchConsent.isActive && 
+                    batchConsent.expirationTime > 0 && 
+                    batchConsent.expirationTime < currentTime) {
+                    count++;
+                }
+            } else {
                 ConsentRecord memory consent = consentRecords[id];
-                if (consent.isActive && 
+                // Check if consent exists (patientAddress is non-zero)
+                if (consent.patientAddress != address(0) &&
+                    consent.isActive && 
                     consent.expirationTime > 0 && 
                     consent.expirationTime < currentTime) {
                     count++;
@@ -934,9 +1163,22 @@ contract PatientConsentManager is ReentrancyGuard {
         uint256 index = 0;
         for (uint256 i = 0; i < consents.length; ) {
             uint256 id = consents[i];
-            if (_consentExists[id]) {
+            
+            if (isBatchConsent[id]) {
+                BatchConsentRecord memory batchConsent = batchConsentRecords[id];
+                // Check if consent exists (patientAddress is non-zero)
+                if (batchConsent.patientAddress != address(0) &&
+                    batchConsent.isActive && 
+                    batchConsent.expirationTime > 0 && 
+                    batchConsent.expirationTime < currentTime) {
+                    expiredIds[index] = id;
+                    unchecked { index++; }
+                }
+            } else {
                 ConsentRecord memory consent = consentRecords[id];
-                if (consent.isActive && 
+                // Check if consent exists (patientAddress is non-zero)
+                if (consent.patientAddress != address(0) &&
+                    consent.isActive && 
                     consent.expirationTime > 0 && 
                     consent.expirationTime < currentTime) {
                     expiredIds[index] = id;

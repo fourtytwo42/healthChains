@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { X, Calendar, FileText, Pill, Heart, FlaskConical, Scan, Dna } from 'lucide-react';
 import { useProviderPatientData } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -657,11 +658,11 @@ export function PatientDetailsCard({
                 <p className="text-sm text-muted-foreground mb-2">
                   The following data types are available for this patient but you do not have consent to access:
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {((patientData as any).unavailableDataTypes || []).map((dataType: string) => (
-                    <Badge key={dataType} variant="secondary">{dataType}</Badge>
-                  ))}
-                </div>
+                <ColoredBadgeList
+                  type="dataType"
+                  values={(patientData as any).unavailableDataTypes || []}
+                  size="md"
+                />
               </CardContent>
             </Card>
           )}

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAccessRequest, useApproveRequest, useDenyRequest } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Building2, Calendar, FileText, Check, X, Loader2 } from 'lucide-react';
+import { Building2, Calendar, FileText, Check, X, Loader2, Copy, ExternalLink, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   Dialog,
@@ -14,6 +14,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { toast } from 'sonner';
+import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
+import { extractDomain, getFullUrl } from '@/lib/badge-utils';
 
 interface RequestResponseCardProps {
   requestId: number;
@@ -85,15 +94,27 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   // Check if request is already processed
   const isProcessed = requestData.status !== 'pending';
 
+  // Copy to clipboard handler
+  const handleCopyAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success('Address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy address');
+      console.error('Failed to copy:', error);
+    }
+  };
+
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Access Request</DialogTitle>
-          <DialogDescription>
-            Review the provider's request for access to your health data
-          </DialogDescription>
-        </DialogHeader>
+    <TooltipProvider>
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Access Request</DialogTitle>
+            <DialogDescription>
+              Review the provider's request for access to your health data
+            </DialogDescription>
+          </DialogHeader>
 
         <Card>
           <CardHeader>
@@ -118,30 +139,76 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
                   {(requestData as any).provider.specialties && (requestData as any).provider.specialties.length > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Specialties</p>
-                      <div className="flex flex-wrap gap-1">
-                        {(requestData as any).provider.specialties.slice(0, 3).map((specialty: string, idx: number) => (
-                          <Badge key={idx} variant="secondary" className="text-xs">
-                            {specialty}
-                          </Badge>
-                        ))}
-                      </div>
+                      <ColoredBadgeList
+                        type="specialty"
+                        values={(requestData as any).provider.specialties}
+                        maxDisplay={3}
+                      />
                     </div>
                   )}
                   {(requestData as any).provider.contact && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Contact</p>
-                      <p className="text-sm">{((requestData as any).provider.contact.email || '').replace('contact@', '')}</p>
+                      {(requestData as any).provider.contact.website ? (
+                        <a
+                          href={getFullUrl((requestData as any).provider.contact.website) || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline flex items-center gap-1 w-fit"
+                        >
+                          <span>{extractDomain((requestData as any).provider.contact.website) || (requestData as any).provider.contact.website}</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (requestData as any).provider.contact.email ? (
+                        <p className="text-sm">{((requestData as any).provider.contact.email || '').replace('contact@', '')}</p>
+                      ) : null}
                     </div>
                   )}
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Provider Address</p>
-                    <p className="font-mono text-xs text-muted-foreground">{requestData.requester || 'Unknown'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-xs text-muted-foreground">{requestData.requester || 'Unknown'}</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleCopyAddress(requestData.requester || '')}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Copy address to clipboard</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </>
               ) : (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Provider Address</p>
-                  <p className="font-mono text-sm">{requestData.requester || 'Unknown'}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-sm">{requestData.requester || 'Unknown'}</p>
+                    {requestData.requester && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleCopyAddress(requestData.requester || '')}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Copy address to clipboard</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">Provider information not available</p>
                 </div>
               )}
@@ -158,20 +225,33 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Data Type</p>
-              {requestData.dataType ? (
-                <Badge variant="outline" className="text-base py-1">
-                  {requestData.dataType}
-                </Badge>
+              <p className="text-sm text-muted-foreground mb-2">Data Types</p>
+              {requestData.dataTypes && requestData.dataTypes.length > 0 ? (
+                <ColoredBadgeList type="dataType" values={requestData.dataTypes} size="md" />
               ) : (
-                <p className="text-sm">Not specified</p>
+                <p className="text-sm text-muted-foreground">No data types specified</p>
               )}
             </div>
 
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Purpose</p>
-              <p className="text-sm font-medium">{requestData.purpose || 'Not specified'}</p>
+              <p className="text-sm text-muted-foreground mb-2">Purposes</p>
+              {requestData.purposes && requestData.purposes.length > 0 ? (
+                <ColoredBadgeList type="purpose" values={requestData.purposes} size="md" />
+              ) : (
+                <p className="text-sm text-muted-foreground">No purposes specified</p>
+              )}
             </div>
+
+            {/* Show cartesian product count */}
+            {requestData.dataTypes && requestData.purposes && 
+             (requestData.dataTypes.length > 1 || requestData.purposes.length > 1) && (
+              <div className="bg-muted/50 p-3 rounded-md">
+                <p className="text-sm font-medium text-muted-foreground">
+                  This will grant {requestData.dataTypes.length * requestData.purposes.length} consent{requestData.dataTypes.length * requestData.purposes.length !== 1 ? 's' : ''} 
+                  {' '}({requestData.dataTypes.length} data type{requestData.dataTypes.length !== 1 ? 's' : ''} × {requestData.purposes.length} purpose{requestData.purposes.length !== 1 ? 's' : ''})
+                </p>
+              </div>
+            )}
 
             {requestData.expirationTime && (
               <div>
@@ -255,6 +335,7 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
         </div>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   );
 }
 

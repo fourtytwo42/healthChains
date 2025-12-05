@@ -633,8 +633,8 @@ export function useRequestAccess() {
   return useMutation({
     mutationFn: async (data: {
       patientAddress: string;
-      dataType: string;
-      purpose: string;
+      dataTypes: string[];      // Array of data types
+      purposes: string[];        // Array of purposes
       expirationTime?: number;
     }) => {
       if (!account) {
@@ -649,11 +649,20 @@ export function useRequestAccess() {
       const contract = await getContract(signer);
       const expirationTime = data.expirationTime ?? 0;
 
-      // Call contract - MetaMask will prompt user to sign
+      // Validate arrays
+      if (!Array.isArray(data.dataTypes) || data.dataTypes.length === 0) {
+        throw new Error('dataTypes must be a non-empty array');
+      }
+
+      if (!Array.isArray(data.purposes) || data.purposes.length === 0) {
+        throw new Error('purposes must be a non-empty array');
+      }
+
+      // Call contract function - MetaMask will prompt user to sign
       const tx = await contract.requestAccess(
         data.patientAddress,
-        data.dataType,
-        data.purpose,
+        data.dataTypes,
+        data.purposes,
         expirationTime
       );
 
@@ -1041,6 +1050,139 @@ export function usePatientPendingRequests(
 }
 
 /**
+ * Hook for getting provider consent history (all events)
+ */
+export function useProviderConsentHistory(
+  providerAddress: string,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['providerConsentHistory', providerAddress?.toLowerCase()],
+    queryFn: async () => {
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = providerAddress.toLowerCase();
+      
+      // Fetch all consent events and access request events (no filter - we'll filter client-side)
+      const [consentEventsResponse, requestEventsResponse] = await Promise.all([
+        apiClient.getConsentEvents(), // Get all events, filter by provider client-side
+        apiClient.getAccessRequestEvents(), // Get all events, filter by requester client-side
+      ]);
+
+      // Combine events
+      const allEvents = [
+        ...(consentEventsResponse.success && consentEventsResponse.data ? consentEventsResponse.data : []),
+        ...(requestEventsResponse.success && requestEventsResponse.data ? requestEventsResponse.data : []),
+      ];
+
+      // Filter events by provider address
+      const providerEvents = allEvents.filter((event: any) => {
+        // For consent events, check if provider matches
+        if (event.type === 'ConsentGranted' || event.type === 'ConsentRevoked') {
+          return event.provider?.toLowerCase() === normalizedAddress;
+        }
+        // For access request events, check if requester matches
+        if (event.type === 'AccessRequested' || event.type === 'AccessApproved' || event.type === 'AccessDenied') {
+          return event.requester?.toLowerCase() === normalizedAddress;
+        }
+        return false;
+      });
+
+      // Fetch patient info for enrichment
+      const patientsResponse = await apiClient.getPatients();
+      const patients = patientsResponse.success && patientsResponse.data ? patientsResponse.data : [];
+
+      // Enrich events with patient info and check for expired consents
+      const enrichedEvents = providerEvents.map((event: any) => {
+        // Find patient by address
+        const patient = event.patient
+          ? patients.find((p: any) => 
+              p.blockchainIntegration?.walletAddress?.toLowerCase() === event.patient?.toLowerCase()
+            )
+          : null;
+
+        // Check if consent expired (for ConsentGranted events)
+        const isExpired = event.type === 'ConsentGranted' && 
+          event.expirationTime && 
+          new Date(event.expirationTime) < new Date();
+
+        return {
+          ...event,
+          patientInfo: patient ? {
+            patientId: patient.patientId,
+            firstName: patient.demographics?.firstName,
+            lastName: patient.demographics?.lastName,
+          } : null,
+          isExpired,
+        };
+      });
+
+      // Add expired consent events for consents that expired but weren't revoked
+      // Get all current consents for this provider to check for expired ones
+      try {
+        const consentsResponse = await apiClient.getProviderConsentsPaginated(normalizedAddress, 1, 100, true);
+        if (consentsResponse.success && consentsResponse.data) {
+          const consentsArray = Array.isArray(consentsResponse.data) 
+            ? consentsResponse.data 
+            : (consentsResponse.data as any)?.data || [];
+          
+          const expiredConsents = consentsArray.filter((c: any) => 
+            c.isExpired && c.isActive
+          );
+
+          // For each expired consent, check if there's already a revocation event
+          expiredConsents.forEach((consent: any) => {
+            const hasRevocationEvent = enrichedEvents.some((e: any) => 
+              e.type === 'ConsentRevoked' && e.consentId === consent.consentId
+            );
+
+            // If no revocation event exists, add an "expired" event
+            if (!hasRevocationEvent) {
+              const patient = patients.find((p: any) => 
+                p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.patientAddress.toLowerCase()
+              );
+
+              enrichedEvents.push({
+                type: 'ConsentExpired',
+                blockNumber: 0, // Not a blockchain event
+                transactionHash: '',
+                consentId: consent.consentId,
+                patient: consent.patientAddress,
+                provider: normalizedAddress,
+                dataType: consent.dataType,
+                purpose: consent.purpose,
+                expirationTime: consent.expirationTime,
+                timestamp: consent.expirationTime || consent.timestamp,
+                patientInfo: patient ? {
+                  patientId: patient.patientId,
+                  firstName: patient.demographics?.firstName,
+                  lastName: patient.demographics?.lastName,
+                } : null,
+                isExpired: true,
+              });
+            }
+          });
+        }
+      } catch (error) {
+        // If fetching consents fails, just continue without expired events
+        console.warn('Failed to fetch consents for expired event detection:', error);
+      }
+
+      // Sort by timestamp (most recent first)
+      enrichedEvents.sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+
+      return enrichedEvents;
+    },
+    enabled: enabled && !!providerAddress,
+    staleTime: 0, // Always refetch to get latest history
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+}
+
+/**
  * Hook for getting patient consent history (all events)
  */
 export function usePatientConsentHistory(
@@ -1109,35 +1251,36 @@ export function usePatientConsentHistory(
 
           // For each expired consent, check if there's already a revocation event
           expiredConsents.forEach((consent: any) => {
-          const hasRevocationEvent = enrichedEvents.some((e: any) => 
-            e.type === 'ConsentRevoked' && e.consentId === consent.consentId
-          );
-
-          // If no revocation event exists, add an "expired" event
-          if (!hasRevocationEvent) {
-            const provider = providers.find((p: any) => 
-              p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+            const hasRevocationEvent = enrichedEvents.some((e: any) => 
+              e.type === 'ConsentRevoked' && e.consentId === consent.consentId
             );
 
-            enrichedEvents.push({
-              type: 'ConsentExpired',
-              blockNumber: 0, // Not a blockchain event
-              transactionHash: '',
-              consentId: consent.consentId,
-              patient: normalizedAddress,
-              provider: consent.providerAddress,
-              dataType: consent.dataType,
-              purpose: consent.purpose,
-              expirationTime: consent.expirationTime,
-              timestamp: consent.expirationTime || consent.timestamp,
-              providerInfo: provider ? {
-                organizationName: provider.organizationName,
-                providerType: provider.providerType,
-              } : null,
-              isExpired: true,
-            });
-          }
-        });
+            // If no revocation event exists, add an "expired" event
+            if (!hasRevocationEvent) {
+              const provider = providers.find((p: any) => 
+                p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+              );
+
+              enrichedEvents.push({
+                type: 'ConsentExpired',
+                blockNumber: 0, // Not a blockchain event
+                transactionHash: '',
+                consentId: consent.consentId,
+                patient: normalizedAddress,
+                provider: consent.providerAddress,
+                dataType: consent.dataType,
+                purpose: consent.purpose,
+                expirationTime: consent.expirationTime,
+                timestamp: consent.expirationTime || consent.timestamp,
+                providerInfo: provider ? {
+                  organizationName: provider.organizationName,
+                  providerType: provider.providerType,
+                } : null,
+                isExpired: true,
+              });
+            }
+          });
+        }
       } catch (error) {
         // If fetching consents fails, just continue without expired events
         console.warn('Failed to fetch consents for expired event detection:', error);
