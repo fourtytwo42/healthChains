@@ -23,6 +23,7 @@ import {
 import { DialogDescription } from '@/components/ui/dialog';
 import { apiClient } from '@/lib/api-client';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ProviderInfoSection } from '@/components/shared/provider-info-section';
 
 interface ConsentDetailsCardProps {
   consent: {
@@ -32,8 +33,11 @@ interface ConsentDetailsCardProps {
     timestamp: string;
     expirationTime: string | null;
     isActive: boolean;
-    dataType: string;
-    purpose: string;
+    dataType?: string;  // Optional for single consents
+    purpose?: string;   // Optional for single consents
+    dataTypes?: string[];  // For batch consents
+    purposes?: string[];   // For batch consents
+    isBatch?: boolean;     // Flag to indicate batch consent
     isExpired: boolean;
     allConsents?: Array<{
       consentId: number;
@@ -88,241 +92,209 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
+      <DialogContent className="max-w-2xl">
+        <DialogHeader className="pb-3">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <FileCheck className="h-4 w-4" />
             Consent Details
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             View all consent details for this provider
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Provider Information */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Building2 className="h-4 w-4" />
                 Provider Information
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              {loadingProvider ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                </div>
-              ) : providerInfo ? (
-                <div className="space-y-2">
-                  {providerInfo.organizationName && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Organization</p>
-                      <p className="font-medium">{providerInfo.organizationName}</p>
-                    </div>
-                  )}
-                  {providerInfo.providerType && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Provider Type</p>
-                      <Badge variant="secondary">{providerInfo.providerType}</Badge>
-                    </div>
-                  )}
-                  {providerInfo.specialties && providerInfo.specialties.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Specialties</p>
-                      <ColoredBadgeList type="specialty" values={providerInfo.specialties} size="md" />
-                    </div>
-                  )}
-                  {providerInfo.contact?.email && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Contact Email</p>
-                      <p className="text-sm">{providerInfo.contact.email}</p>
-                    </div>
-                  )}
-                  {providerInfo.address && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Address</p>
-                      <p className="text-sm">
-                        {providerInfo.address.street}, {providerInfo.address.city}, {providerInfo.address.state} {providerInfo.address.zipCode}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Provider Wallet Address</p>
-                    <p className="font-mono text-sm">{consent.providerAddress}</p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-muted-foreground">Provider Wallet Address</p>
-                  <p className="font-mono text-sm">{consent.providerAddress}</p>
-                </div>
-              )}
+            <CardContent className="pt-0">
+              <ProviderInfoSection
+                providerInfo={providerInfo}
+                providerAddress={consent.providerAddress}
+                loading={loadingProvider}
+                showAddress={true}
+              />
             </CardContent>
           </Card>
 
           {/* Consent Details */}
           <Card>
-            <CardHeader>
-              <CardTitle>Consent Details</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Consent Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-0 space-y-3">
               {/* Show all data types if there are multiple consents */}
               {consent.allConsents && consent.allConsents.length > 1 ? (
                 <>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Data Types</p>
-                    <ColoredBadgeList
-                      type="dataType"
-                      values={Array.from(new Set(consent.allConsents.map(c => c.dataType)))}
-                      size="md"
-                    />
-                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                      <ColoredBadgeList
+                        type="dataType"
+                        values={Array.from(new Set(consent.allConsents.map(c => c.dataType)))}
+                        size="sm"
+                      />
+                    </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Purposes</p>
-                    <ColoredBadgeList
-                      type="purpose"
-                      values={Array.from(new Set(consent.allConsents.map(c => c.purpose)))}
-                      size="md"
-                    />
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Granted Date</p>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {format(new Date(consent.timestamp), 'MMMM d, yyyy HH:mm')}
-                      </span>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Purposes</p>
+                      <ColoredBadgeList
+                        type="purpose"
+                        values={Array.from(new Set(consent.allConsents.map(c => c.purpose)))}
+                        size="sm"
+                      />
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Expiration Dates</p>
-                    <div className="space-y-1">
-                      {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).map((expTime, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">
-                            {format(new Date(expTime as string), 'MMMM d, yyyy HH:mm')}
-                          </span>
-                        </div>
-                      ))}
-                      {consent.allConsents.some(c => !c.expirationTime) && (
-                        <Badge variant="secondary">Some consents have no expiration</Badge>
-                      )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Granted Date</p>
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs">
+                          {format(new Date(consent.timestamp), 'MMM d, yyyy HH:mm')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Status</p>
+                      <div className="flex items-center gap-1.5">
+                        {consent.allConsents.some(c => c.isActive && !c.isExpired) ? (
+                          <>
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                            <Badge variant="default" className="text-xs h-5">Active</Badge>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3 text-red-500" />
+                            <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Status</p>
-                    <div className="flex items-center gap-2">
-                      {consent.allConsents.some(c => c.isActive && !c.isExpired) ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                          <Badge variant="default">Active</Badge>
-                          {consent.allConsents.some(c => c.isExpired || !c.isActive) && (
-                            <Badge variant="secondary" className="ml-2">Some expired</Badge>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-red-500" />
-                          <Badge variant="destructive">All Expired</Badge>
-                        </>
-                      )}
+                  {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Expiration</p>
+                      <div className="space-y-0.5">
+                        {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).slice(0, 2).map((expTime, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs">
+                              {format(new Date(expTime as string), 'MMM d, yyyy HH:mm')}
+                            </span>
+                          </div>
+                        ))}
+                        {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length > 2 && (
+                          <p className="text-xs text-muted-foreground ml-4">
+                            +{Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length - 2} more
+                          </p>
+                        )}
+                        {consent.allConsents.some(c => !c.expirationTime) && (
+                          <Badge variant="secondary" className="text-xs h-5">Some have no expiration</Badge>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Show detailed breakdown - all consents from batch approval */}
                   {consent.allConsents && consent.allConsents.length > 1 && (
-                    <div className="pt-4 border-t">
-                      <p className="text-sm font-medium mb-1">Consent Breakdown</p>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        All {consent.allConsents.length} consents granted in one batch approval
-                      </p>
-                      <div className="space-y-2">
-                        {consent.allConsents.map((c, idx) => (
-                          <div key={idx} className="p-2 bg-muted/50 rounded-md">
-                            <div className="flex items-center justify-between">
-                              <div className="flex gap-2">
+                    <div className="pt-2 border-t">
+                      <p className="text-xs font-medium mb-1">Consent Breakdown ({consent.allConsents.length} total)</p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {consent.allConsents.slice(0, 5).map((c, idx) => (
+                          <div key={idx} className="p-1.5 bg-muted/50 rounded text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex gap-1 flex-wrap">
                                 <ColoredBadge type="dataType" value={c.dataType} size="sm" />
                                 <ColoredBadge type="purpose" value={c.purpose} size="sm" />
                               </div>
-                              <div className="flex items-center gap-2">
-                                {c.expirationTime && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {format(new Date(c.expirationTime), 'MMM d, yyyy')}
-                                  </span>
-                                )}
-                                {c.isActive && !c.isExpired ? (
-                                  <Badge variant="default" className="text-xs">Active</Badge>
-                                ) : (
-                                  <Badge variant="destructive" className="text-xs">Expired</Badge>
-                                )}
-                              </div>
+                              {c.isActive && !c.isExpired ? (
+                                <Badge variant="default" className="text-[10px] h-4 px-1">Active</Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>
+                              )}
                             </div>
                           </div>
                         ))}
+                        {consent.allConsents.length > 5 && (
+                          <p className="text-xs text-muted-foreground text-center py-1">
+                            +{consent.allConsents.length - 5} more consents
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
                 </>
               ) : (
                 <>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Data Type</p>
-                    <ColoredBadge type="dataType" value={consent.dataType} size="md" />
-                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Data Type</p>
+                      {consent.dataType ? (
+                        <ColoredBadge type="dataType" value={consent.dataType} size="sm" />
+                      ) : consent.dataTypes && consent.dataTypes.length > 0 ? (
+                        <ColoredBadgeList type="dataType" values={consent.dataTypes} size="sm" />
+                      ) : null}
+                    </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Purpose</p>
-                    <ColoredBadge type="purpose" value={consent.purpose} size="md" />
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Granted Date</p>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {format(new Date(consent.timestamp), 'MMMM d, yyyy HH:mm')}
-                      </span>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Purpose</p>
+                      {consent.purpose ? (
+                        <ColoredBadge type="purpose" value={consent.purpose} size="sm" />
+                      ) : consent.purposes && consent.purposes.length > 0 ? (
+                        <ColoredBadgeList type="purpose" values={consent.purposes} size="sm" />
+                      ) : null}
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Expiration</p>
-                    {consent.expirationTime ? (
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {format(new Date(consent.expirationTime), 'MMMM d, yyyy HH:mm')}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Granted Date</p>
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs">
+                          {format(new Date(consent.timestamp), 'MMM d, yyyy HH:mm')}
                         </span>
                       </div>
-                    ) : (
-                      <Badge variant="secondary">No expiration</Badge>
-                    )}
-                  </div>
+                    </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Status</p>
-                    <div className="flex items-center gap-2">
-                      {consent.isActive && !consent.isExpired ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                          <Badge variant="default">Active</Badge>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-red-500" />
-                          <Badge variant="destructive">Expired</Badge>
-                        </>
-                      )}
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Status</p>
+                      <div className="flex items-center gap-1.5">
+                        {consent.isActive && !consent.isExpired ? (
+                          <>
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                            <Badge variant="default" className="text-xs h-5">Active</Badge>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3 text-red-500" />
+                            <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {consent.expirationTime && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Expiration</p>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs">
+                          {format(new Date(consent.expirationTime), 'MMM d, yyyy HH:mm')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
@@ -337,19 +309,20 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
 
             if (hasActiveConsents) {
               return (
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  <Button variant="outline" onClick={onClose}>
+                <div className="flex justify-end gap-2 pt-3 border-t">
+                  <Button variant="outline" size="sm" onClick={onClose}>
                     Close
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
                         variant="destructive"
+                        size="sm"
                         disabled={revokeConsent.isPending}
                       >
                         {revokeConsent.isPending ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                             Revoking...
                           </>
                         ) : (
@@ -401,8 +374,8 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
             }
 
             return (
-              <div className="flex justify-end pt-4 border-t">
-                <Button variant="outline" onClick={onClose}>
+              <div className="flex justify-end pt-3 border-t">
+                <Button variant="outline" size="sm" onClick={onClose}>
                   Close
                 </Button>
               </div>

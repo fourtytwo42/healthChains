@@ -1050,17 +1050,68 @@ export function usePatientPendingRequests(
 }
 
 /**
+ * Hook for getting provider pending requests
+ */
+export function useProviderPendingRequests(
+  providerAddress: string,
+  page = 1,
+  limit = 10,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['providerPendingRequests', providerAddress?.toLowerCase(), page, limit],
+    queryFn: async () => {
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = providerAddress.toLowerCase();
+      console.log('[useProviderPendingRequests] Fetching for provider:', normalizedAddress);
+      const response = await apiClient.getProviderPendingRequests(normalizedAddress, page, limit);
+      console.log('[useProviderPendingRequests] Full response:', response);
+      
+      if (!response.success) {
+        console.error('[useProviderPendingRequests] API returned success: false', response);
+        throw new Error(response.error?.message || 'Failed to fetch pending requests');
+      }
+      
+      // The API returns {success: true, data: [...], pagination: {...}}
+      if (!response.data) {
+        console.error('[useProviderPendingRequests] No data in response:', response);
+        throw new Error('No data returned from API');
+      }
+      
+      // Return the data with pagination info
+      const result = {
+        data: response.data || [],
+        pagination: response.pagination || {
+          page: Number(page),
+          limit: Number(limit),
+          total: (response.data || []).length,
+          totalPages: Math.ceil((response.data || []).length / Number(limit))
+        }
+      };
+      
+      console.log('[useProviderPendingRequests] Returning result:', result);
+      return result;
+    },
+    enabled: enabled && !!providerAddress,
+    staleTime: 0, // Always refetch to get latest requests
+    refetchInterval: 10000, // Refetch every 10 seconds to catch new requests
+  });
+}
+
+/**
  * Hook for getting provider consent history (all events)
  */
 export function useProviderConsentHistory(
   providerAddress: string,
   enabled = true
 ) {
+  const normalizedAddress = providerAddress?.toLowerCase() || '';
+  
   return useQuery({
-    queryKey: ['providerConsentHistory', providerAddress?.toLowerCase()],
+    queryKey: ['providerConsentHistory', normalizedAddress],
     queryFn: async () => {
-      // Normalize address to lowercase for consistent API calls
-      const normalizedAddress = providerAddress.toLowerCase();
+      // Use the already normalized address from outer scope
+      const addressToMatch = normalizedAddress;
       
       // Fetch all consent events and access request events (no filter - we'll filter client-side)
       const [consentEventsResponse, requestEventsResponse] = await Promise.all([
@@ -1078,11 +1129,11 @@ export function useProviderConsentHistory(
       const providerEvents = allEvents.filter((event: any) => {
         // For consent events, check if provider matches
         if (event.type === 'ConsentGranted' || event.type === 'ConsentRevoked') {
-          return event.provider?.toLowerCase() === normalizedAddress;
+          return event.provider?.toLowerCase() === addressToMatch;
         }
         // For access request events, check if requester matches
         if (event.type === 'AccessRequested' || event.type === 'AccessApproved' || event.type === 'AccessDenied') {
-          return event.requester?.toLowerCase() === normalizedAddress;
+          return event.requester?.toLowerCase() === addressToMatch;
         }
         return false;
       });
@@ -1119,7 +1170,7 @@ export function useProviderConsentHistory(
       // Add expired consent events for consents that expired but weren't revoked
       // Get all current consents for this provider to check for expired ones
       try {
-        const consentsResponse = await apiClient.getProviderConsentsPaginated(normalizedAddress, 1, 100, true);
+        const consentsResponse = await apiClient.getProviderConsentsPaginated(addressToMatch, 1, 100, true);
         if (consentsResponse.success && consentsResponse.data) {
           const consentsArray = Array.isArray(consentsResponse.data) 
             ? consentsResponse.data 
@@ -1147,9 +1198,11 @@ export function useProviderConsentHistory(
                 transactionHash: '',
                 consentId: consent.consentId,
                 patient: consent.patientAddress,
-                provider: normalizedAddress,
-                dataType: consent.dataType,
-                purpose: consent.purpose,
+                provider: addressToMatch,
+                dataType: consent.dataType || (consent.dataTypes && consent.dataTypes[0]) || '',
+                purpose: consent.purpose || (consent.purposes && consent.purposes[0]) || '',
+                dataTypes: consent.dataTypes || (consent.dataType ? [consent.dataType] : []),
+                purposes: consent.purposes || (consent.purpose ? [consent.purpose] : []),
                 expirationTime: consent.expirationTime,
                 timestamp: consent.expirationTime || consent.timestamp,
                 patientInfo: patient ? {
@@ -1176,9 +1229,12 @@ export function useProviderConsentHistory(
 
       return enrichedEvents;
     },
-    enabled: enabled && !!providerAddress,
-    staleTime: 0, // Always refetch to get latest history
-    refetchInterval: 30000, // Refetch every 30 seconds
+    enabled: enabled && !!normalizedAddress,
+    staleTime: 30000, // Cache for 30 seconds to prevent excessive refetches
+    refetchInterval: false, // Disable automatic refetching to prevent loops
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -1230,6 +1286,9 @@ export function usePatientConsentHistory(
           providerInfo: provider ? {
             organizationName: provider.organizationName,
             providerType: provider.providerType,
+            specialties: provider.specialties || [],
+            contact: provider.contact || {},
+            address: provider.address || {},
           } : null,
           isExpired,
         };
@@ -1268,13 +1327,18 @@ export function usePatientConsentHistory(
                 consentId: consent.consentId,
                 patient: normalizedAddress,
                 provider: consent.providerAddress,
-                dataType: consent.dataType,
-                purpose: consent.purpose,
+                dataType: consent.dataType || (consent.dataTypes && consent.dataTypes[0]) || '',
+                purpose: consent.purpose || (consent.purposes && consent.purposes[0]) || '',
+                dataTypes: consent.dataTypes || (consent.dataType ? [consent.dataType] : []),
+                purposes: consent.purposes || (consent.purpose ? [consent.purpose] : []),
                 expirationTime: consent.expirationTime,
                 timestamp: consent.expirationTime || consent.timestamp,
                 providerInfo: provider ? {
                   organizationName: provider.organizationName,
                   providerType: provider.providerType,
+                  specialties: provider.specialties || [],
+                  contact: provider.contact || {},
+                  address: provider.address || {},
                 } : null,
                 isExpired: true,
               });

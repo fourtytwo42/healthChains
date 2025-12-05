@@ -289,9 +289,9 @@ export default function PatientDashboardPage() {
                       <TableRow>
                         <TableHead>Provider</TableHead>
                         <TableHead>Data Types</TableHead>
+                        <TableHead>Purpose</TableHead>
                         <TableHead>Granted Date</TableHead>
                         <TableHead>Expiration</TableHead>
-                        <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -312,9 +312,19 @@ export default function PatientDashboardPage() {
                           const providerName = firstConsent.provider?.organizationName || 
                             `${providerAddress.slice(0, 6)}...${providerAddress.slice(-4)}`;
                           
-                          // Get all unique data types
-                          const dataTypes = Array.from(new Set(consents.map((c: any) => c.dataType)));
-                          const hasActiveConsents = consents.some((c: any) => c.isActive && !c.isExpired);
+                          // Get all unique data types and purposes
+                          const dataTypes = Array.from(new Set(
+                            consents.flatMap((c: any) => 
+                              c.dataTypes && c.dataTypes.length > 0 ? c.dataTypes : 
+                              (c.dataType ? [c.dataType] : [])
+                            )
+                          ));
+                          const purposes = Array.from(new Set(
+                            consents.flatMap((c: any) => 
+                              c.purposes && c.purposes.length > 0 ? c.purposes : 
+                              (c.purpose ? [c.purpose] : [])
+                            )
+                          ));
                           const earliestDate = consents.reduce((earliest: string, c: any) => 
                             new Date(c.timestamp) < new Date(earliest) ? c.timestamp : earliest, 
                             consents[0].timestamp
@@ -330,33 +340,44 @@ export default function PatientDashboardPage() {
                               className="cursor-pointer hover:bg-muted/50"
                               onClick={() => handleConsentClick(firstConsent)}
                             >
-                              <TableCell className="font-medium">
-                                {providerName}
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">
+                                    {providerName}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground font-mono">
+                                    {providerAddress.slice(0, 6)}...{providerAddress.slice(-4)}
+                                  </div>
+                                </div>
                               </TableCell>
                               <TableCell>
-                                <ColoredBadgeList type="dataType" values={dataTypes} size="sm" maxDisplay={2} />
+                                {dataTypes.length > 0 ? (
+                                  <ColoredBadgeList type="dataType" values={dataTypes} size="sm" maxDisplay={2} />
+                                ) : (
+                                  <span className="text-muted-foreground">N/A</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {purposes.length > 0 ? (
+                                  <ColoredBadgeList type="purpose" values={purposes} size="sm" maxDisplay={2} />
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">N/A</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-1 text-sm">
                                   <Clock className="h-3 w-3" />
-                                  {format(new Date(earliestDate), 'MMM d, yyyy')}
+                                  {format(new Date(earliestDate), 'MMM d, yyyy HH:mm')}
                                 </div>
                               </TableCell>
                               <TableCell>
                                 {latestExpiration ? (
                                   <div className="flex items-center gap-1 text-sm">
                                     <Clock className="h-3 w-3" />
-                                    {format(latestExpiration, 'MMM d, yyyy')}
+                                    {format(latestExpiration, 'MMM d, yyyy HH:mm')}
                                   </div>
                                 ) : (
                                   <Badge variant="secondary">No expiration</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {hasActiveConsents ? (
-                                  <Badge variant="default">Active</Badge>
-                                ) : (
-                                  <Badge variant="destructive">Expired</Badge>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -368,7 +389,7 @@ export default function PatientDashboardPage() {
                                     handleConsentClick(firstConsent);
                                   }}
                                 >
-                                  View Details
+                                  Review
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -480,60 +501,60 @@ export default function PatientDashboardPage() {
                         className={`cursor-pointer transition-all hover:shadow-sm hover:border-opacity-80 border-l-4 ${eventBorderColor} ${eventBgColor}`}
                         onClick={() => setSelectedHistoryEvent(event)}
                       >
-                        <CardContent className="p-3">
-                          <div className="flex items-start gap-3">
+                        <CardContent className="p-2">
+                          <div className="flex items-center gap-2">
                             {/* Icon */}
                             {eventIcon && (
-                              <div className={`flex-shrink-0 p-1.5 rounded-md ${eventBgColor} ${eventColor}`}>
-                                {React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
+                              <div className={`flex-shrink-0 p-1 rounded-md ${eventBgColor} ${eventColor}`}>
+                                {React.cloneElement(eventIcon, { className: 'h-3 w-3' })}
                               </div>
                             )}
                             
                             {/* Main Content */}
-                            <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex-1 min-w-0">
                               {/* Header */}
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center justify-between gap-2 mb-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <h3 className={`font-semibold text-sm ${eventColor}`}>
+                                  <h3 className={`font-semibold text-xs ${eventColor}`}>
                                     {eventType}
                                   </h3>
                                   {statusBadge}
                                   {isExpired && event.type === 'ConsentGranted' && (
-                                    <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>
                                   )}
                                 </div>
-                                <p className="text-xs text-muted-foreground whitespace-nowrap">
+                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
                                   {format(new Date(event.timestamp), 'MMM d, yyyy • h:mm a')}
                                 </p>
                               </div>
 
                               {/* Details Grid - Compact */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-0.5 text-xs">
                                 {/* Provider Info */}
                                 {event.providerInfo?.organizationName ? (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Provider</p>
-                                    <p className="text-xs font-semibold truncate">{event.providerInfo.organizationName}</p>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</p>
+                                    <p className="text-[11px] font-semibold truncate">{event.providerInfo.organizationName}</p>
                                   </div>
                                 ) : event.provider ? (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Provider</p>
-                                    <p className="text-xs font-mono truncate">{event.provider.slice(0, 8)}...{event.provider.slice(-6)}</p>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</p>
+                                    <p className="text-[11px] font-mono truncate">{event.provider.slice(0, 8)}...{event.provider.slice(-6)}</p>
                                   </div>
                                 ) : null}
 
                                 {/* Data Type & Purpose */}
                                 {((event.dataTypes && event.dataTypes.length > 0) || (event.dataType || event.purpose)) && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Access</p>
-                                    <div className="flex flex-wrap gap-1">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Access</p>
+                                    <div className="flex flex-wrap gap-0.5">
                                       {event.dataTypes && event.dataTypes.length > 0 ? (
                                         <>
                                           {event.dataTypes.slice(0, 2).map((dt: string, idx: number) => (
                                             <ColoredBadge key={idx} type="dataType" value={dt} size="sm" />
                                           ))}
                                           {event.dataTypes.length > 2 && (
-                                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.dataTypes.length - 2}</Badge>
+                                            <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.dataTypes.length - 2}</Badge>
                                           )}
                                         </>
                                       ) : event.dataType ? (
@@ -545,7 +566,7 @@ export default function PatientDashboardPage() {
                                             <ColoredBadge key={idx} type="purpose" value={p} size="sm" />
                                           ))}
                                           {event.purposes.length > 2 && (
-                                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.purposes.length - 2}</Badge>
+                                            <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.purposes.length - 2}</Badge>
                                           )}
                                         </>
                                       ) : event.purpose ? (
@@ -558,10 +579,10 @@ export default function PatientDashboardPage() {
                                 {/* Expiration */}
                                 {event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Expires</p>
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-2.5 w-2.5 text-muted-foreground flex-shrink-0" />
-                                      <p className="text-xs truncate">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Expires</p>
+                                    <div className="flex items-center gap-0.5">
+                                      <Clock className="h-2 w-2 text-muted-foreground flex-shrink-0" />
+                                      <p className="text-[11px] truncate">
                                         {format(new Date(event.expirationTime), 'MMM d, yyyy')}
                                       </p>
                                     </div>
@@ -571,10 +592,10 @@ export default function PatientDashboardPage() {
                                 {/* IDs */}
                                 {(event.consentId !== undefined || event.requestId !== undefined) && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                                       {event.consentId !== undefined ? 'Consent ID' : 'Request ID'}
                                     </p>
-                                    <p className="text-xs font-mono font-semibold">
+                                    <p className="text-[11px] font-mono font-semibold">
                                       #{event.consentId ?? event.requestId}
                                     </p>
                                   </div>

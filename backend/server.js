@@ -433,6 +433,45 @@ app.get('/api/provider/:providerAddress/patients', async (req, res, next) => {
   }
 });
 
+// GET /api/provider/:providerAddress/pending-requests
+app.get('/api/provider/:providerAddress/pending-requests', async (req, res, next) => {
+  try {
+    const { providerAddress } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    
+    const requests = await consentService.getProviderPendingRequests(providerAddress);
+    
+    // Enrich with patient info
+    const enrichedRequests = requests.map(request => {
+      const patient = mockPatients.mockPatients.patients.find(
+        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === request.patientAddress.toLowerCase()
+      );
+      
+      return {
+        ...request,
+        patient: patient ? {
+          patientId: patient.patientId,
+          firstName: patient.demographics?.firstName,
+          lastName: patient.demographics?.lastName
+        } : null
+      };
+    });
+    
+    const result = paginateArray(enrichedRequests, page, limit);
+    
+    res.json({
+      success: true,
+      ...result,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        providerAddress
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/provider/:providerAddress/patient/:patientId/data
 app.get('/api/provider/:providerAddress/patient/:patientId/data', async (req, res, next) => {
   try {

@@ -510,6 +510,7 @@ contract PatientConsentManager is ReentrancyGuard {
      * @dev Only the patient who granted the consent can revoke it.
      *      Validates consent exists and is currently active.
      *      Marks consent as inactive but preserves the record for audit purposes.
+     *      Handles both single ConsentRecord and BatchConsentRecord.
      * 
      * @param consentId Unique identifier of the consent to revoke
      * 
@@ -520,23 +521,44 @@ contract PatientConsentManager is ReentrancyGuard {
      * - Protected by ReentrancyGuard
      */
     function revokeConsent(uint256 consentId) external nonReentrant {
-        // Cache storage read for gas efficiency
-        ConsentRecord storage consent = consentRecords[consentId];
-        
-        // Validate consent exists (check if patientAddress is non-zero)
-        if (consent.patientAddress == address(0)) revert ConsentNotFound();
-        
-        // Validate caller is the patient
-        if (consent.patientAddress != msg.sender) revert UnauthorizedRevocation();
-        
-        // Validate consent is active
-        if (!consent.isActive) revert ConsentAlreadyInactive();
-        
-        // Mark consent as inactive (preserve record for audit)
-        consent.isActive = false;
-        
-        // Emit event
-        emit ConsentRevoked(consentId, msg.sender, uint128(block.timestamp));
+        // Check if it's a batch consent
+        if (isBatchConsent[consentId]) {
+            // Handle batch consent
+            BatchConsentRecord storage batchConsent = batchConsentRecords[consentId];
+            
+            // Validate consent exists (check if patientAddress is non-zero)
+            if (batchConsent.patientAddress == address(0)) revert ConsentNotFound();
+            
+            // Validate caller is the patient
+            if (batchConsent.patientAddress != msg.sender) revert UnauthorizedRevocation();
+            
+            // Validate consent is active
+            if (!batchConsent.isActive) revert ConsentAlreadyInactive();
+            
+            // Mark consent as inactive (preserve record for audit)
+            batchConsent.isActive = false;
+            
+            // Emit event
+            emit ConsentRevoked(consentId, msg.sender, uint128(block.timestamp));
+        } else {
+            // Handle single consent
+            ConsentRecord storage consent = consentRecords[consentId];
+            
+            // Validate consent exists (check if patientAddress is non-zero)
+            if (consent.patientAddress == address(0)) revert ConsentNotFound();
+            
+            // Validate caller is the patient
+            if (consent.patientAddress != msg.sender) revert UnauthorizedRevocation();
+            
+            // Validate consent is active
+            if (!consent.isActive) revert ConsentAlreadyInactive();
+            
+            // Mark consent as inactive (preserve record for audit)
+            consent.isActive = false;
+            
+            // Emit event
+            emit ConsentRevoked(consentId, msg.sender, uint128(block.timestamp));
+        }
     }
 
     /**

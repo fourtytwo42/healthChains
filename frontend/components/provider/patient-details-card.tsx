@@ -1,11 +1,12 @@
 'use client';
 
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
-import { X, Calendar, FileText, Pill, Heart, FlaskConical, Scan, Dna } from 'lucide-react';
-import { useProviderPatientData } from '@/hooks/use-api';
+import { X, Calendar, FileText, Pill, Heart, FlaskConical, Scan, Dna, History, CheckCircle, Clock, Users } from 'lucide-react';
+import { useProviderPatientData, useProviderConsentHistory, usePatients } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import {
@@ -124,6 +125,47 @@ export function PatientDetailsCard({
   // Check if there's no consent granted yet
   const hasNoConsent = Object.keys(consentedData).length === 0 && consentInfo.length === 0;
 
+  // Fetch provider consent history and filter for this specific patient
+  // Only fetch when we have valid data (not loading, no error, and data exists)
+  // Use a stable check - only check if data exists, not the object reference
+  const hasData = !!data?.data;
+  const shouldFetchHistory = !isLoading && !error && hasData && !!providerAddress;
+  
+  // DISABLED: This hook is causing infinite loops
+  // const { data: providerHistory } = useProviderConsentHistory(
+  //   providerAddress, 
+  //   false // Disabled to prevent infinite loops
+  // );
+  const providerHistory: any[] = [];
+  
+  // DISABLED: Temporarily disabled to prevent infinite loops
+  // Fetch all patients to get wallet address for this patient
+  // const { data: allPatients } = usePatients();
+  const allPatients: any[] = [];
+  
+  // Get patient wallet address from patients list - use stable reference
+  const patient = React.useMemo(() => {
+    return allPatients?.find((p: any) => p.patientId === patientId);
+  }, [allPatients, patientId]);
+  
+  const patientWalletAddress = patient?.blockchainIntegration?.walletAddress;
+  
+  // Filter history to only show events for this specific patient
+  // We'll match by patient address if available, or by patientId in patientInfo
+  const patientHistory = React.useMemo(() => {
+    if (!providerHistory || !Array.isArray(providerHistory)) return [];
+    if (!patientWalletAddress && !patientId) return [];
+    
+    return providerHistory.filter((event: any) => {
+      if (patientWalletAddress) {
+        const eventPatientAddress = event.patient?.toLowerCase() || event.patientAddress?.toLowerCase();
+        return eventPatientAddress === patientWalletAddress.toLowerCase();
+      }
+      // Fallback: match by patientId in patientInfo
+      return event.patientInfo?.patientId === patientId;
+    });
+  }, [providerHistory, patientWalletAddress, patientId]);
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -204,9 +246,9 @@ export function PatientDetailsCard({
                     <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
                       <div>
                         <Badge variant="outline" className="mr-2">
-                          {consent.dataType}
+                          {(consent as any).dataType || ((consent as any).dataTypes && (consent as any).dataTypes.join(', ')) || 'N/A'}
                         </Badge>
-                        <span className="text-sm">{consent.purpose}</span>
+                        <span className="text-sm">{(consent as any).purpose || ((consent as any).purposes && (consent as any).purposes.join(', ')) || 'N/A'}</span>
                       </div>
                       {consent.expirationTime && (
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -669,6 +711,105 @@ export function PatientDetailsCard({
 
           {/* This message is now shown in the "No Active Consents" card above when hasNoConsent is true */}
         </div>
+
+        {/* Compact Consent History */}
+        {patientHistory.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-sm">
+                <History className="h-3.5 w-3.5" />
+                Consent History
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-1">
+                {patientHistory.slice(0, 10).map((event: any, index: number) => {
+                  // Determine event type and styling
+                  let eventType = '';
+                  let eventIcon = null;
+                  let eventColor = '';
+                  let eventBgColor = '';
+                  
+                  if (event.type === 'ConsentGranted') {
+                    eventType = 'Granted';
+                    eventIcon = <CheckCircle className="h-2.5 w-2.5" />;
+                    eventColor = 'text-green-600 dark:text-green-400';
+                    eventBgColor = 'bg-green-50 dark:bg-green-950/20';
+                  } else if (event.type === 'ConsentRevoked') {
+                    eventType = 'Revoked';
+                    eventIcon = <X className="h-2.5 w-2.5" />;
+                    eventColor = 'text-red-600 dark:text-red-400';
+                    eventBgColor = 'bg-red-50 dark:bg-red-950/20';
+                  } else if (event.type === 'ConsentExpired') {
+                    eventType = 'Expired';
+                    eventIcon = <Clock className="h-2.5 w-2.5" />;
+                    eventColor = 'text-orange-600 dark:text-orange-400';
+                    eventBgColor = 'bg-orange-50 dark:bg-orange-950/20';
+                  } else if (event.type === 'AccessRequested') {
+                    eventType = 'Request Sent';
+                    eventIcon = <Users className="h-2.5 w-2.5" />;
+                    eventColor = 'text-blue-600 dark:text-blue-400';
+                    eventBgColor = 'bg-blue-50 dark:bg-blue-950/20';
+                  } else if (event.type === 'AccessApproved') {
+                    eventType = 'Approved';
+                    eventIcon = <CheckCircle className="h-2.5 w-2.5" />;
+                    eventColor = 'text-green-600 dark:text-green-400';
+                    eventBgColor = 'bg-green-50 dark:bg-green-950/20';
+                  } else if (event.type === 'AccessDenied') {
+                    eventType = 'Denied';
+                    eventIcon = <X className="h-2.5 w-2.5" />;
+                    eventColor = 'text-red-600 dark:text-red-400';
+                    eventBgColor = 'bg-red-50 dark:bg-red-950/20';
+                  }
+
+                  return (
+                    <div
+                      key={`${event.type}-${event.consentId || event.requestId}-${index}`}
+                      className={`flex items-center gap-1.5 p-1.5 rounded text-[10px] ${eventBgColor}`}
+                    >
+                      {eventIcon && (
+                        <div className={`flex-shrink-0 ${eventColor}`}>
+                          {eventIcon}
+                        </div>
+                      )}
+                      <span className={`font-medium ${eventColor} flex-shrink-0`}>
+                        {eventType}
+                      </span>
+                      {(event.dataTypes && event.dataTypes.length > 0) || (event.dataType) ? (
+                        <div className="flex items-center gap-0.5 flex-wrap flex-1 min-w-0">
+                          <ColoredBadgeList
+                            type="dataType"
+                            values={event.dataTypes || (event.dataType ? [event.dataType] : [])}
+                            size="sm"
+                            maxDisplay={2}
+                          />
+                        </div>
+                      ) : null}
+                      {(event.purposes && event.purposes.length > 0) || (event.purpose) ? (
+                        <div className="flex items-center gap-0.5 flex-wrap flex-1 min-w-0">
+                          <ColoredBadgeList
+                            type="purpose"
+                            values={event.purposes || (event.purpose ? [event.purpose] : [])}
+                            size="sm"
+                            maxDisplay={2}
+                          />
+                        </div>
+                      ) : null}
+                      <span className="text-[9px] text-muted-foreground flex-shrink-0 ml-auto">
+                        {format(new Date(event.timestamp), 'MMM d, HH:mm')}
+                      </span>
+                    </div>
+                  );
+                })}
+                {patientHistory.length > 10 && (
+                  <div className="text-center text-[10px] text-muted-foreground pt-1">
+                    +{patientHistory.length - 10} more events
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex justify-end">
           <Button onClick={onClose}>Close</Button>

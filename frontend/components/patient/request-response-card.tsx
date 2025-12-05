@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { extractDomain, getFullUrl } from '@/lib/badge-utils';
+import { ProviderInfoSection } from '@/components/shared/provider-info-section';
 
 interface RequestResponseCardProps {
   requestId: number;
@@ -59,14 +60,14 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   if (isLoading) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Access Request</DialogTitle>
-            <DialogDescription>Loading request details...</DialogDescription>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="pb-3">
+            <DialogTitle className="text-lg">Access Request</DialogTitle>
+            <DialogDescription className="text-xs">Loading request details...</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-32 w-full" />
+          <div className="space-y-3">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
           </div>
         </DialogContent>
       </Dialog>
@@ -76,14 +77,14 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   if (error || !request) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Error</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="pb-3">
+            <DialogTitle className="text-lg">Error</DialogTitle>
+            <DialogDescription className="text-xs">
               Failed to load request details. {error?.message || 'Unknown error'}
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={onClose}>Close</Button>
         </DialogContent>
       </Dialog>
     );
@@ -109,172 +110,96 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
     <TooltipProvider>
       <Dialog open onOpenChange={onClose}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Access Request</DialogTitle>
-            <DialogDescription>
+          <DialogHeader className="pb-3">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <FileText className="h-4 w-4" />
+              Access Request
+            </DialogTitle>
+            <DialogDescription className="text-xs">
               Review the provider's request for access to your health data
             </DialogDescription>
           </DialogHeader>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="h-4 w-4" />
               Provider Information
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {(requestData as any).provider ? (
-                <>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Organization</p>
-                    <p className="font-semibold text-lg">{(requestData as any).provider.organizationName}</p>
-                    {(requestData as any).provider.providerType && (
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {(requestData as any).provider.providerType.replace(/_/g, ' ')}
-                      </p>
-                    )}
-                  </div>
-                  {(requestData as any).provider.specialties && (requestData as any).provider.specialties.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Specialties</p>
-                      <ColoredBadgeList
-                        type="specialty"
-                        values={(requestData as any).provider.specialties}
-                        maxDisplay={3}
-                      />
-                    </div>
-                  )}
-                  {(requestData as any).provider.contact && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Contact</p>
-                      {(requestData as any).provider.contact.website ? (
-                        <a
-                          href={getFullUrl((requestData as any).provider.contact.website) || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary hover:underline flex items-center gap-1 w-fit"
-                        >
-                          <span>{extractDomain((requestData as any).provider.contact.website) || (requestData as any).provider.contact.website}</span>
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : (requestData as any).provider.contact.email ? (
-                        <p className="text-sm">{((requestData as any).provider.contact.email || '').replace('contact@', '')}</p>
-                      ) : null}
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Provider Address</p>
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-xs text-muted-foreground">{requestData.requester || 'Unknown'}</p>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => handleCopyAddress(requestData.requester || '')}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Copy address to clipboard</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Provider Address</p>
-                  <div className="flex items-center gap-2">
-                    <p className="font-mono text-sm">{requestData.requester || 'Unknown'}</p>
-                    {requestData.requester && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => handleCopyAddress(requestData.requester || '')}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Copy address to clipboard</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Provider information not available</p>
-                </div>
-              )}
-            </div>
+          <CardContent className="pt-0">
+            <ProviderInfoSection
+              providerInfo={(requestData as any).provider || null}
+              providerAddress={requestData.requester || 'Unknown'}
+              loading={false}
+              showAddress={false}
+            />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4" />
               Requested Access
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Data Types</p>
-              {requestData.dataTypes && requestData.dataTypes.length > 0 ? (
-                <ColoredBadgeList type="dataType" values={requestData.dataTypes} size="md" />
-              ) : (
-                <p className="text-sm text-muted-foreground">No data types specified</p>
-              )}
-            </div>
+          <CardContent className="pt-0 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                {requestData.dataTypes && requestData.dataTypes.length > 0 ? (
+                  <ColoredBadgeList type="dataType" values={requestData.dataTypes} size="sm" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No data types specified</p>
+                )}
+              </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Purposes</p>
-              {requestData.purposes && requestData.purposes.length > 0 ? (
-                <ColoredBadgeList type="purpose" values={requestData.purposes} size="md" />
-              ) : (
-                <p className="text-sm text-muted-foreground">No purposes specified</p>
-              )}
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Purposes</p>
+                {requestData.purposes && requestData.purposes.length > 0 ? (
+                  <ColoredBadgeList type="purpose" values={requestData.purposes} size="sm" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No purposes specified</p>
+                )}
+              </div>
             </div>
 
             {/* Show cartesian product count */}
             {requestData.dataTypes && requestData.purposes && 
              (requestData.dataTypes.length > 1 || requestData.purposes.length > 1) && (
-              <div className="bg-muted/50 p-3 rounded-md">
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="bg-muted/50 p-2 rounded-md">
+                <p className="text-xs font-medium text-muted-foreground">
                   This will grant {requestData.dataTypes.length * requestData.purposes.length} consent{requestData.dataTypes.length * requestData.purposes.length !== 1 ? 's' : ''} 
                   {' '}({requestData.dataTypes.length} data type{requestData.dataTypes.length !== 1 ? 's' : ''} × {requestData.purposes.length} purpose{requestData.purposes.length !== 1 ? 's' : ''})
                 </p>
               </div>
             )}
 
-            {requestData.expirationTime && (
+            <div className="grid grid-cols-2 gap-3">
+              {requestData.expirationTime && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Expiration
+                  </p>
+                  <p className="text-xs">
+                    {format(new Date(requestData.expirationTime), 'MMM d, yyyy HH:mm')}
+                  </p>
+                </div>
+              )}
+
               <div>
-                <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
-                  Expiration
-                </p>
-                <p className="text-sm">
-                  {format(new Date(requestData.expirationTime), 'PPP')}
+                <p className="text-xs text-muted-foreground mb-1">Request Date</p>
+                <p className="text-xs">
+                  {format(new Date(requestData.timestamp), 'MMM d, yyyy HH:mm')}
                 </p>
               </div>
-            )}
-
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Request Date</p>
-              <p className="text-sm">
-                {format(new Date(requestData.timestamp), 'PPP p')}
-              </p>
             </div>
 
             {isProcessed && (
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Status</p>
+                <p className="text-xs text-muted-foreground mb-1">Status</p>
                 <Badge
                   variant={
                     requestData.status === 'approved'
@@ -283,6 +208,7 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
                       ? 'destructive'
                       : 'outline'
                   }
+                  className="text-xs h-5"
                 >
                   {requestData.status}
                 </Badge>
@@ -291,41 +217,43 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex justify-end gap-2 pt-3 border-t">
+          <Button variant="outline" size="sm" onClick={onClose}>
             {isProcessed ? 'Close' : 'Cancel'}
           </Button>
           {!isProcessed && (
             <>
               <Button
                 variant="destructive"
+                size="sm"
                 onClick={handleDeny}
                 disabled={denyRequest.isPending || approveRequest.isPending}
               >
                 {denyRequest.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                     Denying...
                   </>
                 ) : (
                   <>
-                    <X className="mr-2 h-4 w-4" />
+                    <X className="mr-1.5 h-3 w-3" />
                     Deny
                   </>
                 )}
               </Button>
               <Button
+                size="sm"
                 onClick={handleApprove}
                 disabled={approveRequest.isPending || denyRequest.isPending}
               >
                 {approveRequest.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                     Approving...
                   </>
                 ) : (
                   <>
-                    <Check className="mr-2 h-4 w-4" />
+                    <Check className="mr-1.5 h-3 w-3" />
                     Approve
                   </>
                 )}

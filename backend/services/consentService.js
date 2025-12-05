@@ -828,6 +828,64 @@ class ConsentService {
   }
 
   /**
+   * Get pending requests made by a provider
+   * 
+   * @param {string} providerAddress - Ethereum address of provider
+   * @returns {Promise<Array>} Array of pending access requests made by this provider
+   * @throws {ValidationError} If address is invalid
+   * @throws {ContractError} If contract call fails
+   */
+  async getProviderPendingRequests(providerAddress) {
+    validateAddress(providerAddress, 'providerAddress');
+    const normalizedAddress = normalizeAddress(providerAddress);
+
+    try {
+      // Query all AccessRequested events where requester is this provider
+      const events = await this.getAccessRequestEvents(null); // Get all events
+      
+      // Filter for requests made by this provider that are still pending
+      const requestedEvents = events.filter(
+        e => e.type === 'AccessRequested' && 
+        normalizeAddress(e.requester) === normalizedAddress
+      );
+      
+      // Get approved and denied request IDs
+      const approvedRequestIds = new Set(
+        events.filter(e => e.type === 'AccessApproved').map(e => e.requestId)
+      );
+      const deniedRequestIds = new Set(
+        events.filter(e => e.type === 'AccessDenied').map(e => e.requestId)
+      );
+      
+      // Get pending request IDs (requested but not approved or denied)
+      const pendingRequestIds = requestedEvents
+        .filter(e => !approvedRequestIds.has(e.requestId) && !deniedRequestIds.has(e.requestId))
+        .map(e => e.requestId);
+      
+      // Fetch full request details for pending requests
+      const requests = await Promise.all(
+        pendingRequestIds.map(async (requestId) => {
+          try {
+            return await this.getAccessRequest(requestId);
+          } catch (error) {
+            // If request doesn't exist, return null (will be filtered out)
+            return null;
+          }
+        })
+      );
+      
+      // Filter out nulls and return only pending requests
+      return requests.filter(r => r !== null && r.status === 'pending');
+    } catch (error) {
+      throw new ContractError(
+        'Failed to fetch provider pending requests',
+        'getProviderPendingRequests',
+        error
+      );
+    }
+  }
+
+  /**
    * Query consent events (ConsentGranted, ConsentRevoked)
    * 
    * @param {string} patientAddress - Optional patient address filter
@@ -1110,6 +1168,20 @@ class ConsentService {
         deniedEvents = [];
       }
 
+      // Create a map of requestId -> AccessRequested event to look up requester for approved/denied events
+      const requestMap = new Map();
+      requestedEvents.forEach(event => {
+        const requestId = Number(event.args.requestId);
+        requestMap.set(requestId, {
+          requester: ethers.getAddress(event.args.requester),
+          dataTypes: Array.isArray(event.args.dataTypes) ? event.args.dataTypes : [],
+          purposes: Array.isArray(event.args.purposes) ? event.args.purposes : [],
+          expirationTime: event.args.expirationTime === 0n 
+            ? null 
+            : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
+        });
+      });
+
       // Transform and combine events
       const events = [
         ...requestedEvents.map(event => ({
@@ -1126,22 +1198,38 @@ class ConsentService {
             : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
           timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
         })),
-        ...approvedEvents.map(event => ({
-          type: 'AccessApproved',
-          blockNumber: event.blockNumber,
-          transactionHash: event.transactionHash,
-          requestId: Number(event.args.requestId),
-          patient: ethers.getAddress(event.args.patient),
-          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-        })),
-        ...deniedEvents.map(event => ({
-          type: 'AccessDenied',
-          blockNumber: event.blockNumber,
-          transactionHash: event.transactionHash,
-          requestId: Number(event.args.requestId),
-          patient: ethers.getAddress(event.args.patient),
-          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-        }))
+        ...approvedEvents.map(event => {
+          const requestId = Number(event.args.requestId);
+          const requestInfo = requestMap.get(requestId);
+          return {
+            type: 'AccessApproved',
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            requestId: requestId,
+            requester: requestInfo?.requester || null,
+            patient: ethers.getAddress(event.args.patient),
+            dataTypes: requestInfo?.dataTypes || [],
+            purposes: requestInfo?.purposes || [],
+            expirationTime: requestInfo?.expirationTime || null,
+            timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
+          };
+        }),
+        ...deniedEvents.map(event => {
+          const requestId = Number(event.args.requestId);
+          const requestInfo = requestMap.get(requestId);
+          return {
+            type: 'AccessDenied',
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            requestId: requestId,
+            requester: requestInfo?.requester || null,
+            patient: ethers.getAddress(event.args.patient),
+            dataTypes: requestInfo?.dataTypes || [],
+            purposes: requestInfo?.purposes || [],
+            expirationTime: requestInfo?.expirationTime || null,
+            timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
+          };
+        })
       ];
 
       // Sort by block number

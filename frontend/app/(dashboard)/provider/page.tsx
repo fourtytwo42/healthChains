@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePatients } from '@/hooks/use-api';
 import { useWallet } from '@/contexts/wallet-context';
 import { useRole } from '@/hooks/use-role';
-import { useProviderPatients, useProviderConsentsPaginated, useProviderConsentHistory } from '@/hooks/use-api';
+import { useProviderPatients, useProviderConsentsPaginated, useProviderConsentHistory, useProviderPendingRequests } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { RequestConsentDialog } from '@/components/provider/request-consent-dialog';
 import { PatientDetailsCard } from '@/components/provider/patient-details-card';
 import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
+import { RequestDetailsCard } from '@/components/provider/request-details-card';
 import { Pagination } from '@/components/ui/pagination';
 
 /**
@@ -32,12 +33,21 @@ export default function ProviderDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<string | null>(null);
   const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'granted' | 'history'>('all');
+  const [selectedRequest, setSelectedRequest] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'granted' | 'history'>('all');
   const [page, setPage] = useState(1);
   const limit = 10;
 
   // Fetch all patients for "All Users" tab
   const { data: allPatientsData, isLoading: allPatientsLoading } = usePatients();
+  
+  // Fetch pending requests for "Pending" tab
+  const { data: pendingRequestsData, isLoading: pendingRequestsLoading } = useProviderPendingRequests(
+    account || '',
+    page,
+    limit,
+    activeTab === 'pending' && !!account
+  );
   
   // Fetch patients with granted consents for "Granted Consent" tab
   const { data: grantedPatientsData, isLoading: grantedPatientsLoading } = useProviderPatients(
@@ -53,15 +63,32 @@ export default function ProviderDashboardPage() {
     activeTab === 'history' && !!account
   );
 
-  // Filter patients by search query
-  const filteredPatients = (allPatientsData || []).filter(patient => {
-    if (!searchQuery) return true;
+  // Filter patients by search query - memoize to prevent infinite loops
+  const filteredPatients = useMemo(() => {
+    console.log('[ProviderDashboard] filteredPatients useMemo executing', {
+      hasAllPatientsData: !!allPatientsData,
+      isArray: Array.isArray(allPatientsData),
+      length: allPatientsData?.length,
+      searchQuery,
+    });
+    if (!allPatientsData || !Array.isArray(allPatientsData)) return [];
+    if (!searchQuery) return allPatientsData;
     const query = searchQuery.toLowerCase();
-    const name = `${patient.demographics.firstName} ${patient.demographics.lastName}`.toLowerCase();
-    return name.includes(query) || patient.patientId.toLowerCase().includes(query);
-  });
+    return allPatientsData.filter(patient => {
+      const name = `${patient.demographics.firstName} ${patient.demographics.lastName}`.toLowerCase();
+      return name.includes(query) || patient.patientId.toLowerCase().includes(query);
+    });
+  }, [allPatientsData, searchQuery]);
 
-  const paginatedPatients = filteredPatients.slice((page - 1) * limit, page * limit);
+  const paginatedPatients = useMemo(() => {
+    console.log('[ProviderDashboard] paginatedPatients useMemo executing', {
+      filteredLength: filteredPatients.length,
+      page,
+      limit,
+    });
+    return filteredPatients.slice((page - 1) * limit, page * limit);
+  }, [filteredPatients, page, limit]);
+  
   const totalPages = Math.ceil(filteredPatients.length / limit);
 
   const handlePatientClick = (patientId: string) => {
@@ -72,19 +99,43 @@ export default function ProviderDashboardPage() {
     setSelectedPatient(null);
   };
 
+  const handleCloseRequestCard = () => {
+    setSelectedRequest(null);
+  };
+
+  // Track if we've already redirected to prevent infinite loops
+  const hasRedirected = useRef(false);
+  const lastRoleType = useRef<string | undefined>(undefined);
+  const lastAccount = useRef<string | null>(null);
+  
+  // Memoize roleType to prevent unnecessary re-renders
+  const roleType = useMemo(() => role?.role, [role?.role]);
+
   // Redirect if role changes and user is not a provider
   useEffect(() => {
-    if (roleLoading || !account) return;
+    if (roleLoading || !account || hasRedirected.current) {
+      return;
+    }
+    
+    // Only redirect if role actually changed
+    if (roleType === lastRoleType.current && account === lastAccount.current) {
+      return;
+    }
+    
+    lastRoleType.current = roleType;
+    lastAccount.current = account;
     
     // If role is patient only (not provider or both), redirect to patient page
-    if (role?.role === 'patient') {
+    if (roleType === 'patient') {
+      hasRedirected.current = true;
       router.replace('/patient');
     }
     // If role is unknown, redirect to root dashboard
-    else if (role?.role === 'unknown') {
+    else if (roleType === 'unknown') {
+      hasRedirected.current = true;
       router.replace('/');
     }
-  }, [account, role, roleLoading, router]);
+  }, [account, roleType, roleLoading, router]);
 
   if (!account) {
     return (
@@ -110,13 +161,15 @@ export default function ProviderDashboardPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => {
-        setActiveTab(v as 'all' | 'granted' | 'history');
+        setActiveTab(v as 'all' | 'pending' | 'granted' | 'history');
         setPage(1);
+        setSearchQuery(''); // Clear search when switching tabs
         setSelectedPatient(null);
       }}>
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="all">All Users</TabsTrigger>
+            <TabsTrigger value="all">Patients</TabsTrigger>
+            <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="granted">Granted Consent</TabsTrigger>
             <TabsTrigger value="history">Consent History</TabsTrigger>
           </TabsList>
@@ -228,11 +281,204 @@ export default function ProviderDashboardPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="pending" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5" />
+                    Pending Requests
+                  </CardTitle>
+                  <CardDescription>
+                    Access requests you've sent that are awaiting patient approval
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or patient ID..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setPage(1);
+                      }}
+                      className="pl-8 w-64"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                console.log('[ProviderDashboard] Pending Tab - Loading:', pendingRequestsLoading);
+                console.log('[ProviderDashboard] Pending Tab - Data:', pendingRequestsData);
+                
+                if (pendingRequestsLoading) {
+                  return (
+                    <div className="space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                      ))}
+                    </div>
+                  );
+                }
+
+                const requestsData = pendingRequestsData as { data: any[]; pagination: any } | undefined;
+                if (requestsData?.data && Array.isArray(requestsData.data) && requestsData.data.length > 0) {
+                  // Filter requests by search query
+                  const filteredRequests = requestsData.data.filter((request: any) => {
+                    if (!searchQuery) return true;
+                    const query = searchQuery.toLowerCase();
+                    const patientName = request.patient
+                      ? `${request.patient.firstName} ${request.patient.lastName}`.toLowerCase()
+                      : '';
+                    const patientId = request.patient?.patientId?.toLowerCase() || '';
+                    return patientName.includes(query) || patientId.includes(query);
+                  });
+
+                  if (filteredRequests.length === 0) {
+                    return (
+                      <div className="text-center text-muted-foreground py-8">
+                        {searchQuery ? 'No pending requests found matching your search' : 'No pending requests'}
+                      </div>
+                    );
+                  }
+
+                  // Paginate filtered results
+                  const filteredTotalPages = Math.ceil(filteredRequests.length / limit);
+                  const filteredPage = Math.min(page, filteredTotalPages || 1);
+                  const paginatedFiltered = filteredRequests.slice((filteredPage - 1) * limit, filteredPage * limit);
+
+                  return (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Patient</TableHead>
+                            <TableHead>Data Types</TableHead>
+                            <TableHead>Purposes</TableHead>
+                            <TableHead>Request Date</TableHead>
+                            <TableHead>Expiration</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedFiltered.map((request: any) => {
+                            const patientName = request.patient
+                              ? `${request.patient.firstName} ${request.patient.lastName}`
+                              : `${request.patientAddress.slice(0, 6)}...${request.patientAddress.slice(-4)}`;
+                            
+                            return (
+                              <TableRow 
+                                key={request.requestId}
+                                className="cursor-pointer hover:bg-muted/50"
+                                onClick={() => setSelectedRequest(request.requestId)}
+                              >
+                                <TableCell>
+                                  <div>
+                                    <div className="font-medium">{patientName}</div>
+                                    {request.patient?.patientId && (
+                                      <div className="text-xs text-muted-foreground font-mono">
+                                        {request.patient.patientId}
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-muted-foreground font-mono">
+                                      {request.patientAddress.slice(0, 6)}...{request.patientAddress.slice(-4)}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {request.dataTypes && request.dataTypes.length > 0 ? (
+                                    <ColoredBadgeList type="dataType" values={request.dataTypes} size="sm" maxDisplay={2} />
+                                  ) : (
+                                    <span className="text-muted-foreground">N/A</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {request.purposes && request.purposes.length > 0 ? (
+                                    <ColoredBadgeList type="purpose" values={request.purposes} size="sm" maxDisplay={2} />
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">N/A</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1 text-sm">
+                                    <Clock className="h-3 w-3" />
+                                    {format(new Date(request.timestamp), 'MMM d, yyyy HH:mm')}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {request.expirationTime ? (
+                                    <div className="flex items-center gap-1 text-sm">
+                                      <Clock className="h-3 w-3" />
+                                      {format(new Date(request.expirationTime), 'MMM d, yyyy HH:mm')}
+                                    </div>
+                                  ) : (
+                                    <Badge variant="secondary">No expiration</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">
+                                    Pending
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                      {filteredTotalPages > 1 && (
+                        <div className="mt-4">
+                          <Pagination
+                            page={filteredPage}
+                            totalPages={filteredTotalPages}
+                            onPageChange={setPage}
+                            totalItems={filteredRequests.length}
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                }
+                
+                return (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">
+                      {searchQuery ? 'No pending requests found matching your search' : 'No pending requests'}
+                    </p>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="granted" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Patients with Granted Consent</CardTitle>
-              <CardDescription>View patients who have granted you access to their data</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Patients with Granted Consent</CardTitle>
+                  <CardDescription>View patients who have granted you access to their data</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or patient ID..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setPage(1);
+                      }}
+                      className="pl-8 w-64"
+                    />
+                  </div>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {(() => {
@@ -251,6 +497,27 @@ export default function ProviderDashboardPage() {
                 
                 const patientsData = grantedPatientsData as { data: any[]; pagination: any } | undefined;
                 if (patientsData?.data && Array.isArray(patientsData.data) && patientsData.data.length > 0) {
+                  // Filter patients by search query
+                  const filteredPatients = patientsData.data.filter((patient: any) => {
+                    if (!searchQuery) return true;
+                    const query = searchQuery.toLowerCase();
+                    const name = `${patient.demographics.firstName} ${patient.demographics.lastName}`.toLowerCase();
+                    return name.includes(query) || patient.patientId.toLowerCase().includes(query);
+                  });
+
+                  if (filteredPatients.length === 0) {
+                    return (
+                      <div className="text-center text-muted-foreground py-8">
+                        {searchQuery ? 'No patients found matching your search' : 'No patients with granted consent'}
+                      </div>
+                    );
+                  }
+
+                  // Paginate filtered results
+                  const filteredTotalPages = Math.ceil(filteredPatients.length / limit);
+                  const filteredPage = Math.min(page, filteredTotalPages || 1);
+                  const paginatedFiltered = filteredPatients.slice((filteredPage - 1) * limit, filteredPage * limit);
+
                   return (
                 <>
                   <Table>
@@ -264,7 +531,7 @@ export default function ProviderDashboardPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {patientsData.data.map((patient: any) => (
+                      {paginatedFiltered.map((patient: any) => (
                         <TableRow
                           key={patient.patientId}
                           className="cursor-pointer hover:bg-muted/50"
@@ -311,13 +578,13 @@ export default function ProviderDashboardPage() {
                       ))}
                     </TableBody>
                   </Table>
-                  {patientsData.pagination && patientsData.pagination.totalPages > 1 && (
+                  {filteredTotalPages > 1 && (
                     <div className="mt-4">
                       <Pagination
-                        page={patientsData.pagination.page}
-                        totalPages={patientsData.pagination.totalPages}
+                        page={filteredPage}
+                        totalPages={filteredTotalPages}
                         onPageChange={setPage}
-                        totalItems={patientsData.pagination.total}
+                        totalItems={filteredPatients.length}
                       />
                     </div>
                   )}
@@ -327,7 +594,7 @@ export default function ProviderDashboardPage() {
                 
                 return (
                   <div className="text-center text-muted-foreground py-8">
-                    No patients with granted consent
+                    {searchQuery ? 'No patients found matching your search' : 'No patients with granted consent'}
                   </div>
                 );
               })()}
@@ -338,13 +605,31 @@ export default function ProviderDashboardPage() {
         <TabsContent value="history" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Consent History
-              </CardTitle>
-              <CardDescription>
-                Complete timeline of all consent-related actions
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Consent History
+                  </CardTitle>
+                  <CardDescription>
+                    Complete timeline of all consent-related actions
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or patient ID..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setPage(1);
+                      }}
+                      className="pl-8 w-64"
+                    />
+                  </div>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {historyLoading ? (
@@ -355,7 +640,30 @@ export default function ProviderDashboardPage() {
                 </div>
               ) : historyData && historyData.length > 0 ? (
                 <div className="space-y-2">
-                  {historyData.map((event: any, index: number) => {
+                  {(() => {
+                    // Filter history events by search query
+                    const filteredHistory = historyData.filter((event: any) => {
+                      if (!searchQuery) return true;
+                      const query = searchQuery.toLowerCase();
+                      const patientName = event.patientInfo
+                        ? `${event.patientInfo.firstName} ${event.patientInfo.lastName}`.toLowerCase()
+                        : '';
+                      const patientId = event.patientInfo?.patientId?.toLowerCase() || '';
+                      return patientName.includes(query) || patientId.includes(query);
+                    });
+
+                    if (filteredHistory.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                          <History className="h-12 w-12 text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground">
+                            {searchQuery ? 'No history events found matching your search' : 'No consent history'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return filteredHistory.map((event: any, index: number) => {
                     // Determine event type and styling
                     let eventType = '';
                     let eventIcon = null;
@@ -417,40 +725,40 @@ export default function ProviderDashboardPage() {
                         className={`cursor-pointer transition-all hover:shadow-sm hover:border-opacity-80 border-l-4 ${eventBorderColor} ${eventBgColor}`}
                         onClick={() => setSelectedHistoryEvent(event)}
                       >
-                        <CardContent className="p-3">
-                          <div className="flex items-start gap-3">
+                        <CardContent className="p-2">
+                          <div className="flex items-center gap-2">
                             {/* Icon */}
                             {eventIcon && (
-                              <div className={`flex-shrink-0 p-1.5 rounded-md ${eventBgColor} ${eventColor}`}>
-                                {React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
+                              <div className={`flex-shrink-0 p-1 rounded-md ${eventBgColor} ${eventColor}`}>
+                                {React.cloneElement(eventIcon, { className: 'h-3 w-3' })}
                               </div>
                             )}
                             
                             {/* Main Content */}
-                            <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex-1 min-w-0">
                               {/* Header */}
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center justify-between gap-2 mb-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <h3 className={`font-semibold text-sm ${eventColor}`}>
+                                  <h3 className={`font-semibold text-xs ${eventColor}`}>
                                     {eventType}
                                   </h3>
                                   {statusBadge}
                                   {isExpired && event.type === 'ConsentGranted' && (
-                                    <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>
                                   )}
                                 </div>
-                                <p className="text-xs text-muted-foreground whitespace-nowrap">
+                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
                                   {format(new Date(event.timestamp), 'MMM d, yyyy • h:mm a')}
                                 </p>
                               </div>
 
                               {/* Details Grid - Compact */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-0.5 text-xs">
                                 {/* Patient Info */}
                                 {event.patientInfo ? (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Patient</p>
-                                    <p className="text-xs font-semibold truncate">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Patient</p>
+                                    <p className="text-[11px] font-semibold truncate">
                                       {event.patientInfo.firstName} {event.patientInfo.lastName}
                                     </p>
                                     {event.patientInfo.patientId && (
@@ -461,27 +769,27 @@ export default function ProviderDashboardPage() {
                                   </div>
                                 ) : event.patient ? (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Patient</p>
-                                    <p className="text-xs font-mono truncate">{event.patient.slice(0, 8)}...{event.patient.slice(-6)}</p>
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Patient</p>
+                                    <p className="text-[11px] font-mono truncate">{event.patient.slice(0, 8)}...{event.patient.slice(-6)}</p>
                                   </div>
                                 ) : null}
 
                                 {/* Data Type & Purpose */}
                                 {event.dataTypes && event.dataTypes.length > 0 && event.purposes && event.purposes.length > 0 && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Access</p>
-                                    <div className="flex flex-wrap gap-1">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Access</p>
+                                    <div className="flex flex-wrap gap-0.5">
                                       {event.dataTypes.slice(0, 2).map((dt: string, idx: number) => (
                                         <ColoredBadge key={idx} type="dataType" value={dt} size="sm" />
                                       ))}
                                       {event.dataTypes.length > 2 && (
-                                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.dataTypes.length - 2}</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.dataTypes.length - 2}</Badge>
                                       )}
                                       {event.purposes.slice(0, 2).map((p: string, idx: number) => (
                                         <ColoredBadge key={idx} type="purpose" value={p} size="sm" />
                                       ))}
                                       {event.purposes.length > 2 && (
-                                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">+{event.purposes.length - 2}</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.purposes.length - 2}</Badge>
                                       )}
                                     </div>
                                   </div>
@@ -490,10 +798,10 @@ export default function ProviderDashboardPage() {
                                 {/* Expiration */}
                                 {event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Expires</p>
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-2.5 w-2.5 text-muted-foreground flex-shrink-0" />
-                                      <p className="text-xs truncate">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Expires</p>
+                                    <div className="flex items-center gap-0.5">
+                                      <Clock className="h-2 w-2 text-muted-foreground flex-shrink-0" />
+                                      <p className="text-[11px] truncate">
                                         {format(new Date(event.expirationTime), 'MMM d, yyyy')}
                                       </p>
                                     </div>
@@ -503,10 +811,10 @@ export default function ProviderDashboardPage() {
                                 {/* IDs */}
                                 {(event.consentId !== undefined || event.requestId !== undefined) && (
                                   <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                                       {event.consentId !== undefined ? 'Consent ID' : 'Request ID'}
                                     </p>
-                                    <p className="text-xs font-mono font-semibold">
+                                    <p className="text-[11px] font-mono font-semibold">
                                       #{event.consentId ?? event.requestId}
                                     </p>
                                   </div>
@@ -517,12 +825,15 @@ export default function ProviderDashboardPage() {
                         </CardContent>
                       </Card>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <History className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No consent history</p>
+                  <p className="text-muted-foreground">
+                    {searchQuery ? 'No history events found matching your search' : 'No consent history'}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -544,6 +855,14 @@ export default function ProviderDashboardPage() {
           event={selectedHistoryEvent}
           onClose={() => setSelectedHistoryEvent(null)}
           userRole="provider"
+        />
+      )}
+
+      {/* Request Details Card */}
+      {selectedRequest !== null && (
+        <RequestDetailsCard
+          requestId={selectedRequest}
+          onClose={handleCloseRequestCard}
         />
       )}
     </div>

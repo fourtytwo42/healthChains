@@ -28,6 +28,11 @@ interface ColoredBadgeProps {
  * Displays a badge with color coding and tooltip based on type
  */
 export function ColoredBadge({ type, value, size = 'md', className = '' }: ColoredBadgeProps) {
+  // Guard against undefined/null values
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
   let colors;
   let description;
   let displayValue = value;

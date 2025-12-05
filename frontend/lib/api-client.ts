@@ -61,8 +61,11 @@ export interface ConsentRecord {
   timestamp: string;
   expirationTime: string | null;
   isActive: boolean;
-  dataType: string;
-  purpose: string;
+  dataType?: string;      // For single consents
+  purpose?: string;       // For single consents
+  dataTypes?: string[];  // For batch consents
+  purposes?: string[];   // For batch consents
+  isBatch?: boolean;     // Flag to indicate batch consent
   isExpired: boolean;
 }
 
@@ -429,6 +432,22 @@ class ApiClient {
         consentId: number;
       }>;
     }>(`/api/provider/${providerAddress}/patient/${patientId}/data`);
+  }
+
+  async getProviderPendingRequests(
+    providerAddress: string,
+    page = 1,
+    limit = 10
+  ) {
+    // Normalize address to lowercase for consistent API calls
+    const normalizedAddress = providerAddress.toLowerCase();
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+    return this.request<AccessRequest[]>(
+      `/api/provider/${normalizedAddress}/pending-requests?${params}`
+    );
   }
 
   // Patient-specific endpoints

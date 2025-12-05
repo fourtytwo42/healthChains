@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-context';
 import { useRole } from '@/hooks/use-role';
@@ -14,21 +14,28 @@ export default function DashboardPage() {
   const { account } = useWallet();
   // Only fetch role when account is available - this prevents unnecessary API calls
   const { role, isLoading } = useRole(account);
+  
+  // Track if we've already redirected to prevent infinite loops
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    // Don't do anything if still loading role or no account
-    if (isLoading || !account) {
+    // Don't do anything if still loading role or no account or already redirected
+    if (isLoading || !account || hasRedirected.current) {
       return;
     }
 
+    const roleType = role?.role;
+    
     // Only redirect if we have a valid role
-    if (role?.role === 'provider' || role?.role === 'both') {
+    if (roleType === 'provider' || roleType === 'both') {
+      hasRedirected.current = true;
       router.replace('/provider');
-    } else if (role?.role === 'patient') {
+    } else if (roleType === 'patient') {
+      hasRedirected.current = true;
       router.replace('/patient');
     }
     // If role is 'unknown', stay on this page (could show error message)
-  }, [account, role, isLoading, router]);
+  }, [account, role?.role, isLoading]);
 
   // No account connected - show welcome message (don't check role)
   if (!account) {
