@@ -6,6 +6,67 @@ require('dotenv').config();
 const mockPatients = require('./data/mockup-patients');
 const mockProviders = require('./data/mockup-providers');
 
+/**
+ * Hardhat default accounts (first 20) mapped to patients/providers
+ * Ensures deterministic wallet addresses that exist on the local chain.
+ * Reference: https://hardhat.org/hardhat-network/reference/#accounts
+ */
+const HARDHAT_PATIENT_ADDRESSES = [
+  '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+  '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+  '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+  '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+  '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
+  '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc',
+  '0x976EA74026E726554dB657fA54763abd0C3a0aa9',
+  '0x14dC79964da2C08b23698B3D3cc7Ca32193d9955',
+  '0x23618e81E3f5cdF7f54C3d65f7Fb9f8Ff5f3b7fF',
+  '0xa0Ee7A142d267C1f36714E4a8F75612F20a79720'
+];
+
+const HARDHAT_PROVIDER_ADDRESSES = [
+  '0xbcd4042DE499D14e55001CcbB24a551F3b954096',
+  '0x71be63f3384f5fb98995898a86b02fb2426c5788',
+  '0xfabb0ac9d68b0b445fb7357272ff202c5651694a',
+  '0x1cbda3414b8fda29e7ca743c7d5d7a4918f9ce47',
+  '0x6EDe1597c05A0ca77045ff79fD3F783C237F267f',
+  '0x2a871d0798f97b9b9455a5c5d3ba1b1c531c05c5',
+  '0xf14f9596430931e177469715c591513308244e8f',
+  '0xaAfac29bF13d489A9Cf3f7CF9Dd31259Cdd2ADe5',
+  '0x5c985E89De1Af5FfdCeEC25792F8eA241DFAbF1A',
+  '0x59b670e9fA9D0A427751Af201D676719a970857b'
+];
+
+/**
+ * Normalize blockchain identities for mock patients/providers
+ * without mutating the source data files (protected).
+ */
+function attachDeterministicWallets() {
+  mockPatients.mockPatients.patients.forEach((patient, index) => {
+    const walletAddress = HARDHAT_PATIENT_ADDRESSES[index % HARDHAT_PATIENT_ADDRESSES.length];
+    patient.blockchainIntegration = {
+      ...(patient.blockchainIntegration || {}),
+      walletAddress,
+      network: 'Hardhat Localhost (1337)',
+      smartContractVersion: patient.blockchainIntegration?.smartContractVersion || '1.0.0',
+      lastSync: new Date().toISOString()
+    };
+  });
+
+  mockProviders.mockProviders.providers.forEach((provider, index) => {
+    const walletAddress = HARDHAT_PROVIDER_ADDRESSES[index % HARDHAT_PROVIDER_ADDRESSES.length];
+    provider.blockchainIntegration = {
+      ...(provider.blockchainIntegration || {}),
+      walletAddress,
+      network: 'Hardhat Localhost (1337)',
+      smartContractVersion: provider.blockchainIntegration?.smartContractVersion || '1.0.0',
+      lastSync: new Date().toISOString()
+    };
+  });
+}
+
+attachDeterministicWallets();
+
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
 const { consentRouter, requestRouter, eventRouter } = require('./routes/consentRoutes');
