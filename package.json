@@ -11,7 +11,13 @@
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm start",
-    "compile:contract": "cd backend && npm run compile:contract"
+    "compile:contract": "cd backend && npm run compile:contract",
+    "test:all": "bash scripts/test-all.sh",
+    "test:contract": "cd backend && npm test",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "test:e2e": "cd frontend && npm run test:e2e",
+    "test:coverage": "cd backend && npm test -- --coverage && cd ../frontend && npm run test:coverage"
   },
   "keywords": [
     "blockchain",

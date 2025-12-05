@@ -1,41 +1,54 @@
+/**
+ * PM2 Ecosystem Configuration
+ * 
+ * Manages both backend and frontend processes
+ */
+
 module.exports = {
   apps: [
     {
-      name: 'backend',
-      script: './backend/server.js',
-      cwd: '/home/hendo420/healthChains',
+      name: 'healthchains-backend',
+      script: 'server.js',
+      cwd: './backend',
       instances: 1,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
+      exec_mode: 'fork',
       env: {
-        NODE_ENV: 'development',
-        PORT: 3001
+        NODE_ENV: 'production',
+        PORT: 3001,
+        RPC_URL: process.env.RPC_URL || 'http://127.0.0.1:8545',
+        NETWORK_NAME: process.env.NETWORK_NAME || 'localhost',
+        LOG_LEVEL: process.env.LOG_LEVEL || 'info',
       },
       error_file: './logs/backend-error.log',
       out_file: './logs/backend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true
-    },
-    {
-      name: 'frontend',
-      script: 'npm',
-      args: 'start',
-      cwd: '/home/hendo420/healthChains/frontend',
-      instances: 1,
+      merge_logs: true,
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
+      restart_delay: 4000,
+    },
+    {
+      name: 'healthchains-frontend',
+      script: 'npm',
+      args: 'start',
+      cwd: './frontend',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
         PORT: 3000,
-        REACT_APP_API_URL: 'http://localhost:3001'
+        NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001',
+        NEXT_PUBLIC_CHAIN_ID: process.env.NEXT_PUBLIC_CHAIN_ID || '1337',
       },
       error_file: './logs/frontend-error.log',
       out_file: './logs/frontend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true
-    }
-  ]
+      merge_logs: true,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      restart_delay: 4000,
+    },
+  ],
 };
-

@@ -18,7 +18,7 @@ export function Header() {
         <h1 className="text-xl font-semibold">Patient Consent Management</h1>
         {isLoading ? (
           <Skeleton className="h-5 w-24" />
-        ) : contractInfo?.data?.web3?.connected ? (
+        ) : contractInfo?.web3?.connected ? (
           <Badge variant="outline" className="bg-green-500/10 text-green-600 dark:text-green-400">
             Connected
           </Badge>

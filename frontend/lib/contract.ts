@@ -44,17 +44,25 @@ async function loadContractABI(): Promise<ethers.InterfaceAbi> {
 
 /**
  * Get contract address from backend
+ * Note: Backend returns contract info directly, not wrapped in data
  */
 async function getContractAddress(): Promise<string> {
   if (contractAddress) return contractAddress;
 
   try {
     const contractInfo = await apiClient.getContractInfo();
-    if (contractInfo.success && contractInfo.data?.contract?.address) {
-      contractAddress = contractInfo.data.contract.address;
-      return contractAddress;
+    // Backend returns { success, contract, web3, deployment } directly
+    const info = contractInfo as any;
+    if (contractInfo.success && info.contract?.address) {
+      contractAddress = info.contract.address;
+      if (contractAddress) return contractAddress;
     }
-    throw new Error('Contract address not found');
+    // Fallback: try data wrapper (for consistency)
+    if (contractInfo.success && info.data?.contract?.address) {
+      contractAddress = info.data.contract.address;
+      if (contractAddress) return contractAddress;
+    }
+    throw new Error('Contract address not found in response');
   } catch (error) {
     console.error('Failed to get contract address:', error);
     throw new Error('Failed to get contract address. Make sure the contract is deployed.');

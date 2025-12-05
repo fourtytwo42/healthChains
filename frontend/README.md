@@ -256,13 +256,36 @@ All components are customizable and follow the design system.
 
 ## Testing
 
-```bash
-# Run linting
-npm run lint
+### Run Tests
 
-# Type checking (via TypeScript)
-npm run build
+```bash
+# Unit tests
+npm test                    # Run once
+npm run test:watch         # Watch mode
+npm run test:coverage      # With coverage report
+
+# E2E tests
+npm run test:e2e           # Headless
+npm run test:e2e:ui        # UI mode
+npm run test:e2e:headed    # Headed browser
 ```
+
+### Test Structure
+
+- **Unit Tests** (`tests/__tests__/`): Component, hook, and utility tests
+- **E2E Tests** (`tests/e2e/`): End-to-end user flow tests
+- **Test Utilities** (`tests/utils/`): Mock utilities and helpers
+
+### Test Coverage
+
+Tests cover:
+- ✅ Critical components (wallet connector, consent dialog)
+- ✅ Custom hooks (API hooks, wallet context)
+- ✅ Utility functions (contract utilities, API client)
+- ✅ User interactions and form validation
+- ✅ Error states and loading states
+
+For detailed testing documentation, see [docs/TESTING.md](../docs/TESTING.md).
 
 ## Performance
 

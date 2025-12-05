@@ -341,6 +341,13 @@ const generateMockPatients = () => {
       },
       consentHistory: [],
       accessLog: [],
+      blockchainIntegration: {
+        walletAddress: `0x${Math.random().toString(16).substring(2, 42).padStart(40, "0")}`,
+        network: "Ethereum",
+        smartContractVersion: "1.0.0",
+        lastSync: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        consentRecordsCount: Math.floor(Math.random() * 50)
+      },
       metadata: {
         createdAt: new Date(Date.now() - Math.random() * 365 * 2 * 24 * 60 * 60 * 1000).toISOString(),
         lastUpdated: new Date().toISOString(),

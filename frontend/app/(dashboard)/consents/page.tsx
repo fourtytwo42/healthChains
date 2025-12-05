@@ -32,11 +32,15 @@ import { format } from 'date-fns';
 export default function ConsentsPage() {
   const { data: patients } = usePatients();
   const { account, isConnected } = useWallet();
-  const [selectedPatient, setSelectedPatient] = useState<string>('');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [includeExpired, setIncludeExpired] = useState(false);
 
+  // Find the selected patient and get their wallet address
+  const selectedPatient = patients?.find((p) => p.patientId === selectedPatientId);
+  const patientAddress = selectedPatient?.blockchainIntegration?.walletAddress;
+
   const { data: consents, isLoading, error } = usePatientConsents(
-    selectedPatient,
+    patientAddress || '',
     includeExpired
   );
   const revokeConsent = useRevokeConsent();
@@ -87,17 +91,25 @@ export default function ConsentsPage() {
           <div className="flex gap-4">
             <div className="flex-1">
               <Label htmlFor="patient-select">Patient</Label>
-              <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+              <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
                 <SelectTrigger id="patient-select">
                   <SelectValue placeholder="Select a patient..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {patients?.map((patient) => (
-                    <SelectItem key={patient.patientId} value={patient.patientId}>
-                      {patient.demographics.firstName} {patient.demographics.lastName} (
-                      {patient.patientId})
-                    </SelectItem>
-                  ))}
+                  {patients?.map((patient) => {
+                    const hasWallet = !!patient.blockchainIntegration?.walletAddress;
+                    return (
+                      <SelectItem 
+                        key={patient.patientId} 
+                        value={patient.patientId}
+                        disabled={!hasWallet}
+                      >
+                        {patient.demographics.firstName} {patient.demographics.lastName} (
+                        {patient.patientId})
+                        {!hasWallet && ' (No wallet)'}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -111,7 +123,7 @@ export default function ConsentsPage() {
             </div>
           </div>
 
-          {!selectedPatient ? (
+          {!selectedPatientId || !patientAddress ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FileCheck className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">Please select a patient to view consents.</p>

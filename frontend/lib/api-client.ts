@@ -33,6 +33,9 @@ export interface Patient {
     gender: string;
     [key: string]: unknown;
   };
+  blockchainIntegration?: {
+    walletAddress: string;
+  };
   [key: string]: unknown;
 }
 
@@ -174,8 +177,21 @@ class ApiClient {
   }
 
   // Health check
+  // Note: /health endpoint returns { status, timestamp, data } directly, not wrapped in ApiResponse
   async healthCheck() {
-    return this.request<{ status: string; timestamp: string; data: unknown }>('/health');
+    try {
+      const url = `${this.baseUrl}/health`;
+      const response = await this.fetchWithTimeout(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json() as { status: string; timestamp: string; data: { patients: number; providers: number } };
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Health check failed');
+    }
   }
 
   // Contract info

@@ -23,7 +23,8 @@ export function WalletConnector() {
   const { isConnected, account, chainId, isConnecting, error, connect, disconnect, switchNetwork, checkNetwork } = useWallet();
 
   const EXPECTED_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10);
-  const networkMatches = chainId === EXPECTED_CHAIN_ID;
+  // Compare chain IDs - must match exactly
+  const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
 
   /**
    * Format address for display (truncate middle)

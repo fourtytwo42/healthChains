@@ -15,15 +15,14 @@ import { format } from 'date-fns';
  */
 export default function EventsPage() {
   const { data: patients } = usePatients();
-  const [selectedPatient, setSelectedPatient] = useState<string>('');
+  const [selectedPatient, setSelectedPatient] = useState<string>('__all__');
   const [eventType, setEventType] = useState<'consent' | 'requests'>('consent');
 
-  const { data: consentEvents, isLoading: consentLoading } = useConsentEvents(
-    selectedPatient || undefined
-  );
-  const { data: requestEvents, isLoading: requestLoading } = useAccessRequestEvents(
-    selectedPatient || undefined
-  );
+  // Convert '__all__' to undefined for API calls
+  const patientAddress = selectedPatient === '__all__' ? undefined : selectedPatient;
+
+  const { data: consentEvents, isLoading: consentLoading } = useConsentEvents(patientAddress);
+  const { data: requestEvents, isLoading: requestLoading } = useAccessRequestEvents(patientAddress);
 
   const isLoading = eventType === 'consent' ? consentLoading : requestLoading;
   const events = eventType === 'consent' ? consentEvents : requestEvents;
@@ -66,7 +65,7 @@ export default function EventsPage() {
                   <SelectValue placeholder="All patients..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All patients</SelectItem>
+                  <SelectItem value="__all__">All patients</SelectItem>
                   {patients?.map((patient) => (
                     <SelectItem key={patient.patientId} value={patient.patientId}>
                       {patient.demographics.firstName} {patient.demographics.lastName}

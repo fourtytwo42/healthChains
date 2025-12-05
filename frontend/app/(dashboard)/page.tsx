@@ -33,13 +33,13 @@ export default function DashboardPage() {
     },
     {
       name: 'Contract Status',
-      value: contractInfo?.data?.web3?.connected ? 'Connected' : 'Disconnected',
+      value: contractInfo?.web3?.connected ? 'Connected' : 'Disconnected',
       icon: Activity,
       loading: contractLoading,
     },
     {
       name: 'Backend Status',
-      value: health?.data?.status === 'healthy' ? 'Healthy' : 'Unknown',
+      value: health?.status === 'healthy' ? 'Healthy' : 'Unknown',
       icon: AlertCircle,
       loading: healthLoading,
     },
@@ -123,31 +123,31 @@ export default function DashboardPage() {
                   <span className="text-sm">Backend API</span>
                   <span
                     className={`text-sm font-medium ${
-                      health?.data?.status === 'healthy'
+                      health?.status === 'healthy'
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                     }`}
                   >
-                    {health?.data?.status === 'healthy' ? '✓ Online' : '✗ Offline'}
+                    {health?.status === 'healthy' ? '✓ Online' : '✗ Offline'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Blockchain</span>
                   <span
                     className={`text-sm font-medium ${
-                      contractInfo?.data?.web3?.connected
+                      contractInfo?.web3?.connected
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-yellow-600 dark:text-yellow-400'
                     }`}
                   >
-                    {contractInfo?.data?.web3?.connected ? '✓ Connected' : '⚠ Disconnected'}
+                    {contractInfo?.web3?.connected ? '✓ Connected' : '⚠ Disconnected'}
                   </span>
                 </div>
-                {contractInfo?.data?.contract?.address && (
+                {contractInfo?.contract?.address && (
                   <div className="pt-2 border-t">
                     <p className="text-xs text-muted-foreground">Contract Address</p>
                     <p className="text-xs font-mono break-all">
-                      {contractInfo.data.contract.address}
+                      {contractInfo.contract.address}
                     </p>
                   </div>
                 )}

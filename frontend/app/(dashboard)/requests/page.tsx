@@ -30,11 +30,15 @@ import { format } from 'date-fns';
 export default function RequestsPage() {
   const { data: patients } = usePatients();
   const { account, isConnected } = useWallet();
-  const [selectedPatient, setSelectedPatient] = useState<string>('');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'denied'>('all');
 
+  // Find the selected patient and get their wallet address
+  const selectedPatient = patients?.find((p) => p.patientId === selectedPatientId);
+  const patientAddress = selectedPatient?.blockchainIntegration?.walletAddress;
+
   const { data: requests, isLoading, error } = usePatientRequests(
-    selectedPatient,
+    patientAddress || '',
     statusFilter === 'all' ? 'all' : statusFilter
   );
   const approveRequest = useApproveRequest();
@@ -109,22 +113,30 @@ export default function RequestsPage() {
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium">Patient</label>
-            <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+            <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a patient..." />
               </SelectTrigger>
               <SelectContent>
-                {patients?.map((patient) => (
-                  <SelectItem key={patient.patientId} value={patient.patientId}>
-                    {patient.demographics.firstName} {patient.demographics.lastName} (
-                    {patient.patientId})
-                  </SelectItem>
-                ))}
+                {patients?.map((patient) => {
+                  const hasWallet = !!patient.blockchainIntegration?.walletAddress;
+                  return (
+                    <SelectItem 
+                      key={patient.patientId} 
+                      value={patient.patientId}
+                      disabled={!hasWallet}
+                    >
+                      {patient.demographics.firstName} {patient.demographics.lastName} (
+                      {patient.patientId})
+                      {!hasWallet && ' (No wallet)'}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
 
-          {!selectedPatient ? (
+          {!selectedPatientId || !patientAddress ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">Please select a patient to view requests.</p>

@@ -1412,4 +1412,271 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       expect(patient2Consents.length).to.equal(1);
     });
   });
+
+  // ==================== EXPANDED GAS BENCHMARKS ====================
+  describe("Gas Benchmarks - Comprehensive", function () {
+    it("Should measure gas for single consent grant", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
+        "medical_records",
+        expirationTime,
+        "treatment"
+      );
+      const receipt = await tx.wait();
+
+      console.log(`\n[Gas Benchmark] Single Consent Grant:`);
+      console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
+      console.log(`  Gas Price: ${tx.gasPrice?.toString() || 'N/A'}`);
+      
+      expect(receipt.gasUsed).to.be.greaterThan(0);
+    });
+
+    it("Should measure gas for batch consent grant (10 consents)", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      const providers = Array(10).fill(provider.address);
+      const dataTypes = Array(10).fill("medical_records");
+      const expirationTimes = Array(10).fill(expirationTime);
+      const purposes = Array(10).fill("treatment");
+
+      const tx = await consentManager.connect(patient).grantConsentBatch(
+        providers,
+        dataTypes,
+        expirationTimes,
+        purposes
+      );
+      const receipt = await tx.wait();
+
+      console.log(`\n[Gas Benchmark] Batch Consent Grant (10 consents):`);
+      console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
+      console.log(`  Average per consent: ${receipt.gasUsed / 10n}`);
+      
+      expect(receipt.gasUsed).to.be.greaterThan(0);
+    });
+
+    it("Should measure gas for batch consent grant (50 consents - max batch)", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      const providers = Array(50).fill(provider.address);
+      const dataTypes = Array(50).fill("medical_records");
+      const expirationTimes = Array(50).fill(expirationTime);
+      const purposes = Array(50).fill("treatment");
+
+      const tx = await consentManager.connect(patient).grantConsentBatch(
+        providers,
+        dataTypes,
+        expirationTimes,
+        purposes
+      );
+      const receipt = await tx.wait();
+
+      console.log(`\n[Gas Benchmark] Batch Consent Grant (50 consents - MAX):`);
+      console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
+      console.log(`  Average per consent: ${receipt.gasUsed / 50n}`);
+      
+      expect(receipt.gasUsed).to.be.greaterThan(0);
+    });
+
+    it("Should compare single vs batch gas efficiency", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      // Single consent
+      const tx1 = await consentManager.connect(patient).grantConsent(
+        provider.address,
+        "medical_records",
+        expirationTime,
+        "treatment"
+      );
+      const receipt1 = await tx1.wait();
+      const singleGas = receipt1.gasUsed;
+
+      // Batch of 5
+      const providers = Array(5).fill(provider.address);
+      const dataTypes = Array(5).fill("diagnostic_data");
+      const expirationTimes = Array(5).fill(expirationTime);
+      const purposes = Array(5).fill("research");
+
+      const tx2 = await consentManager.connect(patient).grantConsentBatch(
+        providers,
+        dataTypes,
+        expirationTimes,
+        purposes
+      );
+      const receipt2 = await tx2.wait();
+      const batchGas = receipt2.gasUsed;
+
+      console.log(`\n[Gas Comparison] Single vs Batch:`);
+      console.log(`  Single consent: ${singleGas.toString()}`);
+      console.log(`  Batch (5 consents): ${batchGas.toString()}`);
+      console.log(`  Average per consent (batch): ${batchGas / 5n}`);
+      console.log(`  Savings per consent: ${singleGas - (batchGas / 5n)}`);
+
+      // Batch should be more efficient per consent
+      expect(batchGas / 5n).to.be.lessThan(singleGas);
+    });
+  });
+
+  // ==================== STRESS TESTS ====================
+  describe("Stress Tests", function () {
+    it("Should handle maximum batch size (50 consents)", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      const providers = Array(50).fill(provider.address);
+      const dataTypes = Array(50).fill("medical_records");
+      const expirationTimes = Array(50).fill(expirationTime);
+      const purposes = Array(50).fill("treatment");
+
+      const tx = await consentManager.connect(patient).grantConsentBatch(
+        providers,
+        dataTypes,
+        expirationTimes,
+        purposes
+      );
+      const receipt = await tx.wait();
+
+      // Verify all consents were created
+      const consents = await consentManager.getPatientConsents(patient.address);
+      expect(consents.length).to.be.greaterThanOrEqual(50);
+
+      console.log(`\n[Stress Test] Maximum batch size (50 consents):`);
+      console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
+      console.log(`  Consents created: ${consents.length}`);
+    });
+
+    it("Should handle many consents per patient (100+ consents)", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      // Create 100 consents in batches
+      for (let i = 0; i < 2; i++) {
+        const providers = Array(50).fill(provider.address);
+        const dataTypes = Array(50).fill(`data_type_${i}`);
+        const expirationTimes = Array(50).fill(expirationTime);
+        const purposes = Array(50).fill("treatment");
+
+        await consentManager.connect(patient).grantConsentBatch(
+          providers,
+          dataTypes,
+          expirationTimes,
+          purposes
+        );
+      }
+
+      const consents = await consentManager.getPatientConsents(patient.address);
+      expect(consents.length).to.be.greaterThanOrEqual(100);
+
+      console.log(`\n[Stress Test] Many consents per patient:`);
+      console.log(`  Total consents: ${consents.length}`);
+    });
+
+    it("Should handle concurrent operations from different patients", async function () {
+      const [patient1, patient2, patient3, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      // Grant consents concurrently
+      const promises = [
+        consentManager.connect(patient1).grantConsent(
+          provider.address,
+          "medical_records",
+          expirationTime,
+          "treatment"
+        ),
+        consentManager.connect(patient2).grantConsent(
+          provider.address,
+          "diagnostic_data",
+          expirationTime,
+          "research"
+        ),
+        consentManager.connect(patient3).grantConsent(
+          provider.address,
+          "genetic_data",
+          expirationTime,
+          "analytics"
+        ),
+      ];
+
+      const receipts = await Promise.all(promises.map(p => p.then(tx => tx.wait())));
+
+      // Verify all consents were created
+      const consents1 = await consentManager.getPatientConsents(patient1.address);
+      const consents2 = await consentManager.getPatientConsents(patient2.address);
+      const consents3 = await consentManager.getPatientConsents(patient3.address);
+
+      expect(consents1.length).to.be.greaterThan(0);
+      expect(consents2.length).to.be.greaterThan(0);
+      expect(consents3.length).to.be.greaterThan(0);
+
+      console.log(`\n[Stress Test] Concurrent operations:`);
+      console.log(`  Patient 1 consents: ${consents1.length}`);
+      console.log(`  Patient 2 consents: ${consents2.length}`);
+      console.log(`  Patient 3 consents: ${consents3.length}`);
+    });
+
+    it("Should handle long data type and purpose strings", async function () {
+      const [patient, provider] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      // Test with maximum length strings (100 chars)
+      const longDataType = "a".repeat(100);
+      const longPurpose = "b".repeat(100);
+
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
+        longDataType,
+        expirationTime,
+        longPurpose
+      );
+      const receipt = await tx.wait();
+
+      expect(receipt.status).to.equal(1);
+
+      console.log(`\n[Stress Test] Long strings:`);
+      console.log(`  Data type length: ${longDataType.length}`);
+      console.log(`  Purpose length: ${longPurpose.length}`);
+      console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
+    });
+
+    it("Should handle many access requests per patient", async function () {
+      const [patient, requester1, requester2, requester3] = await ethers.getSigners();
+      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+
+      // Create multiple access requests
+      const requests = [
+        consentManager.connect(requester1).requestAccess(
+          patient.address,
+          "medical_records",
+          "treatment",
+          expirationTime
+        ),
+        consentManager.connect(requester2).requestAccess(
+          patient.address,
+          "diagnostic_data",
+          "research",
+          expirationTime
+        ),
+        consentManager.connect(requester3).requestAccess(
+          patient.address,
+          "genetic_data",
+          "analytics",
+          expirationTime
+        ),
+      ];
+
+      const receipts = await Promise.all(requests.map(r => r.then(tx => tx.wait())));
+
+      // Verify all requests were created
+      const patientRequests = await consentManager.getPatientRequests(patient.address);
+      expect(patientRequests.length).to.be.greaterThanOrEqual(3);
+
+      console.log(`\n[Stress Test] Many access requests:`);
+      console.log(`  Total requests: ${patientRequests.length}`);
+    });
+  });
 });

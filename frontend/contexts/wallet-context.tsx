@@ -79,7 +79,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     try {
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      return parseInt(chainId, 16);
+      // Handle both hex string (0x539) and decimal number formats
+      if (typeof chainId === 'string') {
+        // Remove '0x' prefix if present and parse as hex
+        const hexValue = chainId.startsWith('0x') ? chainId.slice(2) : chainId;
+        return parseInt(hexValue, 16);
+      }
+      return typeof chainId === 'number' ? chainId : null;
     } catch (error) {
       console.error('Error getting chain ID:', error);
       return null;
@@ -167,12 +173,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const chainId = await getChainId();
 
       // Check if network matches
-      const networkMatches = chainId === EXPECTED_CHAIN_ID;
-      if (!networkMatches) {
+      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
+      if (!networkMatches && chainId !== null) {
         setState((prev) => ({
           ...prev,
           isConnecting: false,
-          error: `Network mismatch. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
+          error: `Network mismatch. Current: ${chainId}, Expected: ${EXPECTED_CHAIN_ID}. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
         }));
         return;
       }
@@ -266,12 +272,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const handleChainChanged = async () => {
       const chainId = await getChainId();
-      const networkMatches = chainId === EXPECTED_CHAIN_ID;
+      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
 
       setState((prev) => ({
         ...prev,
         chainId,
-        error: networkMatches ? null : `Network mismatch. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
+        error: networkMatches ? null : `Network mismatch. Current: ${chainId}, Expected: ${EXPECTED_CHAIN_ID}. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
       }));
     };
 

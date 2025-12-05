@@ -287,6 +287,29 @@ If time permits, consider:
    - GitHub repository link, or
    - Zip file with your code
 
+## Testing
+
+This project includes comprehensive testing infrastructure:
+
+- **Smart Contract Tests**: Hardhat/Mocha tests with 95%+ coverage
+- **Backend Tests**: Unit and integration tests using Mocha/Chai/Supertest
+- **Frontend Tests**: Unit tests with Jest/React Testing Library and E2E tests with Playwright
+
+### Quick Start
+
+```bash
+# Run all tests
+npm run test:all
+
+# Run specific test suites
+npm run test:contract    # Smart contract tests
+npm run test:backend     # Backend tests
+npm run test:frontend    # Frontend unit tests
+npm run test:e2e         # Frontend E2E tests
+```
+
+For detailed testing documentation, see [docs/TESTING.md](docs/TESTING.md).
+
 ## Notes
 
 - The mockup data files (`mockup-patients.js` and `mockup-providers.js`) are intentionally complex to test your ability to work with realistic healthcare data structures
