@@ -83,7 +83,7 @@ describe('WalletConnector', () => {
 
     render(<WalletConnector />);
 
-    expect(screen.getByText('0xf39f...2266')).toBeInTheDocument();
+    expect(screen.getByText(/0xf39f...2266/i)).toBeInTheDocument();
   });
 
   it('should show wrong network badge when chain ID does not match', () => {

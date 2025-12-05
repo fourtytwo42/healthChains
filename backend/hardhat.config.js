@@ -27,5 +27,8 @@ module.exports = {
     cache: "./cache",
     artifacts: "./artifacts",
   },
+  mocha: {
+    grep: "PatientConsentManager", // Only run contract tests, exclude integration tests
+  },
 };
 

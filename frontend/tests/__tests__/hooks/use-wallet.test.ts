@@ -15,10 +15,18 @@ describe('useWallet', () => {
     cleanupWindowEthereum();
   });
 
-  it('should provide wallet context', () => {
-    const { result } = renderHook(() => useWallet(), {
-      wrapper: WalletProvider,
+  const renderUseWallet = async () => {
+    let hookResult: ReturnType<typeof renderHook> | undefined;
+    await act(async () => {
+      hookResult = renderHook(() => useWallet(), {
+        wrapper: WalletProvider,
+      });
     });
+    return hookResult!;
+  };
+
+  it('should provide wallet context', async () => {
+    const { result } = await renderUseWallet();
 
     expect(result.current).toBeDefined();
     expect(result.current).toHaveProperty('isConnected');
@@ -27,19 +35,18 @@ describe('useWallet', () => {
     expect(result.current).toHaveProperty('disconnect');
   });
 
-  it('should start with disconnected state', () => {
-    const { result } = renderHook(() => useWallet(), {
-      wrapper: WalletProvider,
-    });
+  it('should start with disconnected state when no accounts are available', async () => {
+    cleanupWindowEthereum();
+    mockWindowEthereum({ account: null, chainId: null, isConnected: false });
+
+    const { result } = await renderUseWallet();
 
     expect(result.current.isConnected).toBe(false);
     expect(result.current.account).toBeNull();
   });
 
   it('should connect wallet successfully', async () => {
-    const { result } = renderHook(() => useWallet(), {
-      wrapper: WalletProvider,
-    });
+    const { result } = await renderUseWallet();
 
     await act(async () => {
       await result.current.connect();
@@ -51,9 +58,7 @@ describe('useWallet', () => {
   });
 
   it('should get signer when connected', async () => {
-    const { result } = renderHook(() => useWallet(), {
-      wrapper: WalletProvider,
-    });
+    const { result } = await renderUseWallet();
 
     await act(async () => {
       await result.current.connect();
@@ -66,9 +71,7 @@ describe('useWallet', () => {
   });
 
   it('should check network correctly', async () => {
-    const { result } = renderHook(() => useWallet(), {
-      wrapper: WalletProvider,
-    });
+    const { result } = await renderUseWallet();
 
     await act(async () => {
       await result.current.connect();

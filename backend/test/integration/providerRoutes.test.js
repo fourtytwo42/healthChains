@@ -13,10 +13,13 @@ const cors = require('cors');
 const mockProviders = require('../../data/mockup-providers');
 
 describe('Provider Routes - Integration Tests', function () {
+  this.timeout(30000); // 30 second timeout for entire suite
+  
   let app;
 
   // Create Express app for testing
   before(function () {
+    this.timeout(10000); // 10 second timeout for setup
     app = express();
     app.use(cors());
     app.use(express.json());

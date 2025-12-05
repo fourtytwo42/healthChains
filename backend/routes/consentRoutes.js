@@ -1,5 +1,7 @@
 const express = require('express');
-const router = express.Router();
+const consentRouter = express.Router();
+const requestRouter = express.Router();
+const eventRouter = express.Router();
 const consentService = require('../services/consentService');
 const web3Service = require('../services/web3Service');
 const {
@@ -36,7 +38,7 @@ const { ValidationError } = require('../utils/errors');
  * - isExpired: boolean
  * - expirationTime: string (ISO) | null
  */
-router.get('/status', async (req, res, next) => {
+consentRouter.get('/status', async (req, res, next) => {
   try {
     const { patientAddress, providerAddress, dataType } = req.query;
 
@@ -105,6 +107,134 @@ router.get('/status', async (req, res, next) => {
 });
 
 /**
+ * GET /api/events/consent
+ * Query consent events (ConsentGranted, ConsentRevoked)
+ * 
+ * Query parameters:
+ * - patientAddress (optional): Filter by patient address
+ * - fromBlock (optional): Starting block number
+ * - toBlock (optional): Ending block number (default: latest)
+ * 
+ * Returns: Array of consent events
+ */
+eventRouter.get('/consent', validateBlockRange(), async (req, res, next) => {
+  try {
+    const { patientAddress, fromBlock, toBlock } = req.query;
+
+    // Validate patient address if provided
+    if (patientAddress) {
+      try {
+        validateAddress(patientAddress, 'patientAddress');
+      } catch (error) {
+        if (error.name === 'InvalidAddressError' || error.name === 'ValidationError') {
+          return res.status(400).json({
+            success: false,
+            error: error.toJSON ? error.toJSON() : {
+              code: 'INVALID_ADDRESS',
+              message: error.message,
+              details: { field: 'patientAddress', value: patientAddress }
+            }
+          });
+        }
+        throw error;
+      }
+    }
+
+    const events = await consentService.getConsentEvents(
+      patientAddress || null,
+      fromBlock ? parseInt(fromBlock, 10) : null,
+      toBlock ? parseInt(toBlock, 10) : null
+    );
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: events,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId,
+        count: events.length,
+        filters: {
+          patientAddress: patientAddress || null,
+          fromBlock: fromBlock || null,
+          toBlock: toBlock || null
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/events/requests
+ * Query access request events (AccessRequested, AccessApproved, AccessDenied)
+ * 
+ * Query parameters:
+ * - patientAddress (optional): Filter by patient address
+ * - fromBlock (optional): Starting block number
+ * - toBlock (optional): Ending block number (default: latest)
+ * 
+ * Returns: Array of access request events
+ */
+eventRouter.get('/requests', validateBlockRange(), async (req, res, next) => {
+  try {
+    const { patientAddress, fromBlock, toBlock } = req.query;
+
+    // Validate patient address if provided
+    if (patientAddress) {
+      try {
+        validateAddress(patientAddress, 'patientAddress');
+      } catch (error) {
+        if (error.name === 'InvalidAddressError' || error.name === 'ValidationError') {
+          return res.status(400).json({
+            success: false,
+            error: error.toJSON ? error.toJSON() : {
+              code: 'INVALID_ADDRESS',
+              message: error.message,
+              details: { field: 'patientAddress', value: patientAddress }
+            }
+          });
+        }
+        throw error;
+      }
+    }
+
+    const events = await consentService.getAccessRequestEvents(
+      patientAddress || null,
+      fromBlock ? parseInt(fromBlock, 10) : null,
+      toBlock ? parseInt(toBlock, 10) : null
+    );
+
+    const blockNumber = await web3Service.getBlockNumber();
+    const networkInfo = await web3Service.getNetworkInfo();
+
+    res.json({
+      success: true,
+      data: events,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        blockNumber: blockNumber,
+        network: networkInfo.name,
+        chainId: networkInfo.chainId,
+        count: events.length,
+        filters: {
+          patientAddress: patientAddress || null,
+          fromBlock: fromBlock || null,
+          toBlock: toBlock || null
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/consent/:consentId
  * Get full consent record by ID
  * 
@@ -113,7 +243,7 @@ router.get('/status', async (req, res, next) => {
  * 
  * Returns: Full consent record with all fields
  */
-router.get('/:consentId', validateConsentId(), async (req, res, next) => {
+consentRouter.get('/:consentId', validateConsentId(), async (req, res, next) => {
   try {
     const { consentId } = req.params;
     const record = await consentService.getConsentRecord(consentId);
@@ -148,7 +278,7 @@ router.get('/:consentId', validateConsentId(), async (req, res, next) => {
  * 
  * Returns: Array of consent records
  */
-router.get(
+consentRouter.get(
   '/patient/:patientAddress',
   validateAddressParam('patientAddress'),
   validateIncludeExpired(),
@@ -197,7 +327,7 @@ router.get(
  * Note: Currently returns empty array as contract doesn't expose provider consents directly.
  * Would need event-based querying for full implementation.
  */
-router.get(
+consentRouter.get(
   '/provider/:providerAddress',
   validateAddressParam('providerAddress'),
   validateIncludeExpired(),
@@ -244,7 +374,7 @@ router.get(
  * 
  * Returns: Full access request record
  */
-router.get('/requests/:requestId', validateRequestId(), async (req, res, next) => {
+requestRouter.get('/:requestId', validateRequestId(), async (req, res, next) => {
   try {
     const { requestId } = req.params;
     const request = await consentService.getAccessRequest(requestId);
@@ -279,8 +409,8 @@ router.get('/requests/:requestId', validateRequestId(), async (req, res, next) =
  * 
  * Returns: Array of access requests
  */
-router.get(
-  '/requests/patient/:patientAddress',
+requestRouter.get(
+  '/patient/:patientAddress',
   validateAddressParam('patientAddress'),
   validateStatus(),
   async (req, res, next) => {
@@ -315,114 +445,6 @@ router.get(
 );
 
 /**
- * GET /api/events/consent
- * Query consent events (ConsentGranted, ConsentRevoked)
- * 
- * Query parameters:
- * - patientAddress (optional): Filter by patient address
- * - fromBlock (optional): Starting block number
- * - toBlock (optional): Ending block number (default: latest)
- * 
- * Returns: Array of consent events
- */
-router.get(
-  '/events/consent',
-  validateBlockRange(),
-  async (req, res, next) => {
-    try {
-      const { patientAddress, fromBlock, toBlock } = req.query;
-
-      // Validate patient address if provided
-      if (patientAddress) {
-        validateAddress(patientAddress, 'patientAddress');
-      }
-
-      const events = await consentService.getConsentEvents(
-        patientAddress || null,
-        fromBlock ? parseInt(fromBlock, 10) : null,
-        toBlock ? parseInt(toBlock, 10) : null
-      );
-
-      const blockNumber = await web3Service.getBlockNumber();
-      const networkInfo = await web3Service.getNetworkInfo();
-
-      res.json({
-        success: true,
-        data: events,
-        metadata: {
-          timestamp: new Date().toISOString(),
-          blockNumber: blockNumber,
-          network: networkInfo.name,
-          chainId: networkInfo.chainId,
-          count: events.length,
-          filters: {
-            patientAddress: patientAddress || null,
-            fromBlock: fromBlock || null,
-            toBlock: toBlock || null
-          }
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
- * GET /api/events/requests
- * Query access request events (AccessRequested, AccessApproved, AccessDenied)
- * 
- * Query parameters:
- * - patientAddress (optional): Filter by patient address
- * - fromBlock (optional): Starting block number
- * - toBlock (optional): Ending block number (default: latest)
- * 
- * Returns: Array of access request events
- */
-router.get(
-  '/events/requests',
-  validateBlockRange(),
-  async (req, res, next) => {
-    try {
-      const { patientAddress, fromBlock, toBlock } = req.query;
-
-      // Validate patient address if provided
-      if (patientAddress) {
-        validateAddress(patientAddress, 'patientAddress');
-      }
-
-      const events = await consentService.getAccessRequestEvents(
-        patientAddress || null,
-        fromBlock ? parseInt(fromBlock, 10) : null,
-        toBlock ? parseInt(toBlock, 10) : null
-      );
-
-      const blockNumber = await web3Service.getBlockNumber();
-      const networkInfo = await web3Service.getNetworkInfo();
-
-      res.json({
-        success: true,
-        data: events,
-        metadata: {
-          timestamp: new Date().toISOString(),
-          blockNumber: blockNumber,
-          network: networkInfo.name,
-          chainId: networkInfo.chainId,
-          count: events.length,
-          filters: {
-            patientAddress: patientAddress || null,
-            fromBlock: fromBlock || null,
-            toBlock: toBlock || null
-          }
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
  * POST /api/consent/grant
  * Grant consent to a provider
  * 
@@ -439,7 +461,7 @@ router.get(
  * 
  * Returns: Transaction result with consentId and transaction hash
  */
-router.post('/grant', async (req, res, next) => {
+consentRouter.post('/grant', async (req, res, next) => {
   try {
     const { patientAddress, providerAddress, dataType, purpose, expirationTime } = req.body;
 
@@ -536,7 +558,7 @@ router.post('/grant', async (req, res, next) => {
  * 
  * Returns: Transaction result with transaction hash
  */
-router.put('/:consentId/revoke', validateConsentId(), async (req, res, next) => {
+consentRouter.put('/:consentId/revoke', validateConsentId(), async (req, res, next) => {
   try {
     const { consentId } = req.params;
     const { patientAddress } = req.body;
@@ -590,7 +612,7 @@ router.put('/:consentId/revoke', validateConsentId(), async (req, res, next) => 
  * 
  * Returns: Transaction result with requestId and transaction hash
  */
-router.post('/requests', async (req, res, next) => {
+requestRouter.post('/', async (req, res, next) => {
   try {
     const { requesterAddress, patientAddress, dataType, purpose, expirationTime } = req.body;
 
@@ -687,7 +709,7 @@ router.post('/requests', async (req, res, next) => {
  * 
  * Returns: Transaction result with transaction hash
  */
-router.put('/requests/:requestId/approve', validateRequestId(), async (req, res, next) => {
+requestRouter.put('/:requestId/approve', validateRequestId(), async (req, res, next) => {
   try {
     const { requestId } = req.params;
     const { patientAddress } = req.body;
@@ -740,7 +762,7 @@ router.put('/requests/:requestId/approve', validateRequestId(), async (req, res,
  * 
  * Returns: Transaction result with transaction hash
  */
-router.put('/requests/:requestId/deny', validateRequestId(), async (req, res, next) => {
+requestRouter.put('/:requestId/deny', validateRequestId(), async (req, res, next) => {
   try {
     const { requestId } = req.params;
     const { patientAddress } = req.body;
@@ -778,5 +800,9 @@ router.put('/requests/:requestId/deny', validateRequestId(), async (req, res, ne
   }
 });
 
-module.exports = router;
+module.exports = {
+  consentRouter,
+  requestRouter,
+  eventRouter
+};
 

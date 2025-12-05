@@ -11,7 +11,15 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^until-async$': '<rootDir>/tests/mocks/until-async.js',
   },
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
+  transformIgnorePatterns: [
+    '/node_modules/(?!(until-async|@mswjs|msw|web-streams-polyfill)/)',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ],
   testMatch: [
     '**/__tests__/**/*.[jt]s?(x)',
     '**/?(*.)+(spec|test).[jt]s?(x)',

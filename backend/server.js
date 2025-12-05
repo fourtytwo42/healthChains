@@ -8,7 +8,7 @@ const mockProviders = require('./data/mockup-providers');
 
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
-const consentRoutes = require('./routes/consentRoutes');
+const { consentRouter, requestRouter, eventRouter } = require('./routes/consentRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -211,9 +211,9 @@ app.get('/api/contract/info', async (req, res, next) => {
 });
 
 // Consent management routes (Web3 integration)
-app.use('/api/consent', consentRoutes);
-app.use('/api/requests', consentRoutes); // Access request routes
-app.use('/api/events', consentRoutes); // Event query routes
+app.use('/api/consent', consentRouter);
+app.use('/api/requests', requestRouter);
+app.use('/api/events', eventRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

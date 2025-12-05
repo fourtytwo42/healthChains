@@ -3,7 +3,7 @@
  */
 
 import { ethers } from 'ethers';
-import { getContract, getReadOnlyContract, waitForTransaction } from '@/lib/contract';
+import { getContract, getReadOnlyContract, waitForTransaction, __resetContractCacheForTests } from '@/lib/contract';
 import { apiClient } from '@/lib/api-client';
 
 // Mock api-client
@@ -31,6 +31,7 @@ describe('Contract Utilities', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  __resetContractCacheForTests();
 
     // Mock fetch for ABI
     (global.fetch as jest.Mock).mockResolvedValue({

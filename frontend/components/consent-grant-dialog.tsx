@@ -31,6 +31,8 @@ interface GrantConsentDialogProps {
  * Scalable component for selecting multiple items from large lists
  */
 function MultiSelect({
+  id,
+  labelId,
   options,
   selected,
   onSelectionChange,
@@ -40,6 +42,8 @@ function MultiSelect({
   getLabel,
   getValue,
 }: {
+  id?: string;
+  labelId?: string;
   options: any[];
   selected: string[];
   onSelectionChange: (values: string[]) => void;
@@ -70,6 +74,8 @@ function MultiSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
+          aria-labelledby={labelId}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -254,8 +260,10 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Providers Selection */}
             <div className="space-y-2">
-              <Label htmlFor="providers">Providers</Label>
+              <Label id="providers-label">Providers</Label>
               <MultiSelect
+                id="providers"
+                labelId="providers-label"
                 options={providersWithWallets}
                 selected={selectedProviders}
                 onSelectionChange={setSelectedProviders}
@@ -274,8 +282,10 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
 
             {/* Data Types Selection */}
             <div className="space-y-2">
-              <Label htmlFor="dataTypes">Data Types</Label>
+              <Label id="dataTypes-label">Data Types</Label>
               <MultiSelect
+                id="dataTypes"
+                labelId="dataTypes-label"
                 options={dataTypes || []}
                 selected={selectedDataTypes}
                 onSelectionChange={setSelectedDataTypes}
@@ -294,8 +304,10 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
 
             {/* Purposes Selection */}
             <div className="space-y-2">
-              <Label htmlFor="purposes">Purposes</Label>
+              <Label id="purposes-label">Purposes</Label>
               <MultiSelect
+                id="purposes"
+                labelId="purposes-label"
                 options={purposes || []}
                 selected={selectedPurposes}
                 onSelectionChange={setSelectedPurposes}

@@ -126,11 +126,20 @@ The server will start on `http://localhost:3001` and automatically:
 npm run test:contract
 
 # Run backend tests (unit + integration)
+# Automatically starts/stops Hardhat node
 npm run test:backend
 
 # Run all tests
 npm run test:all
 ```
+
+**Important**: Backend tests automatically manage the Hardhat node:
+- Starts a Hardhat node before running tests
+- Deploys the contract to the Hardhat network
+- Runs all backend tests
+- Stops the Hardhat node when tests complete
+
+No manual node management is required. The test script handles everything automatically.
 
 ### Test Structure
 

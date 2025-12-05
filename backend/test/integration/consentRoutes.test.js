@@ -1,15 +1,23 @@
 const { expect } = require('chai');
+process.env.HARDHAT_NETWORK = process.env.HARDHAT_NETWORK || 'localhost';
 const { ethers } = require('hardhat');
+const { time } = require('@nomicfoundation/hardhat-network-helpers');
 const request = require('supertest');
 const express = require('express');
 const cors = require('cors');
 
 // Import services and routes
 const web3Service = require('../../services/web3Service');
-const consentRoutes = require('../../routes/consentRoutes');
+const {
+  consentRouter,
+  requestRouter,
+  eventRouter
+} = require('../../routes/consentRoutes');
 const { errorHandler, notFoundHandler } = require('../../middleware/errorHandler');
 
 describe('Consent Routes - Integration Tests', function () {
+  this.timeout(60000); // 60 second timeout for entire suite
+  
   let app;
   let consentManager;
   let owner, patient, provider, requester;
@@ -17,18 +25,20 @@ describe('Consent Routes - Integration Tests', function () {
 
   // Create Express app for testing
   before(function () {
+    this.timeout(10000); // 10 second timeout for setup
     app = express();
     app.use(cors());
     app.use(express.json());
-    app.use('/api/consent', consentRoutes);
-    app.use('/api/requests', consentRoutes);
-    app.use('/api/events', consentRoutes);
+    app.use('/api/consent', consentRouter);
+    app.use('/api/requests', requestRouter);
+    app.use('/api/events', eventRouter);
     app.use(notFoundHandler);
     app.use(errorHandler);
   });
 
   // Deploy contract and get signers
   before(async function () {
+    this.timeout(30000); // 30 second timeout for contract deployment
     [owner, patient, provider, requester] = await ethers.getSigners();
     patientAddress = await patient.getAddress();
     providerAddress = await provider.getAddress();
@@ -117,7 +127,8 @@ describe('Consent Routes - Integration Tests', function () {
 
     before(async function () {
       // Create a consent for testing
-      const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+      const latestBlock = await ethers.provider.getBlock('latest');
+      const expirationTime = Number(latestBlock.timestamp) + 86400;
       const tx = await consentManager.connect(patient).grantConsent(
         providerAddress,
         'genetic_data',
@@ -180,14 +191,19 @@ describe('Consent Routes - Integration Tests', function () {
     });
 
     it('should filter expired consents by default', async function () {
-      // Create an expired consent
-      const pastTime = Math.floor(Date.now() / 1000) - 86400; // 1 day ago
+      // Create a consent that will expire soon
+      const latestBlock = await ethers.provider.getBlock('latest');
+      const expirationTime = Number(latestBlock.timestamp) + 60; // 1 minute ahead of chain time
       await consentManager.connect(patient).grantConsent(
         providerAddress,
         'imaging_data',
-        pastTime,
+        expirationTime,
         'treatment'
       );
+
+      // Fast-forward time beyond expiration and mark consents as expired
+      await time.increaseTo(expirationTime + 120);
+      await consentManager.connect(patient).checkAndExpireConsents(patientAddress);
 
       const res = await request(app)
         .get(`/api/consent/patient/${patientAddress}`)
@@ -223,16 +239,15 @@ describe('Consent Routes - Integration Tests', function () {
         expirationTime
       );
       const receipt = await tx.wait();
-      const event = receipt.logs.find(log => {
-        try {
-          return consentManager.interface.parseLog(log).name === 'AccessRequested';
-        } catch {
-          return false;
-        }
-      });
-      if (event) {
-        const parsed = consentManager.interface.parseLog(event);
-        requestId = Number(parsed.args.requestId);
+      const events = await consentManager.queryFilter(
+        consentManager.filters.AccessRequested(null, null, patientAddress),
+        receipt.blockNumber,
+        receipt.blockNumber
+      );
+      if (events && events.length > 0) {
+        requestId = Number(events[0].args.requestId);
+      } else {
+        throw new Error('AccessRequested event not found');
       }
     });
 
@@ -290,6 +305,10 @@ describe('Consent Routes - Integration Tests', function () {
     it('should return consent events', async function () {
       const res = await request(app)
         .get('/api/events/consent');
+
+      if (res.status !== 200) {
+        console.error('Error response:', JSON.stringify(res.body, null, 2));
+      }
 
       expect(res.status).to.equal(200);
       expect(res.body.success).to.be.true;

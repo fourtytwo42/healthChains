@@ -116,7 +116,7 @@ export function WalletConnector() {
         <Wallet className="h-3 w-3" />
         {formatAddress(account)}
       </Badge>
-      <Button variant="ghost" size="sm" onClick={disconnect}>
+      <Button variant="ghost" size="sm" onClick={disconnect} aria-label="Disconnect wallet">
         <LogOut className="h-4 w-4" />
       </Button>
     </div>

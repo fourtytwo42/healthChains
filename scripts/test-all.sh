@@ -68,13 +68,10 @@ if [ ! -f "package.json" ] || [ ! -d "backend" ] || [ ! -d "frontend" ]; then
 fi
 
 # 1. Smart Contract Tests
-run_test "Smart Contract Tests" "npm test" "backend"
+run_test "Smart Contract Tests" "npm run test:contract" "backend"
 
-# 2. Backend Unit Tests
-run_test "Backend Unit Tests" "npm test -- test/services" "backend"
-
-# 3. Backend Integration Tests
-run_test "Backend Integration Tests" "npm test -- test/integration" "backend"
+# 2. Backend Tests (starts/stops Hardhat node automatically)
+run_test "Backend Tests" "npm run test:backend" "backend"
 
 # 4. Frontend Unit Tests
 run_test "Frontend Unit Tests" "npm test -- --coverage=false" "frontend"

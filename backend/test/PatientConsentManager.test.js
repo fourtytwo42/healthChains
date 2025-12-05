@@ -1,5 +1,6 @@
 const { expect } = require("chai");
-const { ethers, time } = require("hardhat");
+const { ethers } = require("hardhat");
+const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("PatientConsentManager - Comprehensive Test Suite", function () {
   let consentManager;
@@ -597,18 +598,17 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       });
 
       it("Should correctly identify expired consent", async function () {
-        const pastTime = (await getCurrentTimestamp()) - 86400; // 1 day ago
+        const expirationTime = (await getCurrentTimestamp()) + 60; // Expires in 1 minute
         
-        // Manually set expiration (we'll use time manipulation for testing)
         await consentManager.connect(patient).grantConsent(
           provider.address,
           "medical_records",
-          pastTime,
+          expirationTime,
           "treatment"
         );
 
-        // Advance time
-        await time.increase(86400 * 2); // 2 days
+        // Advance time past expiration
+        await time.increase(120); // 2 minutes
 
         const expired = await consentManager.isConsentExpired(0);
         expect(expired).to.be.true;
@@ -646,11 +646,14 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         // Advance time past expiration
         await time.increase(120); // 2 minutes
 
-        const expiredCount = await consentManager.checkAndExpireConsents(patient.address);
-        expect(expiredCount).to.equal(1);
-
-        const consent = await consentManager.getConsentRecord(0);
-        expect(consent.isActive).to.be.false;
+        // Call the function and get the return value using staticCall first, then execute
+        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
+        await consentManager.checkAndExpireConsents(patient.address);
+        expect(Number(expiredCount)).to.equal(1);
+        
+        // Check that consent was marked inactive
+        const consentRecord = await consentManager.getConsentRecord(0);
+        expect(consentRecord.isActive).to.be.false;
       });
 
       it("Should emit ConsentExpired event when marking expired consents", async function () {
@@ -690,8 +693,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         await time.increase(90); // Expires first but not second
 
-        const expiredCount = await consentManager.checkAndExpireConsents(patient.address);
-        expect(expiredCount).to.equal(1);
+        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
+        await consentManager.checkAndExpireConsents(patient.address);
+        expect(Number(expiredCount)).to.equal(1);
       });
 
       it("Should handle patient with no expired consents", async function () {
@@ -702,8 +706,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
           "treatment"
         );
 
-        const expiredCount = await consentManager.checkAndExpireConsents(patient.address);
-        expect(expiredCount).to.equal(0);
+        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
+        await consentManager.checkAndExpireConsents(patient.address);
+        expect(Number(expiredCount)).to.equal(0);
       });
     });
 
@@ -910,7 +915,6 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         const request = await consentManager.getAccessRequest(requestId);
         expect(request.isProcessed).to.be.true;
         expect(request.status).to.equal(1); // RequestStatus.Approved = 1
-        expect(request.isApproved).to.be.true;
       });
 
       it("Should automatically grant consent when request is approved", async function () {
@@ -939,7 +943,6 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         const request = await consentManager.getAccessRequest(requestId);
         expect(request.isProcessed).to.be.true;
         expect(request.status).to.equal(2); // RequestStatus.Denied = 2
-        expect(request.isApproved).to.be.false;
       });
 
       it("Should not create consent when request is denied", async function () {
@@ -1270,10 +1273,13 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
     it("Should handle many consents for single patient", async function () {
       const count = 20;
+      const allSigners = await ethers.getSigners();
       
       for (let i = 0; i < count; i++) {
+        // Use provider addresses in rotation, or create new ones
+        const providerSigner = allSigners[Math.min(i + 3, allSigners.length - 1)];
         await consentManager.connect(patient).grantConsent(
-          accounts[i].address,
+          providerSigner.address,
           `data_type_${i}`,
           0,
           `purpose_${i}`

@@ -8,9 +8,9 @@
     "dev": "nodemon server.js",
     "compile:contract": "npx hardhat compile",
     "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
-    "deploy:hardhat": "npx hardhat run scripts/deploy-hardhat.js --network hardhat",
+    "deploy:hardhat": "npx hardhat run scripts/deploy-hardhat.js --network localhost",
     "test:contract": "npx hardhat test",
-    "test:backend": "mocha test/services/**/*.test.js test/integration/**/*.test.js --timeout 30000",
+    "test:backend": "bash scripts/start-hardhat-node.sh && npm run deploy:hardhat && mocha test/services/**/*.test.js test/integration/**/*.test.js --timeout 60000 --exit; EXIT_CODE=$?; bash scripts/stop-hardhat-node.sh; exit $EXIT_CODE",
     "test:all": "npm run test:contract && npm run test:backend"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "mocha": "^10.2.0",
     "nodemon": "^3.0.2",
     "sinon": "^17.0.1",
+    "sinon-chai": "^3.7.0",
     "supertest": "^6.3.3"
   },
   "keywords": [

@@ -125,3 +125,11 @@ export async function waitForTransaction(
   return receipt;
 }
 
+/**
+ * Testing helper to reset cached contract metadata between tests.
+ */
+export function __resetContractCacheForTests() {
+  contractABI = null;
+  contractAddress = null;
+}
+

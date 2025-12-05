@@ -9,12 +9,14 @@ import { render as renderWithProviders } from '../../utils/test-utils';
 import { server } from '../../utils/msw-server';
 import { handlers } from '../../utils/mock-api';
 
+const defaultWalletState = {
+  account: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+  isConnected: true,
+};
+
 // Mock wallet context
 jest.mock('@/contexts/wallet-context', () => ({
-  useWallet: jest.fn(() => ({
-    account: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
-    isConnected: true,
-  })),
+  useWallet: jest.fn(() => defaultWalletState),
 }));
 
 // Mock API hooks
@@ -43,6 +45,12 @@ jest.mock('@/hooks/use-api', () => ({
 }));
 
 describe('GrantConsentDialog', () => {
+  const { useWallet } = require('@/contexts/wallet-context');
+
+  beforeEach(() => {
+    useWallet.mockReturnValue(defaultWalletState);
+  });
+
   beforeAll(() => {
     server.listen();
   });
@@ -74,7 +82,6 @@ describe('GrantConsentDialog', () => {
   });
 
   it('should show wallet connection message when not connected', async () => {
-    const { useWallet } = require('@/contexts/wallet-context');
     useWallet.mockReturnValue({
       account: null,
       isConnected: false,

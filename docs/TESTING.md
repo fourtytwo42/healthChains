@@ -27,6 +27,7 @@ This runs all test suites in sequence and provides a summary.
 npm run test:contract
 
 # Backend tests (unit + integration)
+# Note: Automatically starts/stops Hardhat node
 npm run test:backend
 
 # Frontend unit tests
@@ -35,6 +36,14 @@ npm run test:frontend
 # Frontend E2E tests
 npm run test:e2e
 ```
+
+**Important**: Backend integration tests automatically start and stop a Hardhat node. The test script will:
+1. Start a Hardhat node on `localhost:8545`
+2. Deploy the contract to the Hardhat network
+3. Run all backend tests
+4. Stop the Hardhat node when tests complete
+
+This is handled automatically - no manual node management required.
 
 ## Test Structure
 
@@ -79,8 +88,10 @@ npm run test:e2e
 
 ```bash
 cd backend
-npm test
+npm run test:contract
 ```
+
+**Note**: These tests use Hardhat's built-in network and don't require a separate node.
 
 ### Test Coverage
 

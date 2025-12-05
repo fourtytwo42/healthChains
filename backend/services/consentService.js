@@ -28,10 +28,17 @@ class ConsentService {
    * @private
    */
   async _ensureContract() {
-    if (!this.contract) {
-      this.contract = await web3Service.getContract();
+    // Always get a fresh contract instance to avoid caching issues
+    // This ensures we're using the latest contract address and ABI
+    if (!web3Service.isInitialized) {
+      await web3Service.initialize();
     }
-    return this.contract;
+    const contract = await web3Service.getContract();
+    if (!contract) {
+      throw new ConfigurationError('Failed to get contract instance from web3Service');
+    }
+    // Don't cache - always get fresh instance to handle contract redeployments in tests
+    return contract;
   }
 
   /**
@@ -151,15 +158,69 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      // Call contract with timeout
-      const result = await Promise.race([
-        contract.hasActiveConsent(normalizedPatient, normalizedProvider, dataType),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 30000)
-        )
-      ]);
+      if (!contract) {
+        throw new ConfigurationError('Contract instance is not available');
+      }
+      
+      // Check if method exists
+      if (typeof contract.hasActiveConsent !== 'function') {
+        throw new ConfigurationError('hasActiveConsent method not found on contract');
+      }
+      
+      // Call contract method with timeout wrapper
+      let result;
+      try {
+        // Direct call without Promise.race to avoid undefined results
+        result = await contract.hasActiveConsent(normalizedPatient, normalizedProvider, dataType);
+        
+        // Verify result is not undefined
+        if (result === undefined) {
+          throw new Error('Contract call returned undefined - this should not happen');
+        }
+      } catch (callError) {
+        // If it's a CALL_EXCEPTION, it might mean the method doesn't exist or the call failed
+        if (callError.code === 'CALL_EXCEPTION') {
+          throw new ContractError(
+            'Failed to check consent status',
+            'hasActiveConsent',
+            callError
+          );
+        }
+        if (callError.message === 'Request timeout') {
+          throw new Web3ConnectionError('Request timed out while checking consent status');
+        }
+        throw callError;
+      }
 
-      const [hasConsent, consentId] = result;
+      // In ethers v6, named tuple returns are objects with property names
+      // Handle both object (named tuple) and array returns
+      if (result === undefined || result === null) {
+        throw new Error(`Invalid result from hasActiveConsent: result is ${result}`);
+      }
+      
+      let hasConsent, consentId;
+      if (typeof result === 'object') {
+        // Check if it's a named tuple (ethers v6 style)
+        if (result.hasOwnProperty('hasConsent') && result.hasOwnProperty('consentId')) {
+          hasConsent = result.hasConsent;
+          consentId = result.consentId;
+        } else if (result.hasOwnProperty('0') && result.hasOwnProperty('1')) {
+          // Indexed properties (alternative ethers v6 format)
+          hasConsent = result[0];
+          consentId = result[1];
+        } else if (Array.isArray(result)) {
+          // Array return
+          [hasConsent, consentId] = result;
+        } else if (result.length !== undefined && result.length >= 2) {
+          // Array-like object
+          hasConsent = result[0];
+          consentId = result[1];
+        } else {
+          throw new Error(`Unexpected result format from hasActiveConsent: ${JSON.stringify(result)}`);
+        }
+      } else {
+        throw new Error(`Invalid result from hasActiveConsent: ${typeof result}`);
+      }
       
       // If consent exists, check if expired
       let isExpired = false;
@@ -210,12 +271,45 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      const record = await Promise.race([
+      const result = await Promise.race([
         contract.getConsentRecord(consentId),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Request timeout')), 30000)
         )
       ]);
+
+      // Handle ethers v6 return format (may be object with named properties or array)
+      let record;
+      if (result && typeof result === 'object') {
+        if (result.patientAddress !== undefined) {
+          // Named struct return
+          record = result;
+        } else if (Array.isArray(result)) {
+          // Array return - convert to object
+          record = {
+            patientAddress: result[0],
+            providerAddress: result[1],
+            timestamp: result[2],
+            expirationTime: result[3],
+            isActive: result[4],
+            dataType: result[5],
+            purpose: result[6]
+          };
+        } else {
+          // Try indexed access
+          record = {
+            patientAddress: result[0] || result.patientAddress,
+            providerAddress: result[1] || result.providerAddress,
+            timestamp: result[2] || result.timestamp,
+            expirationTime: result[3] || result.expirationTime,
+            isActive: result[4] !== undefined ? result[4] : result.isActive,
+            dataType: result[5] || result.dataType,
+            purpose: result[6] || result.purpose
+          };
+        }
+      } else {
+        throw new Error('Unexpected result format from getConsentRecord');
+      }
 
       return this._transformConsentRecord(record, consentId);
     } catch (error) {
@@ -550,18 +644,54 @@ class ConsentService {
       }
 
       // Query ConsentGranted events
-      const grantedEvents = await contract.queryFilter(
-        contract.filters.ConsentGranted(filter.patient),
-        filter.fromBlock,
-        filter.toBlock
-      );
+      // Handle null/undefined for fromBlock and toBlock
+      const fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
+      const toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
+      
+      // ConsentGranted event: (uint256 indexed consentId, address indexed patient, address indexed provider, ...)
+      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+      // In ethers v6, pass null for unfiltered indexed parameters
+      const grantedFilter = filter.patient 
+        ? contract.filters.ConsentGranted(null, filter.patient, null)
+        : contract.filters.ConsentGranted(null, null, null);
+      
+      let grantedEvents;
+      try {
+        grantedEvents = await contract.queryFilter(
+          grantedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        // Ensure it's an array
+        if (!Array.isArray(grantedEvents)) {
+          grantedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying ConsentGranted events:', filterError.message);
+        grantedEvents = [];
+      }
 
-      // Query ConsentRevoked events
-      const revokedEvents = await contract.queryFilter(
-        contract.filters.ConsentRevoked(filter.patient),
-        filter.fromBlock,
-        filter.toBlock
-      );
+      // ConsentRevoked event: (uint256 indexed consentId, address indexed patient, ...)
+      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+      const revokedFilter = filter.patient
+        ? contract.filters.ConsentRevoked(null, filter.patient)
+        : contract.filters.ConsentRevoked(null, null);
+      
+      let revokedEvents;
+      try {
+        revokedEvents = await contract.queryFilter(
+          revokedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        // Ensure it's an array
+        if (!Array.isArray(revokedEvents)) {
+          revokedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying ConsentRevoked events:', filterError.message);
+        revokedEvents = [];
+      }
 
       // Transform and combine events
       const events = [
@@ -594,6 +724,8 @@ class ConsentService {
 
       return events;
     } catch (error) {
+      // Log the actual error for debugging
+      console.error('Error querying consent events:', error.message, error.code, error.reason);
       throw new ContractError(
         'Failed to query consent events',
         'getConsentEvents',
@@ -650,23 +782,72 @@ class ConsentService {
       }
 
       // Query all access request event types
-      const requestedEvents = await contract.queryFilter(
-        contract.filters.AccessRequested(filter.patient),
-        filter.fromBlock,
-        filter.toBlock
-      );
+      // Handle null/undefined for fromBlock and toBlock
+      const fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
+      const toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
+      
+      // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
+      // If patient filter is provided, filter by patient (third indexed parameter), otherwise get all events
+      const requestedFilter = filter.patient
+        ? contract.filters.AccessRequested(null, null, filter.patient)
+        : contract.filters.AccessRequested(null, null, null);
+      
+      let requestedEvents;
+      try {
+        requestedEvents = await contract.queryFilter(
+          requestedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        if (!Array.isArray(requestedEvents)) {
+          requestedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying AccessRequested events:', filterError.message);
+        requestedEvents = [];
+      }
 
-      const approvedEvents = await contract.queryFilter(
-        contract.filters.AccessApproved(filter.patient),
-        filter.fromBlock,
-        filter.toBlock
-      );
+      // AccessApproved event: (uint256 indexed requestId, address indexed patient, ...)
+      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+      const approvedFilter = filter.patient
+        ? contract.filters.AccessApproved(null, filter.patient)
+        : contract.filters.AccessApproved(null, null);
+      
+      let approvedEvents;
+      try {
+        approvedEvents = await contract.queryFilter(
+          approvedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        if (!Array.isArray(approvedEvents)) {
+          approvedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying AccessApproved events:', filterError.message);
+        approvedEvents = [];
+      }
 
-      const deniedEvents = await contract.queryFilter(
-        contract.filters.AccessDenied(filter.patient),
-        filter.fromBlock,
-        filter.toBlock
-      );
+      // AccessDenied event: (uint256 indexed requestId, address indexed patient, ...)
+      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+      const deniedFilter = filter.patient
+        ? contract.filters.AccessDenied(null, filter.patient)
+        : contract.filters.AccessDenied(null, null);
+      
+      let deniedEvents;
+      try {
+        deniedEvents = await contract.queryFilter(
+          deniedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        if (!Array.isArray(deniedEvents)) {
+          deniedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying AccessDenied events:', filterError.message);
+        deniedEvents = [];
+      }
 
       // Transform and combine events
       const events = [

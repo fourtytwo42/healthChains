@@ -35,9 +35,30 @@ class Web3Service {
    * @throws {ConfigurationError} If required configuration is missing
    * @throws {Web3ConnectionError} If RPC connection fails
    */
+  /**
+   * Reset the service to allow re-initialization
+   */
+  reset() {
+    this.provider = null;
+    this.contract = null;
+    this.signer = null;
+    this.signedContract = null;
+    this.contractAddress = null;
+    this.networkName = null;
+    this.chainId = null;
+    this.isInitialized = false;
+  }
+
   async initialize() {
-    if (this.isInitialized) {
+    // Allow re-initialization if contract address changes (for tests)
+    const newContractAddress = process.env.CONTRACT_ADDRESS || await this._loadContractAddress();
+    if (this.isInitialized && this.contractAddress === newContractAddress) {
       return;
+    }
+    
+    // Reset if contract address changed
+    if (this.isInitialized && this.contractAddress !== newContractAddress) {
+      this.reset();
     }
 
     // Load configuration from environment
@@ -75,6 +96,38 @@ class Web3Service {
     if (!this.contractAddress) {
       throw new ConfigurationError(
         'Contract address not found. Deploy contract first or set CONTRACT_ADDRESS environment variable.'
+      );
+    }
+    
+    // Verify contract exists at this address (with retry for test deployments)
+    let code;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        code = await this.provider.getCode(this.contractAddress);
+        if (code && code !== '0x' && code.length > 2) {
+          break; // Contract exists
+        }
+        // Wait a bit and retry (contract might be deploying)
+        if (retries > 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        retries--;
+      } catch (error) {
+        retries--;
+        if (retries === 0) {
+          throw new Web3ConnectionError(
+            `Failed to verify contract deployment at ${this.contractAddress}`,
+            error
+          );
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    if (!code || code === '0x' || code.length <= 2) {
+      throw new ConfigurationError(
+        `No contract code found at address ${this.contractAddress}. Contract may not be deployed.`
       );
     }
 
@@ -223,9 +276,12 @@ class Web3Service {
    * @returns {Promise<string|null>} Contract address or null
    */
   async _loadContractAddress() {
-    // First try environment variable
+    // First try environment variable (highest priority - used in tests)
     if (process.env.CONTRACT_ADDRESS) {
-      return process.env.CONTRACT_ADDRESS;
+      const address = process.env.CONTRACT_ADDRESS.trim();
+      if (address && address.startsWith('0x')) {
+        return address;
+      }
     }
 
     // Then try deployment.json

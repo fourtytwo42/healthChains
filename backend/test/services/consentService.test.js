@@ -1,10 +1,15 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
+const sinonChai = require('sinon-chai');
+const chai = require('chai');
+chai.use(sinonChai);
+
 const consentService = require('../../services/consentService');
 const { ValidationError, InvalidIdError, NotFoundError, ContractError } = require('../../utils/errors');
 const { ethers } = require('ethers');
 
 describe('ConsentService - Unit Tests', function () {
+  this.timeout(30000); // 30 second timeout for entire suite
   let mockContract;
   let mockWeb3Service;
 
@@ -38,6 +43,9 @@ describe('ConsentService - Unit Tests', function () {
 
     // Replace web3Service module
     const web3ServiceModule = require('../../services/web3Service');
+    sinon.stub(web3ServiceModule, 'initialize').callsFake(async () => {
+      web3ServiceModule.isInitialized = true;
+    });
     sinon.stub(web3ServiceModule, 'getContract').callsFake(() => mockWeb3Service.getContract());
     sinon.stub(web3ServiceModule, 'getBlockNumber').callsFake(() => mockWeb3Service.getBlockNumber());
     sinon.stub(web3ServiceModule, 'getNetworkInfo').callsFake(() => mockWeb3Service.getNetworkInfo());
