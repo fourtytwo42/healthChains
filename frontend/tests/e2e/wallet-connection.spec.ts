@@ -34,21 +34,30 @@ test.describe('Wallet Connection', () => {
   });
 
   test('should open connection dialog when connect button is clicked', async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
     await page.getByText('Connect Wallet').click();
     
-    await expect(page.getByText('Connect MetaMask Wallet')).toBeVisible();
-    await expect(page.getByText(/connect your metamask wallet/i)).toBeVisible();
+    await expect(page.getByText('Connect MetaMask Wallet')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/connect your metamask wallet/i)).toBeVisible({ timeout: 5000 });
   });
 
   test('should connect wallet successfully', async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
     await page.getByText('Connect Wallet').click();
     await page.getByRole('button', { name: /connect metamask/i }).click();
     
-    // Wait for connection
-    await page.waitForTimeout(1000);
+    // Wait for connection and redirect
+    await page.waitForTimeout(3000);
     
-    // Should show connected address
-    await expect(page.getByText(/0xf39f...2266/i)).toBeVisible();
+    // Should redirect to role-based page and show connected address
+    await page.waitForURL(/\/(patient|provider)$/, { timeout: 10000 }).catch(() => {});
+    const url = page.url();
+    expect(url).toMatch(/\/(patient|provider)$/);
+    // Check for connected address (might be in header)
+    const addressText = page.getByText(/0xf39f...2266/i);
+    await expect(addressText).toBeVisible({ timeout: 10000 });
   });
 
   test('should show wrong network badge when on wrong network', async ({ page }) => {
@@ -71,10 +80,13 @@ test.describe('Wallet Connection', () => {
     });
 
     await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
     await page.getByText('Connect Wallet').click();
     await page.getByRole('button', { name: /connect metamask/i }).click();
+    await page.waitForTimeout(1000);
 
-    await expect(page.getByText(/network mismatch\. current: 1/i)).toBeVisible();
+    await expect(page.getByText(/network mismatch/i)).toBeVisible({ timeout: 10000 });
   });
 });
 

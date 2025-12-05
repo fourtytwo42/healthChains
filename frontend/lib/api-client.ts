@@ -22,6 +22,12 @@ export interface ApiResponse<T> {
     chainId?: number;
     count?: number;
   };
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface Patient {
@@ -155,7 +161,21 @@ class ApiClient {
         throw new Error(errorData.error?.message || `HTTP ${response.status}`);
       }
 
-      return await response.json();
+      // Parse JSON response - it may include pagination at the top level
+      const jsonData = await response.json();
+      
+      // If the response has pagination, preserve it
+      if (jsonData.pagination) {
+        return {
+          success: jsonData.success ?? true,
+          data: jsonData.data as T,
+          pagination: jsonData.pagination,
+          metadata: jsonData.metadata,
+          error: jsonData.error,
+        };
+      }
+      
+      return jsonData;
     } catch (error) {
       if (error instanceof Error) {
         return {
@@ -316,6 +336,139 @@ class ApiClient {
 
   async getPurposes() {
     return this.request<string[]>('/api/purposes');
+  }
+
+  // User role detection
+  async getUserRole(address: string) {
+    // Normalize address to lowercase for consistent API calls
+    const normalizedAddress = address.toLowerCase();
+    const params = new URLSearchParams({ address: normalizedAddress });
+    const response = await this.request<{
+      role: 'patient' | 'provider' | 'both' | 'unknown';
+      patientId?: string;
+      providerId?: string;
+    }>(`/api/user/role?${params}`);
+    
+    // Debug logging
+    console.log('[apiClient.getUserRole] Address:', address);
+    console.log('[apiClient.getUserRole] Normalized:', normalizedAddress);
+    console.log('[apiClient.getUserRole] Response:', response);
+    
+    if (!response.success || !response.data) {
+      console.warn('[apiClient.getUserRole] Failed to get role:', response.error);
+      return { role: 'unknown' as const };
+    }
+    
+    return response.data;
+  }
+
+  // Provider-specific endpoints
+  async getProviderConsentsPaginated(
+    providerAddress: string,
+    page = 1,
+    limit = 10,
+    includeExpired = false
+  ) {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      includeExpired: includeExpired.toString(),
+    });
+    return this.request<{
+      data: ConsentRecord[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/api/provider/${providerAddress}/consents?${params}`);
+  }
+
+  async getProviderPatients(
+    providerAddress: string,
+    page = 1,
+    limit = 10
+  ) {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+    return this.request<{
+      data: Array<Patient & { consents: Array<{
+        consentId: number;
+        dataType: string;
+        purpose: string;
+        expirationTime: string | null;
+        isExpired: boolean;
+        isActive: boolean;
+      }> }>;
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/api/provider/${providerAddress}/patients?${params}`);
+  }
+
+  async getProviderPatientData(providerAddress: string, patientId: string) {
+    return this.request<{
+      patientId: string;
+      demographics: unknown;
+      consentedData: Record<string, unknown>;
+      consentInfo: Array<{
+        dataType: string;
+        purpose: string;
+        expirationTime: string | null;
+        consentId: number;
+      }>;
+    }>(`/api/provider/${providerAddress}/patient/${patientId}/data`);
+  }
+
+  // Patient-specific endpoints
+  async getPatientConsentsPaginated(
+    patientAddress: string,
+    page = 1,
+    limit = 10,
+    includeExpired = false
+  ) {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      includeExpired: includeExpired.toString(),
+    });
+    return this.request<{
+      data: ConsentRecord[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/api/patient/${patientAddress}/consents?${params}`);
+  }
+
+  async getPatientPendingRequests(
+    patientAddress: string,
+    page = 1,
+    limit = 10
+  ) {
+    // Normalize address to lowercase for consistent API calls
+    const normalizedAddress = patientAddress.toLowerCase();
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+    // The API returns {success: true, data: [...], pagination: {...}}
+    // The request method will parse this, but we need to preserve pagination
+    return this.request<Array<AccessRequest & {
+      provider?: {
+        providerId: string;
+        organizationName: string;
+        providerType: string;
+      } | null;
+    }>>(`/api/patient/${normalizedAddress}/pending-requests?${params}`);
   }
 
   // Note: Write operations (grant, revoke, approve, deny) are now handled

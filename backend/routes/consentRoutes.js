@@ -379,12 +379,30 @@ requestRouter.get('/:requestId', validateRequestId(), async (req, res, next) => 
     const { requestId } = req.params;
     const request = await consentService.getAccessRequest(requestId);
 
+    // Enrich with provider info from mockup data
+    const mockProviders = require('../data/mockup-providers');
+    const provider = mockProviders.mockProviders.providers.find(
+      p => p.blockchainIntegration?.walletAddress?.toLowerCase() === request.requester.toLowerCase()
+    );
+    
+    const enrichedRequest = {
+      ...request,
+      provider: provider ? {
+        providerId: provider.providerId,
+        organizationName: provider.organizationName,
+        providerType: provider.providerType,
+        address: provider.address,
+        contact: provider.contact,
+        specialties: provider.specialties
+      } : null
+    };
+
     const blockNumber = await web3Service.getBlockNumber();
     const networkInfo = await web3Service.getNetworkInfo();
 
     res.json({
       success: true,
-      data: request,
+      data: enrichedRequest,
       metadata: {
         timestamp: new Date().toISOString(),
         blockNumber: blockNumber,

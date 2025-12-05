@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useWallet } from '@/contexts/wallet-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ import {
  */
 export function WalletConnector() {
   const { isConnected, account, chainId, isConnecting, error, connect, disconnect, switchNetwork, checkNetwork } = useWallet();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const EXPECTED_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10);
   // Compare chain IDs - must match exactly
@@ -49,11 +51,17 @@ export function WalletConnector() {
       }
     }
     await connect();
+    // Close dialog after successful connection
+    setTimeout(() => {
+      if (!error) {
+        setDialogOpen(false);
+      }
+    }, 500);
   };
 
   if (!isConnected) {
     return (
-      <Dialog>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" disabled={isConnecting}>
             <Wallet className="mr-2 h-4 w-4" />
@@ -85,17 +93,35 @@ export function WalletConnector() {
                     try {
                       await switchNetwork(EXPECTED_CHAIN_ID);
                       await connect();
+                      setDialogOpen(false);
                     } catch (err) {
                       console.error('Failed to switch network:', err);
                     }
                   }}
                   className="w-full"
+                  disabled={isConnecting}
                 >
                   Switch Network
                 </Button>
               </div>
             )}
-            <Button onClick={handleConnect} className="w-full" disabled={isConnecting}>
+            <Button 
+              onClick={async () => {
+                try {
+                  await handleConnect();
+                  // Close dialog on successful connection (check after a short delay)
+                  setTimeout(() => {
+                    if (!error && !isConnecting) {
+                      setDialogOpen(false);
+                    }
+                  }, 500);
+                } catch (err) {
+                  console.error('Failed to connect:', err);
+                }
+              }} 
+              className="w-full" 
+              disabled={isConnecting}
+            >
               {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
             </Button>
           </div>

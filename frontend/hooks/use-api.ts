@@ -798,3 +798,197 @@ export function useDenyRequest() {
   });
 }
 
+/**
+ * Hook for getting user role
+ */
+export function useUserRole(address: string | null) {
+  return useQuery({
+    queryKey: ['userRole', address],
+    queryFn: async () => {
+      if (!address) return null;
+      return await apiClient.getUserRole(address);
+    },
+    enabled: !!address,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Hook for getting provider consents with pagination
+ */
+export function useProviderConsentsPaginated(
+  providerAddress: string,
+  page = 1,
+  limit = 10,
+  includeExpired = false,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['providerConsents', providerAddress, page, limit, includeExpired],
+    queryFn: async () => {
+      const response = await apiClient.getProviderConsentsPaginated(
+        providerAddress,
+        page,
+        limit,
+        includeExpired
+      );
+      if (!response.success || !response.data) {
+        throw new Error('Failed to fetch provider consents');
+      }
+      return response.data;
+    },
+    enabled: enabled && !!providerAddress,
+  });
+}
+
+/**
+ * Hook for getting provider patients with granted consents
+ */
+export function useProviderPatients(
+  providerAddress: string,
+  page = 1,
+  limit = 10,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['providerPatients', providerAddress, page, limit],
+    queryFn: async () => {
+      const response = await apiClient.getProviderPatients(providerAddress, page, limit);
+      if (!response.success || !response.data) {
+        throw new Error('Failed to fetch provider patients');
+      }
+      return response.data;
+    },
+    enabled: enabled && !!providerAddress,
+  });
+}
+
+/**
+ * Hook for getting provider patient data (with consent filtering)
+ */
+export function useProviderPatientData(
+  providerAddress: string,
+  patientId: string,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['providerPatientData', providerAddress, patientId],
+    queryFn: async () => {
+      const response = await apiClient.getProviderPatientData(providerAddress, patientId);
+      // If the response has an error, check if it's a "no consent" scenario
+      if (!response.success) {
+        // If it's a 404 or NOT_FOUND, it might mean no consent yet - return empty data structure
+        if (response.error?.code === 'NOT_FOUND' || response.error?.message?.includes('404')) {
+          // Return a structure indicating no consent, but don't throw an error
+          return {
+            success: true,
+            data: {
+              patientId,
+              demographics: {},
+              consentedData: {},
+              consentInfo: [],
+              unavailableDataTypes: []
+            }
+          };
+        }
+        // For other errors, throw
+        throw new Error(response.error?.message || 'Failed to fetch patient data');
+      }
+      // If response is successful but no data, return empty structure
+      if (!response.data) {
+        return {
+          success: true,
+          data: {
+            patientId,
+            demographics: {},
+            consentedData: {},
+            consentInfo: [],
+            unavailableDataTypes: []
+          }
+        };
+      }
+      return response;
+    },
+    enabled: enabled && !!providerAddress && !!patientId,
+    retry: false, // Don't retry on errors - likely means no consent
+  });
+}
+
+/**
+ * Hook for getting patient consents with pagination
+ */
+export function usePatientConsentsPaginated(
+  patientAddress: string,
+  page = 1,
+  limit = 10,
+  includeExpired = false,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['patientConsents', patientAddress, page, limit, includeExpired],
+    queryFn: async () => {
+      const response = await apiClient.getPatientConsentsPaginated(
+        patientAddress,
+        page,
+        limit,
+        includeExpired
+      );
+      if (!response.success || !response.data) {
+        throw new Error('Failed to fetch patient consents');
+      }
+      return response.data;
+    },
+    enabled: enabled && !!patientAddress,
+  });
+}
+
+/**
+ * Hook for getting patient pending requests with pagination
+ */
+export function usePatientPendingRequests(
+  patientAddress: string,
+  page = 1,
+  limit = 10,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['patientPendingRequests', patientAddress?.toLowerCase(), page, limit],
+    queryFn: async () => {
+      // Normalize address to lowercase for consistent API calls
+      const normalizedAddress = patientAddress.toLowerCase();
+      console.log('[usePatientPendingRequests] Fetching for address:', normalizedAddress);
+      const response = await apiClient.getPatientPendingRequests(normalizedAddress, page, limit);
+      console.log('[usePatientPendingRequests] Full response:', response);
+      
+      if (!response.success) {
+        console.error('[usePatientPendingRequests] API returned success: false', response);
+        throw new Error(response.error?.message || 'Failed to fetch pending requests');
+      }
+      
+      // The API returns {success: true, data: [...], pagination: {...}}
+      // The request method wraps it, so response.data is the array
+      if (!response.data) {
+        console.error('[usePatientPendingRequests] No data in response:', response);
+        throw new Error('No data returned from API');
+      }
+      
+      // Return the data with pagination info
+      const result = {
+        data: response.data || [],
+        pagination: response.pagination || {
+          page: Number(page),
+          limit: Number(limit),
+          total: (response.data || []).length,
+          totalPages: Math.ceil((response.data || []).length / Number(limit))
+        }
+      };
+      
+      console.log('[usePatientPendingRequests] Returning result:', result);
+      return result;
+    },
+    enabled: enabled && !!patientAddress,
+    staleTime: 0, // Always refetch to get latest requests
+    refetchInterval: 10000, // Refetch every 10 seconds to catch new requests
+  });
+}
+

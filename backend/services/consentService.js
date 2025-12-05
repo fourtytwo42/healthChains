@@ -400,10 +400,37 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      // Note: Contract doesn't have getProviderConsents, so we need to query events
-      // For now, we'll return empty array and implement event-based querying
-      // This is a limitation - we'd need to track this differently or use events
-      return [];
+      // Query ConsentGranted events filtered by provider address
+      // ConsentGranted event: (uint256 indexed consentId, address indexed patient, address indexed provider, ...)
+      const filter = contract.filters.ConsentGranted(null, null, normalizedAddress);
+      
+      // Query from deployment block to latest
+      const fromBlock = 0; // Start from contract deployment
+      const toBlock = 'latest';
+      
+      const events = await contract.queryFilter(filter, fromBlock, toBlock);
+      
+      // Transform events to consent records
+      const consents = await Promise.all(
+        events.map(async (event) => {
+          const consentId = Number(event.args.consentId);
+          try {
+            return await this.getConsentRecord(consentId);
+          } catch (error) {
+            // Consent might have been revoked or doesn't exist
+            return null;
+          }
+        })
+      );
+
+      // Filter out nulls and by expiration if needed
+      let filtered = consents.filter(c => c !== null);
+      
+      if (!includeExpired) {
+        filtered = filtered.filter(c => c.isActive && !c.isExpired);
+      }
+
+      return filtered;
     } catch (error) {
       throw new ContractError(
         'Failed to fetch provider consents',

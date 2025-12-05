@@ -46,12 +46,8 @@ export default defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /* No webServer config - using existing PM2-managed server on port 3000 */
+  /* Note: Frontend must be running via PM2 before running E2E tests */
+  /* Backend should also be running on port 3001 */
 });
 
