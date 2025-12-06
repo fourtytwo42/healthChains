@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { Button } from '@/components/ui/button';
 import React from 'react';
-import { FileCheck, X, Clock, MessageSquare, Users, Building2, Calendar, ExternalLink } from 'lucide-react';
+import { FileCheck, X, Clock, MessageSquare, Users, Building2, Calendar, ExternalLink, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { ProviderInfoSection } from '@/components/shared/provider-info-section';
 import { apiClient } from '@/lib/api-client';
@@ -171,86 +171,96 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
 
           {/* Provider Info - Consolidated format matching patient info format */}
           {userRole === 'patient' && event.provider && providerInfo && (
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-semibold text-base mb-1">{providerName}</p>
+            <div className="mt-4 text-sm">
+              {/* Provider Name - Full width row */}
+              <div className="mb-3">
+                <p className="font-semibold text-base">{providerName}</p>
                 {providerType && (
-                  <p className="text-muted-foreground text-xs capitalize">
+                  <p className="text-muted-foreground text-xs capitalize mt-0.5">
                     {providerType}
                   </p>
                 )}
-                {providerInfo.specialties && providerInfo.specialties.length > 0 && (
-                  <div className="mt-1">
-                    <ColoredBadgeList
-                      type="specialty"
-                      values={providerInfo.specialties}
-                      maxDisplay={3}
-                      size="sm"
-                    />
-                  </div>
-                )}
-                {event.provider && (
-                  <p className="text-muted-foreground text-xs font-mono mt-1">
-                    <strong>Wallet:</strong>{' '}
-                    <button
-                      onClick={() => handleCopyWalletAddress(event.provider || '')}
-                      className="text-primary hover:underline cursor-pointer break-all text-left"
-                      title="Click to copy full wallet address"
-                    >
-                      {event.provider}
-                    </button>
-                  </p>
-                )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {providerInfo.contact?.phone && (
-                  <p>
-                    <strong>Phone:</strong>{' '}
-                    <a 
-                      href={`tel:${providerInfo.contact.phone}`}
-                      className="text-primary hover:underline"
-                    >
-                      {providerInfo.contact.phone}
-                    </a>
-                  </p>
-                )}
-                {providerInfo.contact?.email && (
-                  <p>
-                    <strong>Email:</strong>{' '}
-                    <a 
-                      href={`mailto:${providerInfo.contact.email}`}
-                      className="text-primary hover:underline"
-                    >
-                      {providerInfo.contact.email}
-                    </a>
-                  </p>
-                )}
-                {providerInfo.contact?.website && (
-                  <p>
-                    <strong>Website:</strong>{' '}
-                    <a 
-                      href={providerInfo.contact.website.startsWith('http') ? providerInfo.contact.website : `https://${providerInfo.contact.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {providerInfo.contact.website}
-                    </a>
-                  </p>
-                )}
-                {providerAddressFormatted !== 'N/A' && googleMapsUrl && (
-                  <p>
-                    <strong>Address:</strong>{' '}
-                    <a 
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {providerAddressFormatted}
-                    </a>
-                  </p>
-                )}
+              
+              {/* Two column layout below name */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  {providerInfo.specialties && providerInfo.specialties.length > 0 && (
+                    <div className="mb-2">
+                      <ColoredBadgeList
+                        type="specialty"
+                        values={providerInfo.specialties}
+                        maxDisplay={3}
+                        size="sm"
+                      />
+                    </div>
+                  )}
+                  {event.provider && (
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Wallet:</strong>{' '}
+                        <button
+                          onClick={() => handleCopyWalletAddress(event.provider || '')}
+                          className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                          title="Click to copy full wallet address"
+                        >
+                          {event.provider.slice(0, 6)}...{event.provider.slice(-4)}
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {providerInfo.contact?.phone && (
+                    <p>
+                      <strong>Phone:</strong>{' '}
+                      <a 
+                        href={`tel:${providerInfo.contact.phone}`}
+                        className="text-primary hover:underline"
+                      >
+                        {providerInfo.contact.phone}
+                      </a>
+                    </p>
+                  )}
+                  {providerInfo.contact?.email && (
+                    <p>
+                      <strong>Email:</strong>{' '}
+                      <a 
+                        href={`mailto:${providerInfo.contact.email}`}
+                        className="text-primary hover:underline"
+                      >
+                        {providerInfo.contact.email}
+                      </a>
+                    </p>
+                  )}
+                  {providerInfo.contact?.website && (
+                    <p>
+                      <strong>Website:</strong>{' '}
+                      <a 
+                        href={providerInfo.contact.website.startsWith('http') ? providerInfo.contact.website : `https://${providerInfo.contact.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {providerInfo.contact.website}
+                      </a>
+                    </p>
+                  )}
+                  {providerAddressFormatted !== 'N/A' && googleMapsUrl && (
+                    <p>
+                      <strong>Address:</strong>{' '}
+                      <a 
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {providerAddressFormatted}
+                      </a>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
