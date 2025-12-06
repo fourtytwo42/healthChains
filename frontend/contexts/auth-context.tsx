@@ -138,6 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries();
       }, 100);
       
+      // Clear the account change flag after successful authentication
+      isHandlingAccountChangeRef.current = false;
+      
       // Don't show toast on automatic authentication
       // Only show on manual authentication attempts
     } catch (error) {
@@ -151,6 +154,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: null,
         error: errorMessage,
       });
+      
+      // Clear the account change flag on error so user can retry
+      isHandlingAccountChangeRef.current = false;
 
       // Only show toast for actual errors (not silent failures)
       if (errorMessage.includes('User rejected') || errorMessage.includes('denied')) {
@@ -244,11 +250,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Re-authenticate with new account after a short delay
       // This ensures the state is fully updated before authentication
       setTimeout(async () => {
+        // Clear the flag before calling authenticate so it can proceed
+        isHandlingAccountChangeRef.current = false;
         try {
           await authenticate();
-        } finally {
-          // Clear the flag after authentication completes (success or failure)
-          isHandlingAccountChangeRef.current = false;
+        } catch (error) {
+          // Error handling is done in authenticate() function
+          // Flag will be cleared there too
         }
       }, 300);
       
