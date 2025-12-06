@@ -175,37 +175,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
         sessionStorage.removeItem('auth_signing');
         
-        // Continue with rest of authentication...
-
-      // Step 3: Login and get JWT token
-      const authToken = await login(account, signature, message, timestamp);
+        // Step 4: Login and get JWT token
+        const authToken = await login(account, signature, message, timestamp);
 
         // Step 5: Store token
         storeToken(authToken.token, authToken.expiresIn);
 
-      // Clear ref first, then update state
-      isAuthenticatingRef.current = false;
-      setState({
-        isAuthenticated: true,
-        isAuthenticating: false,
-        token: authToken.token,
-        error: null,
-      });
+        // Clear ref first, then update state
+        isAuthenticatingRef.current = false;
+        setState({
+          isAuthenticated: true,
+          isAuthenticating: false,
+          token: authToken.token,
+          error: null,
+        });
 
-      // Invalidate all queries to refetch data with new authentication
-      // This ensures the page updates automatically after authentication
-      // Use a small delay to ensure state is fully updated first
-      setTimeout(() => {
-        queryClient.invalidateQueries();
-        // Also refetch all active queries to ensure immediate update
-        queryClient.refetchQueries();
-      }, 100);
-      
-      // Clear the account change flag after successful authentication
-      isHandlingAccountChangeRef.current = false;
-      
-      // Don't show toast on automatic authentication
-      // Only show on manual authentication attempts
+        // Invalidate all queries to refetch data with new authentication
+        // This ensures the page updates automatically after authentication
+        // Use a small delay to ensure state is fully updated first
+        setTimeout(() => {
+          queryClient.invalidateQueries();
+          // Also refetch all active queries to ensure immediate update
+          queryClient.refetchQueries();
+        }, 100);
+        
+        // Clear the account change flag after successful authentication
+        isHandlingAccountChangeRef.current = false;
+        
+        // Don't show toast on automatic authentication
+        // Only show on manual authentication attempts
+      } catch (signError) {
+        sessionStorage.removeItem('auth_signing');
+        throw signError; // Re-throw to be caught by outer catch
+      }
     } catch (error) {
       console.error('Authentication error:', error);
       clearToken();
