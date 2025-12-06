@@ -144,6 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Use a small delay to ensure state is fully updated first
       setTimeout(() => {
         queryClient.invalidateQueries();
+        // Also refetch all active queries to ensure immediate update
+        queryClient.refetchQueries();
       }, 100);
       
       // Clear the account change flag after successful authentication
