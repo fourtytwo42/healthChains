@@ -97,14 +97,19 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ### 7. ✅ Redundant Event Queries - **COMPLETED**
 
-**Status**: ✅ **IMPLEMENTED** - PostgreSQL event indexing with incremental queries
-- PostgreSQL tracks last processed block number per event type
-- Only queries new events from blockchain (from last processed block + 1)
+**Status**: ✅ **IMPLEMENTED** - PostgreSQL event indexing with full query optimization
+- PostgreSQL stores all event data (consent and access request events)
+- **Queries PostgreSQL first** for historical events (much faster than blockchain queries)
+- **Only fetches new events** from blockchain (from last processed block + 1)
 - Automatic schema creation on first connection
-- Graceful degradation if PostgreSQL unavailable (falls back to block 0 queries)
+- Graceful degradation if PostgreSQL unavailable (falls back to full blockchain queries)
 - Optional feature - can be enabled via `POSTGRES_ENABLED=true` environment variable
+- **Performance**: Historical queries are now instant (database) vs slow (blockchain RPC calls)
 
 **Implementation**: See `backend/services/eventIndexer.js` and `backend/services/consentService.js`
+- `getConsentEvents()` and `getAccessRequestEvents()` now query PostgreSQL first
+- New events are automatically stored in PostgreSQL after being fetched from blockchain
+- Duplicate detection prevents storing the same event twice
 
 ---
 
@@ -154,34 +159,43 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ### 11. ✅ No Database for Event Indexing - **COMPLETED**
 
-**Status**: ✅ **IMPLEMENTED** - PostgreSQL event indexing infrastructure in place
+**Status**: ✅ **IMPLEMENTED** - PostgreSQL event indexing fully operational
 - PostgreSQL database for event indexing (`healthchains_events`)
-- Event indexer service with block tracking
+- Tables: `consent_events`, `access_request_events`, `block_tracking`
 - Automatic schema creation
-- Tracks last processed block per event type
-- Infrastructure ready for full event storage (currently tracks blocks, can be extended to store full events)
-- Graceful degradation if PostgreSQL unavailable
+- **Full event storage**: All event data is stored in PostgreSQL (not just block tracking)
+- **Query optimization**: Historical events are queried from PostgreSQL first, then only new events from blockchain
+- Tracks last processed block per event type for incremental queries
+- Graceful degradation if PostgreSQL unavailable (falls back to full blockchain queries)
 
 **Implementation**: See `backend/services/eventIndexer.js` and `backend/services/consentService.js`
-
-**Note**: Currently tracks blocks for optimization. Can be extended to store full events for querying from database instead of blockchain.
+- `storeConsentEvents()` and `storeAccessRequestEvents()` store full event data
+- `queryConsentEvents()` and `queryAccessRequestEvents()` retrieve events from database
+- `getConsentEvents()` and `getAccessRequestEvents()` use PostgreSQL for historical data
 
 ---
 
-### 12. ⚠️ Memory Growth from Event Processing
+### 12. ✅ Memory Growth from Event Processing - **COMPLETED**
 
-**Problem**: Large event arrays loaded into memory.
+**Status**: ✅ **IMPLEMENTED** - Batch processing applied to all event operations
+- **ConsentGranted events**: Processed in batches of 50 events
+- **ConsentRevoked events**: Processed in batches of 50 events (already implemented)
+- **Access request events**: Processed in batches of 50 events (AccessRequested, AccessApproved, AccessDenied)
+- **PostgreSQL query results**: Transformed in batches of 100 rows
+- **PostgreSQL storage**: Events stored in batches of 100 events
 
-**Impact**: Memory usage grows with blockchain size
+**Implementation**: 
+- `getConsentEvents()`: Batch processing for ConsentGranted events
+- `getAccessRequestEvents()`: Batch processing for all access request event types
+- `eventIndexer.storeConsentEvents()`: Batch storage (100 events per batch)
+- `eventIndexer.storeAccessRequestEvents()`: Batch storage (100 events per batch)
+- PostgreSQL query result transformation: Batched to reduce memory footprint
 
-**Recommendation**:
-- Stream events instead of loading all
-- Process in batches
-- Use cursor-based pagination
-
-**Implementation Priority**: 🟡 **MEDIUM**
-
-**Estimated Effort**: 2-3 days
+**Benefits**:
+- Reduced memory usage when processing large event arrays
+- Prevents memory spikes from loading all events at once
+- More predictable memory consumption patterns
+- Better performance for large block ranges
 
 ---
 

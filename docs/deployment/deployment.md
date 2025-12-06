@@ -300,9 +300,13 @@ POSTGRES_PASSWORD=healthchains123
 #### How It Works
 
 When PostgreSQL is enabled:
-- **First Run**: Queries all events from block 0 and stores the last processed block
-- **Subsequent Runs**: Only queries new events from the last processed block + 1
+- **First Run**: Queries all events from block 0, stores them in PostgreSQL, and tracks the last processed block
+- **Subsequent Runs**: 
+  - **Queries PostgreSQL first** for historical events (instant, no blockchain RPC calls)
+  - **Only fetches new events** from blockchain (from last processed block + 1)
+  - **Stores new events** in PostgreSQL automatically
 - **Block Tracking**: Tracks last processed block per event type (ConsentGranted, ConsentRevoked, AccessRequested, etc.)
+- **Performance**: Historical event queries are now instant (database) vs slow (blockchain RPC calls)
 - **Automatic Schema**: Database schema is automatically created on first connection
 
 **Important**: If PostgreSQL is not enabled or unavailable, the backend will:

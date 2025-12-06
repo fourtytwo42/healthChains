@@ -1002,23 +1002,90 @@ class ConsentService {
       let fromBlockArg = fromBlock !== null && fromBlock !== undefined ? fromBlock : undefined;
       let toBlockArg = toBlock !== null && toBlock !== undefined ? toBlock : undefined;
       
-      // Note: PostgreSQL is used for tracking last processed block, but we still need to query
-      // all events from blockchain for history. The block tracking is useful for background
-      // indexing jobs, but for API requests we need full history.
-      // If an explicit block range is provided, use it. Otherwise query from block 0.
-      if (fromBlockArg === undefined) {
-        fromBlockArg = 0;
+      // If PostgreSQL is enabled, query from database first, then only fetch new events from blockchain
+      let historicalEvents = [];
+      let lastProcessedBlock = 0;
+      
+      if (usePostgres) {
+        // Get last processed block to know where to start querying new events
+        lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
+        
+        // Query historical events from PostgreSQL
+        const dbFilters = {};
+        if (patientAddress) {
+          dbFilters.patientAddress = normalizeAddress(patientAddress);
+        }
+        if (fromBlockArg !== undefined) {
+          dbFilters.fromBlock = fromBlockArg;
+        }
+        if (toBlockArg !== undefined && toBlockArg !== 'latest') {
+          dbFilters.toBlock = toBlockArg;
+        } else if (lastProcessedBlock > 0) {
+          // Only get events up to last processed block from DB
+          dbFilters.toBlock = lastProcessedBlock;
+        }
+        
+        const dbEvents = await eventIndexer.queryConsentEvents(dbFilters);
+        
+        // Transform database events in batches to reduce memory usage (improvement #12)
+        const DB_BATCH_SIZE = 100;
+        for (let i = 0; i < dbEvents.length; i += DB_BATCH_SIZE) {
+          const batch = dbEvents.slice(i, i + DB_BATCH_SIZE);
+          const batchResults = batch.map(row => ({
+            type: row.event_type,
+            blockNumber: parseInt(row.block_number, 10),
+            transactionHash: row.transaction_hash,
+            consentId: row.consent_id,
+            patient: row.patient_address,
+            provider: row.provider_address,
+            dataType: row.data_type,
+            dataTypes: row.data_types || (row.data_type ? [row.data_type] : []),
+            purpose: row.purpose,
+            purposes: row.purposes || (row.purpose ? [row.purpose] : []),
+            expirationTime: row.expiration_time 
+              ? new Date(parseInt(row.expiration_time, 10) * 1000).toISOString()
+              : null,
+            timestamp: row.timestamp 
+              ? new Date(parseInt(row.timestamp, 10) * 1000).toISOString()
+              : null
+          }));
+          historicalEvents.push(...batchResults);
+        }
+        
+        logger.debug('PostgreSQL event index active', { 
+          lastProcessedBlock, 
+          historicalEventsCount: historicalEvents.length,
+          fromBlock: fromBlockArg, 
+          toBlock: toBlockArg 
+        });
       }
+      
+      // Determine block range for new events from blockchain
+      // If PostgreSQL is enabled and we have historical events, only fetch new events
+      if (fromBlockArg === undefined) {
+        fromBlockArg = usePostgres && lastProcessedBlock > 0 ? lastProcessedBlock + 1 : 0;
+      } else if (usePostgres && lastProcessedBlock > 0 && fromBlockArg <= lastProcessedBlock) {
+        // If requested range is entirely in the past, we already have it from DB
+        // Only fetch if the range extends beyond lastProcessedBlock
+        fromBlockArg = lastProcessedBlock + 1;
+      }
+      
       if (toBlockArg === undefined) {
         toBlockArg = 'latest';
       }
       
-      // If PostgreSQL is enabled, we can optionally optimize by only querying new events
-      // but for now, we'll query all events to ensure history is complete
-      // TODO: In the future, we can store events in PostgreSQL and query from there
-      if (usePostgres) {
-        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
-        logger.debug('PostgreSQL event index active', { lastProcessedBlock, fromBlock: fromBlockArg, toBlock: toBlockArg });
+      // If fromBlockArg is beyond toBlockArg (or latest), we already have all events from DB
+      if (usePostgres && historicalEvents.length > 0 && 
+          (fromBlockArg === 'latest' || (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg))) {
+        // Return historical events from DB only
+        const events = historicalEvents;
+        events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+        
+        // Cache result
+        const ttl = 15; // 15 seconds for event queries
+        await cacheService.set(cacheKey, events, ttl);
+        
+        return events;
       }
       
       // Build filter
@@ -1049,10 +1116,7 @@ class ConsentService {
             grantedEvents = [];
           }
           
-          // Store new events in PostgreSQL if enabled
-          if (usePostgres && grantedEvents.length > 0) {
-            await eventIndexer.storeConsentEvents(grantedEvents);
-          }
+          // Note: We'll store transformed events after transformation
         } catch (filterError) {
           logger.error('Error querying ConsentGranted events', { error: filterError.message, stack: filterError.stack });
           grantedEvents = [];
@@ -1075,10 +1139,7 @@ class ConsentService {
             revokedEvents = [];
           }
           
-          // Store new events in PostgreSQL if enabled
-          if (usePostgres && revokedEvents.length > 0) {
-            await eventIndexer.storeConsentEvents(revokedEvents);
-          }
+          // Note: We'll store transformed events after transformation
         } catch (filterError) {
           logger.error('Error querying ConsentRevoked events', { error: filterError.message, stack: filterError.stack });
           revokedEvents = [];
@@ -1090,46 +1151,59 @@ class ConsentService {
       // getConsentEvents() should only return actual ConsentGranted events (direct grants)
       const grantedEventList = [];
       
-      // Process ConsentGranted events (direct grants only)
-      for (const event of grantedEvents) {
-        const consentIds = event.args.consentIds || [];
-        const patient = ethers.getAddress(event.args.patient);
-        const timestamp = new Date(Number(event.args.timestamp) * 1000).toISOString();
-        
-        // For each consentId in the array, fetch the consent record and create an event
-        for (const consentIdBigInt of consentIds) {
-          const consentId = Number(consentIdBigInt);
-          try {
-            const consentRecord = await this.getConsentRecord(consentId);
-            
-            // Create an event for each dataType/purpose combination
-            // Since we now use BatchConsentRecord, we have arrays of dataTypes and purposes
-            const dataTypes = consentRecord.dataTypes || [];
-            const purposes = consentRecord.purposes || [];
-            
-            // Create one event per dataType (use first purpose or all purposes)
-            for (const dataType of dataTypes) {
-              for (const purpose of purposes) {
-                grantedEventList.push({
-                  type: 'ConsentGranted',
-                  blockNumber: event.blockNumber,
-                  transactionHash: event.transactionHash,
-                  consentId: consentId,
-                  patient: patient,
-                  provider: consentRecord.providerAddress,
-                  dataType: dataType,
-                  dataTypes: dataTypes,
-                  expirationTime: consentRecord.expirationTime,
-                  purpose: purpose,
-                  purposes: purposes,
-                  timestamp: timestamp
-                });
+      // Process ConsentGranted events in batches to reduce memory usage (improvement #12)
+      const GRANTED_BATCH_SIZE = 50;
+      for (let i = 0; i < grantedEvents.length; i += GRANTED_BATCH_SIZE) {
+        const batch = grantedEvents.slice(i, i + GRANTED_BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(async (event) => {
+          const consentIds = event.args.consentIds || [];
+          const patient = ethers.getAddress(event.args.patient);
+          const timestamp = new Date(Number(event.args.timestamp) * 1000).toISOString();
+          const eventResults = [];
+          
+          // For each consentId in the array, fetch the consent record and create an event
+          for (const consentIdBigInt of consentIds) {
+            const consentId = Number(consentIdBigInt);
+            try {
+              const consentRecord = await this.getConsentRecord(consentId);
+              
+              // Create an event for each dataType/purpose combination
+              // Since we now use BatchConsentRecord, we have arrays of dataTypes and purposes
+              const dataTypes = consentRecord.dataTypes || [];
+              const purposes = consentRecord.purposes || [];
+              
+              // Create one event per dataType (use first purpose or all purposes)
+              for (const dataType of dataTypes) {
+                for (const purpose of purposes) {
+                  eventResults.push({
+                    type: 'ConsentGranted',
+                    blockNumber: event.blockNumber,
+                    transactionHash: event.transactionHash,
+                    logIndex: event.logIndex || 0,
+                    consentId: consentId,
+                    patient: patient,
+                    provider: consentRecord.providerAddress,
+                    dataType: dataType,
+                    dataTypes: dataTypes,
+                    expirationTime: consentRecord.expirationTime,
+                    purpose: purpose,
+                    purposes: purposes,
+                    timestamp: timestamp
+                  });
+                }
               }
+            } catch (error) {
+              // If consent record doesn't exist (e.g., was revoked), skip it
+              logger.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event`, { consentId, error: error.message });
             }
-          } catch (error) {
-            // If consent record doesn't exist (e.g., was revoked), skip it
-            logger.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event`, { consentId, error: error.message });
           }
+          
+          return eventResults;
+        }));
+        
+        // Flatten batch results into grantedEventList
+        for (const eventResult of batchResults) {
+          grantedEventList.push(...eventResult);
         }
       }
       
@@ -1182,6 +1256,7 @@ class ConsentService {
             type: 'ConsentRevoked',
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash,
+            logIndex: event.logIndex || 0,
             consentId: consentId,
             patient: ethers.getAddress(event.args.patient),
             provider: provider,
@@ -1196,15 +1271,41 @@ class ConsentService {
         revokedEventsList.push(...batchResults);
       }
       
-      const events = [
+      const newEvents = [
         ...grantedEventList,
         ...revokedEventsList
+      ];
+      
+      // Store new events in PostgreSQL if enabled
+      if (usePostgres && newEvents.length > 0) {
+        await eventIndexer.storeConsentEvents(newEvents);
+      }
+      
+      // Combine historical events from DB with new events from blockchain
+      const events = [
+        ...historicalEvents,
+        ...newEvents
       ];
 
       // Sort by block number
       events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+      
+      // Remove duplicates based on transaction hash and consentId (in case of overlap)
+      const seen = new Set();
+      const uniqueEvents = events.filter(event => {
+        const key = `${event.transactionHash}-${event.consentId || event.type}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+      
+      // Cache result
+      const ttl = 15; // 15 seconds for event queries
+      await cacheService.set(cacheKey, uniqueEvents, ttl);
 
-      return events;
+      return uniqueEvents;
     } catch (error) {
       // Log the actual error for debugging
       logger.error('Error querying consent events', { 
@@ -1283,23 +1384,89 @@ class ConsentService {
       let fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
       let toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
       
-      // Note: PostgreSQL is used for tracking last processed block, but we still need to query
-      // all events from blockchain for history. The block tracking is useful for background
-      // indexing jobs, but for API requests we need full history.
-      // If an explicit block range is provided, use it. Otherwise query from block 0.
-      if (fromBlockArg === undefined) {
-        fromBlockArg = 0;
+      // If PostgreSQL is enabled, query from database first, then only fetch new events from blockchain
+      let historicalEvents = [];
+      let lastProcessedBlock = 0;
+      
+      if (usePostgres) {
+        // Get last processed block to know where to start querying new events
+        lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
+        
+        // Query historical events from PostgreSQL
+        const dbFilters = {};
+        if (patientAddress) {
+          dbFilters.patientAddress = normalizeAddress(patientAddress);
+        }
+        if (fromBlockArg !== undefined) {
+          dbFilters.fromBlock = fromBlockArg;
+        }
+        if (toBlockArg !== undefined && toBlockArg !== 'latest') {
+          dbFilters.toBlock = toBlockArg;
+        } else if (lastProcessedBlock > 0) {
+          // Only get events up to last processed block from DB
+          dbFilters.toBlock = lastProcessedBlock;
+        }
+        
+        const dbEvents = await eventIndexer.queryAccessRequestEvents(dbFilters);
+        
+        // Transform database events in batches to reduce memory usage (improvement #12)
+        const DB_BATCH_SIZE = 100;
+        for (let i = 0; i < dbEvents.length; i += DB_BATCH_SIZE) {
+          const batch = dbEvents.slice(i, i + DB_BATCH_SIZE);
+          const batchResults = batch.map(row => ({
+            type: row.event_type,
+            blockNumber: parseInt(row.block_number, 10),
+            transactionHash: row.transaction_hash,
+            requestId: row.request_id,
+            patient: row.patient_address,
+            provider: row.provider_address,
+            requester: row.provider_address, // Use provider_address as requester
+            dataTypes: row.data_types || [],
+            purposes: row.purposes || [],
+            expirationTime: row.expiration_time 
+              ? new Date(parseInt(row.expiration_time, 10) * 1000).toISOString()
+              : null,
+            timestamp: row.timestamp 
+              ? new Date(parseInt(row.timestamp, 10) * 1000).toISOString()
+              : null
+          }));
+          historicalEvents.push(...batchResults);
+        }
+        
+        logger.debug('PostgreSQL event index active for access requests', { 
+          lastProcessedBlock, 
+          historicalEventsCount: historicalEvents.length,
+          fromBlock: fromBlockArg, 
+          toBlock: toBlockArg 
+        });
       }
+      
+      // Determine block range for new events from blockchain
+      // If PostgreSQL is enabled and we have historical events, only fetch new events
+      if (fromBlockArg === undefined) {
+        fromBlockArg = usePostgres && lastProcessedBlock > 0 ? lastProcessedBlock + 1 : 0;
+      } else if (usePostgres && lastProcessedBlock > 0 && fromBlockArg <= lastProcessedBlock) {
+        // If requested range is entirely in the past, we already have it from DB
+        // Only fetch if the range extends beyond lastProcessedBlock
+        fromBlockArg = lastProcessedBlock + 1;
+      }
+      
       if (toBlockArg === undefined) {
         toBlockArg = 'latest';
       }
       
-      // If PostgreSQL is enabled, we can optionally optimize by only querying new events
-      // but for now, we'll query all events to ensure history is complete
-      // TODO: In the future, we can store events in PostgreSQL and query from there
-      if (usePostgres) {
-        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
-        logger.debug('PostgreSQL event index active for access requests', { lastProcessedBlock, fromBlock: fromBlockArg, toBlock: toBlockArg });
+      // If fromBlockArg is beyond toBlockArg (or latest), we already have all events from DB
+      if (usePostgres && historicalEvents.length > 0 && 
+          (fromBlockArg === 'latest' || (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg))) {
+        // Return historical events from DB only
+        const events = historicalEvents;
+        events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+        
+        // Cache result
+        const ttl = 15; // 15 seconds for event queries
+        await cacheService.set(cacheKey, events, ttl);
+        
+        return events;
       }
       
       // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
@@ -1368,13 +1535,7 @@ class ConsentService {
           deniedEvents = [];
         }
         
-        // Store new events in PostgreSQL if enabled
-        if (usePostgres) {
-          const allRequestEvents = [...requestedEvents, ...approvedEvents, ...deniedEvents];
-          if (allRequestEvents.length > 0) {
-            await eventIndexer.storeAccessRequestEvents(allRequestEvents);
-          }
-        }
+        // Note: We'll store transformed events after transformation
       }
 
       // Create a map of requestId -> AccessRequested event to look up requester for approved/denied events
@@ -1424,6 +1585,7 @@ class ConsentService {
             type: 'AccessApproved',
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash,
+            logIndex: event.logIndex || 0,
             requestId: requestId,
             consentId: consentId,
             consentIds: consentIds.map(id => Number(id)),
@@ -1438,13 +1600,15 @@ class ConsentService {
         })
       );
       
-      const events = [
+      const newEvents = [
         ...requestedEvents.map(event => ({
           type: 'AccessRequested',
           blockNumber: event.blockNumber,
           transactionHash: event.transactionHash,
+          logIndex: event.logIndex || 0,
           requestId: Number(event.args.requestId),
           requester: ethers.getAddress(event.args.requester),
+          provider: ethers.getAddress(event.args.requester), // Also set provider for storage
           patient: ethers.getAddress(event.args.patient),
           dataTypes: Array.isArray(event.args.dataTypes) ? event.args.dataTypes : [],
           purposes: Array.isArray(event.args.purposes) ? event.args.purposes : [],
@@ -1461,8 +1625,10 @@ class ConsentService {
             type: 'AccessDenied',
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash,
+            logIndex: event.logIndex || 0,
             requestId: requestId,
             requester: requestInfo?.requester || null,
+            provider: requestInfo?.requester || null, // Also set provider for storage
             patient: ethers.getAddress(event.args.patient),
             dataTypes: requestInfo?.dataTypes || [],
             purposes: requestInfo?.purposes || [],
@@ -1471,15 +1637,37 @@ class ConsentService {
           };
         })
       ];
+      
+      // Store new events in PostgreSQL if enabled
+      if (usePostgres && newEvents.length > 0) {
+        await eventIndexer.storeAccessRequestEvents(newEvents);
+      }
+      
+      // Combine historical events from DB with new events from blockchain
+      const events = [
+        ...historicalEvents,
+        ...newEvents
+      ];
+      
+      // Remove duplicates based on transaction hash and requestId (in case of overlap)
+      const seen = new Set();
+      const uniqueEvents = events.filter(event => {
+        const key = `${event.transactionHash}-${event.requestId || event.type}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
 
       // Sort by block number
-      events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+      uniqueEvents.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
 
       // Use shorter TTL for request events (they change when requests are approved/denied)
       const ttl = 15; // 15 seconds - requests can be approved/denied quickly
-      await cacheService.set(cacheKey, events, ttl);
+      await cacheService.set(cacheKey, uniqueEvents, ttl);
 
-      return events;
+      return uniqueEvents;
     } catch (error) {
       throw new ContractError(
         'Failed to query access request events',
