@@ -14,6 +14,8 @@ async function main() {
 
   // Save deployment info
   const fs = require("fs");
+  const path = require("path");
+  
   const deploymentInfo = {
     address: address,
     network: hre.network.name,
@@ -26,6 +28,24 @@ async function main() {
   );
 
   console.log("Deployment info saved to deployment.json");
+
+  // Copy ABI to frontend public folder
+  try {
+    const artifactPath = path.join(__dirname, "../artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json");
+    const frontendAbiPath = path.join(__dirname, "../../frontend/public/contract-abi.json");
+    
+    if (fs.existsSync(artifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
+      const abiWrapper = { abi: artifact.abi };
+      fs.writeFileSync(frontendAbiPath, JSON.stringify(abiWrapper, null, 2));
+      console.log("Contract ABI copied to frontend/public/contract-abi.json");
+    } else {
+      console.warn("Warning: Artifact file not found, ABI not copied to frontend");
+    }
+  } catch (error) {
+    console.error("Error copying ABI to frontend:", error.message);
+    console.warn("Please manually copy the ABI to frontend/public/contract-abi.json");
+  }
 }
 
 main()

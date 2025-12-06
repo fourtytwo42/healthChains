@@ -73,9 +73,12 @@ The deployment script will:
 1. Compile the contract
 2. Deploy to the network
 3. Save the contract address to `deployment.json`
-4. Display the contract address
+4. **Automatically copy the ABI to `frontend/public/contract-abi.json`** (wrapped in `{abi: [...]}` format)
+5. Display the contract address
 
-**Important**: Note the contract address for configuration.
+**Important**: 
+- Note the contract address for configuration
+- The ABI is automatically copied to the frontend, so you don't need to manually copy it
 
 ### Step 4: Configure Environment Variables
 
