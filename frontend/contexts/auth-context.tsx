@@ -277,6 +277,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [state.token, account, isConnected, authenticate]);
 
+  /**
+   * Refetch queries when authentication state changes from false to true
+   * This ensures data loads automatically after successful authentication
+   */
+  useEffect(() => {
+    if (state.isAuthenticated && state.token) {
+      // Authentication just completed, invalidate and refetch all queries
+      // This triggers automatic data loading after account change + authentication
+      queryClient.invalidateQueries();
+    }
+  }, [state.isAuthenticated, state.token, queryClient]);
+
   const value: AuthContextType = {
     ...state,
     authenticate,
