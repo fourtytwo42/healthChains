@@ -478,72 +478,54 @@ class ConsentService {
         contract.queryFilter(accessApprovedFilter, fromBlock, toBlock)
       ]);
       
-      // Transform ConsentGranted events to consent records
-      const consentArrays = await Promise.all(
-        consentEvents.map(async (event) => {
-          const consentIds = event.args.consentIds || [];
-          // For each consent ID, fetch the record and check if provider matches
-          return Promise.all(
-            consentIds.map(async (consentIdBigInt) => {
-              const consentId = Number(consentIdBigInt);
-              try {
-                const record = await this.getConsentRecord(consentId);
-                // Check if this consent belongs to the provider
-                if (normalizeAddress(record.providerAddress) === normalizedAddress) {
-                  return record;
-                }
-                return null;
-              } catch (error) {
-                // Consent might have been revoked or doesn't exist
-                return null;
-              }
-            })
-          );
+      // Optimization: Collect all unique consentIds first to avoid redundant fetches
+      const consentIdSet = new Set();
+      
+      // Collect consentIds from ConsentGranted events
+      for (const event of consentEvents) {
+        const consentIds = event.args.consentIds || [];
+        for (const consentIdBigInt of consentIds) {
+          consentIdSet.add(Number(consentIdBigInt));
+        }
+      }
+      
+      // Collect consentIds from AccessApproved events
+      for (const event of accessApprovedEvents) {
+        const consentIds = event.args.consentIds || [];
+        for (const consentIdBigInt of consentIds) {
+          consentIdSet.add(Number(consentIdBigInt));
+        }
+      }
+      
+      // Batch fetch all consent records at once (getConsentRecord uses cache, so this is efficient)
+      const consentRecords = await Promise.all(
+        Array.from(consentIdSet).map(async (consentId) => {
+          try {
+            return await this.getConsentRecord(consentId);
+          } catch (error) {
+            // Consent might have been revoked or doesn't exist
+            return null;
+          }
         })
       );
       
-      // Transform AccessApproved events to consent records
-      // AccessApproved events contain consentIds when a request is approved
-      const accessApprovedArrays = await Promise.all(
-        accessApprovedEvents.map(async (event) => {
-          const consentIds = event.args.consentIds || [];
-          // For each consent ID, fetch the record and check if provider matches
-          return Promise.all(
-            consentIds.map(async (consentIdBigInt) => {
-              const consentId = Number(consentIdBigInt);
-              try {
-                const record = await this.getConsentRecord(consentId);
-                // Check if this consent belongs to the provider
-                if (normalizeAddress(record.providerAddress) === normalizedAddress) {
-                  return record;
-                }
-                return null;
-              } catch (error) {
-                // Consent might have been revoked or doesn't exist
-                return null;
-              }
-            })
-          );
-        })
-      );
-
-      // Flatten consents array (it's an array of arrays)
-      // Combine both ConsentGranted and AccessApproved consents
-      const allConsents = [...consentArrays.flat(), ...accessApprovedArrays.flat()];
-
-      // Filter out nulls and by expiration if needed
-      let filtered = allConsents.filter(c => c !== null);
+      // Filter by provider address and remove nulls
+      const providerConsents = consentRecords
+        .filter(record => record !== null)
+        .filter(record => normalizeAddress(record.providerAddress) === normalizedAddress);
       
-      // Remove duplicates (same consentId might appear in both if there's overlap)
+      // Remove duplicates (shouldn't happen with Set, but safety check)
       const uniqueConsents = [];
       const seenIds = new Set();
-      for (const consent of filtered) {
+      for (const consent of providerConsents) {
         if (!seenIds.has(consent.consentId)) {
           seenIds.add(consent.consentId);
           uniqueConsents.push(consent);
         }
       }
       
+      // Filter by expiration status
+      let filtered;
       if (!includeExpired) {
         filtered = uniqueConsents.filter(c => c.isActive && !c.isExpired);
       } else {
@@ -556,6 +538,9 @@ class ConsentService {
 
       return filtered;
     } catch (error) {
+      // Log the underlying error for debugging
+      console.error('Error in getProviderConsents:', error.message);
+      console.error('Stack:', error.stack);
       throw new ContractError(
         'Failed to fetch provider consents',
         'getProviderConsents',

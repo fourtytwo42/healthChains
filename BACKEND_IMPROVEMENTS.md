@@ -43,27 +43,16 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ---
 
-### 3. ❌ N+1 Query Problem in `getProviderConsents()`
+### 3. ✅ N+1 Query Problem in `getProviderConsents()` - **COMPLETED**
 
-**Problem**: Lines 433-454 in `consentService.js` - Fetches all events, then fetches each consent record individually.
+**Status**: ✅ **IMPLEMENTED** - Optimized to collect unique consentIds first, then batch fetch
+- Collects all unique consentIds from events into a Set
+- Batch fetches all consent records in parallel using Promise.all
+- Filters by provider address after fetching (reduces redundant contract calls)
+- Leverages existing cache in getConsentRecord for efficiency
+- Reduces redundant fetches of the same consentId
 
-**Current Flow**:
-1. Query all ConsentGranted events (1 call)
-2. For each event, get consentIds array
-3. For each consentId, fetch full record (N calls)
-4. Filter by provider address
-
-**Impact**: 100 consents = 100+ contract calls = very slow
-
-**Recommendation**: 
-- **Option A**: Use event data directly (if sufficient info in events)
-- **Option B**: Batch contract calls using multicall pattern
-- **Option C**: Cache consent records after first fetch
-- **Option D**: Build indexed database from events (best long-term)
-
-**Implementation Priority**: 🔴 **CRITICAL**
-
-**Estimated Effort**: 2-3 hours for caching, 1 week for indexed database
+**Implementation**: See `backend/services/consentService.js` lines 475-510
 
 ---
 
@@ -157,34 +146,15 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ## Scalability Issues (Medium Priority)
 
-### 10. ⚠️ No Pagination for Large Datasets
+### 10. ✅ No Pagination for Large Datasets - **COMPLETED**
 
-**Problem**: Some endpoints return all data without pagination.
+**Status**: ✅ **IMPLEMENTED** - Pagination added to `/api/patients` and `/api/providers`
+- Uses existing `paginateArray` helper function
+- Supports `page` and `limit` query parameters
+- Default pagination: page=1, limit=10
+- Returns pagination metadata (total, totalPages, etc.)
 
-**Examples**:
-- `/api/patients` - returns all patients
-- `/api/providers` - returns all providers
-- Event queries can return thousands of events
-
-**Impact**: 
-- Memory issues with large datasets
-- Slow responses
-- Network bandwidth waste
-
-**Recommendation**: Add pagination to all list endpoints
-
-```javascript
-// Already has paginateArray helper, but not used consistently
-app.get('/api/patients', (req, res) => {
-  const { page = 1, limit = 50 } = req.query;
-  const result = paginateArray(mockPatients.mockPatients.patients, page, limit);
-  res.json({ success: true, ...result });
-});
-```
-
-**Implementation Priority**: 🟡 **MEDIUM**
-
-**Estimated Effort**: 30 minutes
+**Implementation**: See `backend/server.js` lines 183-198 and 439-445
 
 ---
 
@@ -320,51 +290,27 @@ app.use(morgan('combined')); // or 'dev' for development
 
 ## Security & Reliability
 
-### 17. ⚠️ No Request Timeout Middleware
+### 17. ✅ No Request Timeout Middleware - **COMPLETED**
 
-**Problem**: Long-running requests can hang indefinitely.
+**Status**: ✅ **IMPLEMENTED** - Request timeout middleware added
+- 30 second timeout for all requests
+- Prevents resource exhaustion from hanging requests
+- Uses `connect-timeout` package
+- Gracefully handles timeout errors
 
-**Impact**: Resource exhaustion
-
-**Recommendation**: Add timeout middleware
-
-```javascript
-const timeout = require('connect-timeout');
-app.use(timeout('30s'));
-app.use((req, res, next) => {
-  if (!req.timedout) next();
-});
-```
-
-**Implementation Priority**: 🟡 **MEDIUM**
-
-**Estimated Effort**: 10 minutes
+**Implementation**: See `backend/server.js` lines 121-126
 
 ---
 
-### 18. ⚠️ No Health Check for RPC Connection
+### 18. ✅ No Health Check for RPC Connection - **COMPLETED**
 
-**Problem**: No periodic health checks of blockchain connection.
+**Status**: ✅ **IMPLEMENTED** - Periodic RPC health checks with auto-reconnection
+- Checks RPC connection health every 60 seconds
+- Automatically attempts to reconnect if connection fails
+- Uses existing `web3Service.isConnected()` method
+- Cleans up interval on process exit (SIGTERM/SIGINT)
 
-**Impact**: Failures only detected on request
-
-**Recommendation**: Add periodic health checks with automatic reconnection
-
-```javascript
-// Periodic health check
-setInterval(async () => {
-  try {
-    await web3Service.isConnected();
-  } catch (error) {
-    console.error('RPC health check failed, reconnecting...');
-    await web3Service.initialize();
-  }
-}, 60000); // Every minute
-```
-
-**Implementation Priority**: 🟡 **MEDIUM**
-
-**Estimated Effort**: 30 minutes
+**Implementation**: See `backend/server.js` lines 1010-1027
 
 ---
 

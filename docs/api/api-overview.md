@@ -154,6 +154,10 @@ Get all patients (providers only). Returns basic patient information only (demog
 
 **Authentication**: Required (provider role)
 
+**Query Parameters**:
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 10)
+
 **Response**:
 ```json
 {
@@ -228,7 +232,13 @@ Get all providers (providers only).
       "organizationName": "...",
       "providerType": "..."
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 100,
+    "totalPages": 10
+  }
 }
 ```
 

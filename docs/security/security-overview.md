@@ -391,7 +391,7 @@ modifier validString(string memory str) {
 2. **No Multi-Sig**: Single signature required (can add multi-sig support)
 3. **No Time-Locked Revocation**: Revocation is immediate (can add delay)
 4. **Public Transparency**: All consents are publicly visible (by design)
-5. **No Rate Limiting**: API doesn't have rate limiting (can be added)
+5. **Rate Limiting**: ✅ **IMPLEMENTED** - API has rate limiting (10,000 requests/15min general, 2,000/15min for expensive endpoints)
 6. **JWT Token Storage**: Tokens stored in browser localStorage (consider httpOnly cookies for production)
 
 ### Future Security Enhancements

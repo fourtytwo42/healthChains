@@ -129,6 +129,11 @@ This document covers scalability considerations, limitations, and strategies for
 
 **Scalability Improvements**:
 - ✅ Backend caching (Redis) - **IMPLEMENTED**
+- ✅ O(1) Map lookups - **IMPLEMENTED** - Patient/provider lookups use Map instead of array searches
+- ✅ Pagination support - **IMPLEMENTED** - `/api/patients` and `/api/providers` support pagination
+- ✅ Optimized consent queries - **IMPLEMENTED** - `getProviderConsents()` optimized to reduce redundant contract calls
+- ✅ Request timeout middleware - **IMPLEMENTED** - Prevents resource exhaustion from hanging requests
+- ✅ RPC health checks - **IMPLEMENTED** - Automatic reconnection if blockchain connection fails
 - CDN for static assets (can be added)
 - Browser caching (automatic)
 
@@ -266,7 +271,8 @@ This document covers scalability considerations, limitations, and strategies for
 
 ### Phase 4: Advanced Optimization
 
-- [ ] Pagination on all endpoints
+- ✅ Pagination on list endpoints - **IMPLEMENTED** (`/api/patients`, `/api/providers`)
+- [ ] Pagination on all endpoints (event queries, etc.)
 - [ ] GraphQL API (optional)
 - [ ] CDN integration
 - [ ] Load balancing

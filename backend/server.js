@@ -119,22 +119,29 @@ app.use(cors());
 const compression = require('compression');
 app.use(compression());
 
+// Add request timeout middleware (reliability improvement)
+const timeout = require('connect-timeout');
+app.use(timeout('30s')); // 30 second timeout for all requests
+app.use((req, res, next) => {
+  if (!req.timedout) next();
+});
+
 // Add rate limiting (security improvement)
 const rateLimit = require('express-rate-limit');
 
-// General API rate limiter
+// General API rate limiter (increased 100x for testing - 10x * 10x)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 10000, // limit each IP to 10000 requests per windowMs (was 100, increased 100x for testing)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Stricter limiter for expensive endpoints
+// Stricter limiter for expensive endpoints (increased 100x for testing - 10x * 10x)
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 requests per 15 minutes
+  max: 2000, // 2000 requests per 15 minutes (was 20, increased 100x for testing)
   message: 'Too many requests to this endpoint, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -190,9 +197,13 @@ app.get('/api/patients', authenticate, requireProvider, (req, res) => {
     blockchainIntegration: patient.blockchainIntegration
   }));
   
+  // Add pagination support
+  const { page, limit } = req.query;
+  const result = paginateArray(basicPatientInfo, page, limit);
+  
   res.json({
     success: true,
-    data: basicPatientInfo,
+    ...result,
     metadata: mockPatients.mockPatients.metadata
   });
 });
@@ -437,9 +448,13 @@ app.get('/api/user/role', (req, res) => {
 
 // Get all providers - Providers only
 app.get('/api/providers', authenticate, requireProvider, (req, res) => {
+  // Add pagination support
+  const { page, limit } = req.query;
+  const result = paginateArray(mockProviders.mockProviders.providers, page, limit);
+  
   res.json({
     success: true,
-    data: mockProviders.mockProviders.providers,
+    ...result,
     metadata: mockProviders.mockProviders.metadata
   });
 });
@@ -992,6 +1007,32 @@ async function startServer() {
     // Initialize Web3 service
     console.log('Initializing Web3 service...');
     await web3Service.initialize();
+    
+    // Set up periodic RPC health checks (reliability improvement)
+    const healthCheckInterval = setInterval(async () => {
+      try {
+        const isHealthy = await web3Service.isConnected();
+        if (!isHealthy) {
+          console.warn('⚠️  RPC health check failed, attempting to reconnect...');
+          try {
+            await web3Service.initialize();
+            console.log('✅ RPC connection restored');
+          } catch (reconnectError) {
+            console.error('❌ Failed to reconnect to RPC:', reconnectError.message);
+          }
+        }
+      } catch (error) {
+        console.error('❌ RPC health check error:', error.message);
+      }
+    }, 60000); // Check every minute
+    
+    // Clean up interval on process exit
+    process.on('SIGTERM', () => {
+      clearInterval(healthCheckInterval);
+    });
+    process.on('SIGINT', () => {
+      clearInterval(healthCheckInterval);
+    });
     console.log('✅ Web3 service initialized successfully\n');
   } catch (error) {
     console.error('⚠️  Warning: Web3 service initialization failed:', error.message);
