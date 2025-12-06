@@ -1002,29 +1002,23 @@ class ConsentService {
       let fromBlockArg = fromBlock !== null && fromBlock !== undefined ? fromBlock : undefined;
       let toBlockArg = toBlock !== null && toBlock !== undefined ? toBlock : undefined;
       
-      // If PostgreSQL is enabled and no explicit block range is provided, use incremental querying
-      if (usePostgres && fromBlock === null && toBlock === null) {
-        // Get last processed block from PostgreSQL
-        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
-        
-        // Only query new events from blockchain (from last processed block + 1)
-        if (lastProcessedBlock > 0) {
-          fromBlockArg = lastProcessedBlock + 1;
-        } else {
-          // First time indexing - query from deployment block (0)
-          fromBlockArg = 0;
-        }
+      // Note: PostgreSQL is used for tracking last processed block, but we still need to query
+      // all events from blockchain for history. The block tracking is useful for background
+      // indexing jobs, but for API requests we need full history.
+      // If an explicit block range is provided, use it. Otherwise query from block 0.
+      if (fromBlockArg === undefined) {
+        fromBlockArg = 0;
+      }
+      if (toBlockArg === undefined) {
         toBlockArg = 'latest';
-        
-        console.log(`📊 Using PostgreSQL event index. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg}`);
-      } else if (!usePostgres) {
-        // PostgreSQL not enabled - use current behavior (query from block 0 if not specified)
-        if (fromBlockArg === undefined) {
-          fromBlockArg = 0;
-        }
-        if (toBlockArg === undefined) {
-          toBlockArg = 'latest';
-        }
+      }
+      
+      // If PostgreSQL is enabled, we can optionally optimize by only querying new events
+      // but for now, we'll query all events to ensure history is complete
+      // TODO: In the future, we can store events in PostgreSQL and query from there
+      if (usePostgres) {
+        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
+        console.log(`📊 PostgreSQL event index active. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg} to ${toBlockArg}`);
       }
       
       // Build filter
@@ -1042,8 +1036,8 @@ class ConsentService {
       let grantedEvents = [];
       let revokedEvents = [];
       
-      // Only query blockchain if we need new events (PostgreSQL enabled) or if PostgreSQL is disabled
-      if (!usePostgres || (fromBlockArg !== undefined && fromBlockArg >= 0)) {
+      // Query blockchain for events (always query all events for history, PostgreSQL is just for tracking)
+      if (fromBlockArg !== undefined && fromBlockArg >= 0) {
         try {
           grantedEvents = await contract.queryFilter(
             grantedFilter,
@@ -1275,29 +1269,23 @@ class ConsentService {
       let fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
       let toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
       
-      // If PostgreSQL is enabled and no explicit block range is provided, use incremental querying
-      if (usePostgres && fromBlock === null && toBlock === null) {
-        // Get last processed block from PostgreSQL (use AccessRequested as the event type)
-        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
-        
-        // Only query new events from blockchain (from last processed block + 1)
-        if (lastProcessedBlock > 0) {
-          fromBlockArg = lastProcessedBlock + 1;
-        } else {
-          // First time indexing - query from deployment block (0)
-          fromBlockArg = 0;
-        }
+      // Note: PostgreSQL is used for tracking last processed block, but we still need to query
+      // all events from blockchain for history. The block tracking is useful for background
+      // indexing jobs, but for API requests we need full history.
+      // If an explicit block range is provided, use it. Otherwise query from block 0.
+      if (fromBlockArg === undefined) {
+        fromBlockArg = 0;
+      }
+      if (toBlockArg === undefined) {
         toBlockArg = 'latest';
-        
-        console.log(`📊 Using PostgreSQL event index for access requests. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg}`);
-      } else if (!usePostgres) {
-        // PostgreSQL not enabled - use current behavior (query from block 0 if not specified)
-        if (fromBlockArg === undefined) {
-          fromBlockArg = 0;
-        }
-        if (toBlockArg === undefined) {
-          toBlockArg = 'latest';
-        }
+      }
+      
+      // If PostgreSQL is enabled, we can optionally optimize by only querying new events
+      // but for now, we'll query all events to ensure history is complete
+      // TODO: In the future, we can store events in PostgreSQL and query from there
+      if (usePostgres) {
+        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
+        console.log(`📊 PostgreSQL event index active for access requests. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg} to ${toBlockArg}`);
       }
       
       // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
@@ -1310,8 +1298,8 @@ class ConsentService {
       let approvedEvents = [];
       let deniedEvents = [];
       
-      // Only query blockchain if we need new events (PostgreSQL enabled) or if PostgreSQL is disabled
-      if (!usePostgres || (fromBlockArg !== undefined && fromBlockArg >= 0)) {
+      // Query blockchain for events (always query all events for history, PostgreSQL is just for tracking)
+      if (fromBlockArg !== undefined) {
         try {
           requestedEvents = await contract.queryFilter(
             requestedFilter,
