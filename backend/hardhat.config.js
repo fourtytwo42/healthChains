@@ -16,6 +16,8 @@ module.exports = {
   networks: {
     hardhat: {
       chainId: 1337,
+      // Listen on all interfaces (0.0.0.0) to allow external connections
+      hostname: "0.0.0.0",
     },
     localhost: {
       url: "http://127.0.0.1:8545",

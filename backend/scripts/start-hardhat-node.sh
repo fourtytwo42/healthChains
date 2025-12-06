@@ -20,8 +20,8 @@ if [ -f "$HARDHAT_NODE_PID_FILE" ]; then
     fi
 fi
 
-echo "Starting Hardhat node..."
-npx hardhat node > "$HARDHAT_NODE_LOG" 2>&1 &
+echo "Starting Hardhat node on all interfaces (0.0.0.0)..."
+npx hardhat node --hostname 0.0.0.0 > "$HARDHAT_NODE_LOG" 2>&1 &
 HARDHAT_PID=$!
 
 # Save PID
