@@ -542,6 +542,127 @@ class ApiClient {
   // Note: Write operations (grant, revoke, approve, deny) are now handled
   // directly via MetaMask contract calls in the frontend. See hooks/use-api.ts
   // for mutation hooks that use direct contract interaction.
+
+  /**
+   * Stream chat message to Groq AI
+   * 
+   * @param message - User's message
+   * @param conversationHistory - Previous messages in conversation
+   * @param onChunk - Callback function called for each chunk of the response
+   * @returns Promise that resolves when stream completes
+   */
+  async streamChatMessage(
+    message: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [],
+    onChunk: (chunk: string) => void
+  ): Promise<void> {
+    const token = getToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const url = `${API_BASE_URL}/api/chat/message`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        message,
+        conversationHistory,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(errorData.error?.message || `Chat API error: ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    // Parse Server-Sent Events (SSE) stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let hasReceivedData = false;
+    let chunkCount = 0;
+    let rawDataReceived = '';
+
+    console.log('Starting to read SSE stream...');
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          console.log(`Stream ended. Received data: ${hasReceivedData}, Chunks processed: ${chunkCount}, Buffer length: ${buffer.length}`);
+          if (!hasReceivedData) {
+            console.warn('Stream ended without receiving any data chunks');
+          }
+          if (rawDataReceived) {
+            console.log('Raw data received (first 500 chars):', rawDataReceived.substring(0, 500));
+          }
+          break;
+        }
+
+        hasReceivedData = true;
+        const decoded = decoder.decode(value, { stream: true });
+        rawDataReceived += decoded;
+        buffer += decoded;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        console.log(`Decoded ${decoded.length} bytes, ${lines.length} lines, buffer: ${buffer.length} chars`);
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          
+          console.log(`Processing line: "${line.substring(0, 100)}"`);
+          
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim(); // Remove 'data: ' prefix and trim
+            
+            if (data === '[DONE]') {
+              console.log('Received [DONE] marker, stream complete');
+              return;
+            }
+
+            try {
+              const json = JSON.parse(data);
+              console.log('Parsed JSON:', json);
+              if (json.content) {
+                chunkCount++;
+                console.log(`Received chunk ${chunkCount}: "${json.content.substring(0, 50)}"`);
+                onChunk(json.content);
+              } else if (json.error) {
+                console.error('Chat API error:', json.error);
+                throw new Error(json.error);
+              } else {
+                // Log unexpected format for debugging
+                console.warn('Unexpected chat response format:', json);
+              }
+            } catch (parseError) {
+              // Ignore parse errors for malformed JSON (might be partial data)
+              if (data !== '[DONE]') {
+                console.warn('Failed to parse SSE data:', data.substring(0, 200), parseError);
+              }
+            }
+          } else if (line.trim() !== '') {
+            // Log non-data lines for debugging (but ignore empty lines)
+            console.log('Non-data SSE line:', line.substring(0, 100));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reading chat stream:', error);
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+  }
 }
 
 export const apiClient = new ApiClient();

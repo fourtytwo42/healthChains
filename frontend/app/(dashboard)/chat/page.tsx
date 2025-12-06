@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@/contexts/wallet-context';
 import { useRole } from '@/hooks/use-role';
-import { useProviders, usePatients } from '@/hooks/use-api';
+import { useProviders, usePatients, useChatMessage } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Trash2, Send } from 'lucide-react';
@@ -33,6 +33,8 @@ export default function ChatPage() {
   const [imageErrors, setImageErrors] = useState<{ fred: boolean; user: boolean }>({ fred: false, user: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const chatMutation = useChatMessage();
+  const currentAiMessageRef = useRef<string>('');
 
   // Get user display name
   const getUserDisplayName = () => {
@@ -65,10 +67,20 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Focus input on mount
+  // Focus input on mount and after AI responses
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Keep focus on input after loading completes
+  useEffect(() => {
+    if (!isLoading && inputRef.current) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [isLoading]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -81,20 +93,65 @@ export default function ChatPage() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const userInput = input.trim();
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response (mock)
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `This is a mock response to: "${userMessage.content}". The chat functionality is currently in development and will be connected to the backend soon.`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
+    // Create AI message placeholder with unique ID
+    const aiMessageId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const aiMessage: Message = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, aiMessage]);
+    currentAiMessageRef.current = '';
+
+    // Build conversation history
+    const conversationHistory = messages.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    }));
+
+    try {
+      await chatMutation.mutateAsync({
+        message: userInput,
+        conversationHistory,
+        onChunk: (chunk: string) => {
+          // Update ref first
+          currentAiMessageRef.current += chunk;
+          // Capture the current content value to avoid closure issues
+          const currentContent = currentAiMessageRef.current;
+          // Update state with the captured value
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, content: currentContent }
+                : msg
+            )
+          );
+        },
+      });
+    } catch (error) {
+      console.error('Chat mutation error:', error);
+      // Update AI message with error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMessageId
+            ? { ...msg, content: 'Sorry, I encountered an error. Please try again.' }
+            : msg
+        )
+      );
+    } finally {
       setIsLoading(false);
-    }, 1000);
+      // Don't clear the ref here - it might still be needed for the final render
+      // The ref will be reset on the next message
+      // Focus input after response completes so user can continue typing
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
   };
 
   const handleClearChat = () => {
@@ -228,42 +285,6 @@ export default function ChatPage() {
               )}
             </div>
           ))
-        )}
-        
-        {isLoading && (
-          <div className="flex gap-3 justify-start">
-            <div className="flex-shrink-0">
-              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted">
-                {!imageErrors.fred ? (
-                  <Image
-                    src="/avatars/fred-avatar.png"
-                    alt="Fred AI"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                    onError={() => {
-                      setImageErrors(prev => ({ ...prev, fred: true }));
-                    }}
-                  />
-                ) : null}
-                {imageErrors.fred && (
-                  <div className="absolute inset-0 bg-primary/20 flex items-center justify-center text-primary font-semibold">
-                    F
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col items-start">
-              <div className="text-xs text-muted-foreground mb-1 px-2">Fred</div>
-              <div className="bg-muted rounded-lg px-4 py-2">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          </div>
         )}
         
         <div ref={messagesEndRef} />

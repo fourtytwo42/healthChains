@@ -24,6 +24,8 @@ module.exports = {
         POSTGRES_DATABASE: process.env.POSTGRES_DATABASE,
         POSTGRES_USER: process.env.POSTGRES_USER,
         POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD,
+        GROQ_API_KEY: process.env.GROQ_API_KEY,
+        GROQ_MODEL: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
       },
       error_file: './logs/backend-error.log',
       out_file: './logs/backend-out.log',

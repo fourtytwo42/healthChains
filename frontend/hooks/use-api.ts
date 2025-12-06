@@ -1270,3 +1270,32 @@ export function usePatientConsentHistory(
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 }
+
+/**
+ * Chat message mutation hook
+ * Handles streaming chat messages with Groq AI
+ */
+export function useChatMessage() {
+  return useMutation({
+    mutationFn: async ({
+      message,
+      conversationHistory,
+      onChunk,
+    }: {
+      message: string;
+      conversationHistory?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+      onChunk: (chunk: string) => void;
+    }) => {
+      try {
+        await apiClient.streamChatMessage(message, conversationHistory || [], onChunk);
+      } catch (error) {
+        logger.error('Chat message error', { error });
+        throw error;
+      }
+    },
+    onError: (error: Error) => {
+      logger.error('Chat mutation error', { error });
+      handleError(error);
+    },
+  });
+}

@@ -103,6 +103,15 @@ mockProviders.mockProviders.providers.forEach(provider => {
 
 logger.info(`Created lookup maps: ${patientById.size} patients, ${providerById.size} providers`);
 
+// Make lookup maps available to routes via app.locals
+// Note: app is created later, so we'll set this after app initialization
+const setupAppLocals = (app) => {
+  app.locals.patientById = patientById;
+  app.locals.patientByAddress = patientByAddress;
+  app.locals.providerById = providerById;
+  app.locals.providerByAddress = providerByAddress;
+};
+
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
 const consentService = require('./services/consentService');
@@ -118,6 +127,9 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const { getApiBaseUrl } = require('./utils/env-config');
+
+// Setup app.locals with lookup maps
+setupAppLocals(app);
 
 // Middleware
 // Configure CORS to allow requests from both localhost and production domain
@@ -1015,6 +1027,10 @@ app.get('/api/contract/info', async (req, res, next) => {
 
 // Authentication routes (public)
 app.use('/api/auth', authRouter);
+
+// Chat routes (AI chat with Groq)
+const chatRouter = require('./routes/chatRoutes');
+app.use('/api/chat', chatRouter);
 
 // Consent management routes (Web3 integration)
 // Protect routes that require authentication
