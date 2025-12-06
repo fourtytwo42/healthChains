@@ -116,6 +116,14 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 
+// Add request/response logging (improvement #16 - quick win)
+if (process.env.NODE_ENV !== 'test') {
+  const morgan = require('morgan');
+  // Use 'combined' format for production, 'dev' for development
+  const logFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+  app.use(morgan(logFormat));
+}
+
 // Add compression middleware (performance improvement)
 const compression = require('compression');
 app.use(compression());
