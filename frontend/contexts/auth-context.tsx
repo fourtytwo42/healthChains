@@ -117,13 +117,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Set both state and ref immediately to prevent race conditions
+    // CRITICAL: Set ref FIRST (atomically) to prevent any other calls from proceeding
+    // Double-check one more time right before setting (defense in depth against race conditions)
+    if (isAuthenticatingRef.current) {
+      console.log('[AuthContext] Ref check failed - already authenticating, aborting');
+      return;
+    }
+    
+    // Set ref immediately (atomic operation) - this prevents ALL other calls
     isAuthenticatingRef.current = true;
-    setState((prev) => ({
-      ...prev,
-      isAuthenticating: true,
-      error: null,
-    }));
+    
+    // Update state (only if not already set to avoid unnecessary re-renders)
+    if (!state.isAuthenticating) {
+      setState((prev) => ({
+        ...prev,
+        isAuthenticating: true,
+        error: null,
+      }));
+    }
 
     try {
       // Step 1: Get message to sign
