@@ -161,26 +161,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[AuthContext] authenticate() - Message to sign:', message.substring(0, 50) + '...');
       console.log('[AuthContext] authenticate() - About to call signer.signMessage() - this should only happen ONCE');
       
-      // Store a flag that we're about to sign (to prevent duplicate calls)
-      // This is a final defense against race conditions
-      // Use account + message hash to create unique key for identification
-      const messageHash = message.substring(0, 20); // Use first 20 chars of message as part of key
+      // MULTIPLE LAYERS OF PROTECTION against duplicate signature requests:
+      // 1. Check ref first (in-memory, fastest check)
+      if (isWaitingForSignatureRef.current) {
+        console.log('[AuthContext] authenticate() - BLOCKED: Already waiting for signature (ref check)');
+        isAuthenticatingRef.current = false;
+        return;
+      }
+      
+      // 2. Check sessionStorage (persists across page reloads)
+      const messageHash = message.substring(0, 20);
       const signingKey = `signing_${account.toLowerCase()}_${messageHash}`;
       const existingSigning = sessionStorage.getItem('auth_signing');
       console.log('[AuthContext] authenticate() - Checking sessionStorage for existing signing:', existingSigning);
       console.log('[AuthContext] authenticate() - New signing key:', signingKey);
       
-      // Block if ANY signing is in progress (not just different keys)
-      // This prevents race conditions where two calls happen simultaneously
       if (existingSigning) {
-        console.log('[AuthContext] authenticate() - BLOCKED: Another signature request is in progress!');
+        console.log('[AuthContext] authenticate() - BLOCKED: Another signature request is in progress (sessionStorage)!');
         console.log('[AuthContext] authenticate() - Existing key:', existingSigning);
         isAuthenticatingRef.current = false;
         return;
       }
       
-      console.log('[AuthContext] authenticate() - No existing signing, setting sessionStorage flag before signing');
-      sessionStorage.setItem('auth_signing', signingKey);
+      // 3. Set BOTH flags before signing (atomic operation)
+      console.log('[AuthContext] authenticate() - No existing signing, setting BOTH flags before signing');
+      isWaitingForSignatureRef.current = true; // Set ref immediately (in-memory)
+      sessionStorage.setItem('auth_signing', signingKey); // Set sessionStorage (persistent)
       
       try {
         console.log('[AuthContext] authenticate() - CALLING signer.signMessage() NOW - this is the ONLY call');
