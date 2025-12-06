@@ -12,6 +12,7 @@ import { ProviderInfoSection } from '@/components/shared/provider-info-section';
 import { apiClient } from '@/lib/api-client';
 import { useState, useEffect } from 'react';
 import type { ConsentHistoryEvent } from '@/types/consent';
+import { toast } from 'sonner';
 
 interface ConsentHistoryEventCardProps {
   event: ConsentHistoryEvent;
@@ -96,6 +97,31 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
     ? `${event.patientInfo.address.street || ''}, ${event.patientInfo.address.city || ''}, ${event.patientInfo.address.state || ''} ${event.patientInfo.address.zipCode || ''}`
     : 'N/A';
 
+  // Format provider information for display (matching consolidated format)
+  const providerName = providerInfo?.organizationName || 'Unknown Provider';
+  const providerType = providerInfo?.providerType 
+    ? providerInfo.providerType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+    : null;
+  const providerAddressFormatted = providerInfo?.address
+    ? `${providerInfo.address.street || ''}, ${providerInfo.address.city || ''}, ${providerInfo.address.state || ''} ${providerInfo.address.zipCode || ''}`
+    : 'N/A';
+  
+  // Google Maps URL for provider address
+  const googleMapsUrl = providerAddressFormatted !== 'N/A' 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerAddressFormatted)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
@@ -142,6 +168,92 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
               </div>
             </div>
           )}
+
+          {/* Provider Info - Consolidated format matching patient info format */}
+          {userRole === 'patient' && event.provider && providerInfo && (
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-semibold text-base mb-1">{providerName}</p>
+                {providerType && (
+                  <p className="text-muted-foreground text-xs capitalize">
+                    {providerType}
+                  </p>
+                )}
+                {providerInfo.specialties && providerInfo.specialties.length > 0 && (
+                  <div className="mt-1">
+                    <ColoredBadgeList
+                      type="specialty"
+                      values={providerInfo.specialties}
+                      maxDisplay={3}
+                      size="sm"
+                    />
+                  </div>
+                )}
+                {event.provider && (
+                  <p className="text-muted-foreground text-xs font-mono mt-1">
+                    <strong>Wallet:</strong>{' '}
+                    <button
+                      onClick={() => handleCopyWalletAddress(event.provider || '')}
+                      className="text-primary hover:underline cursor-pointer break-all text-left"
+                      title="Click to copy full wallet address"
+                    >
+                      {event.provider}
+                    </button>
+                  </p>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {providerInfo.contact?.phone && (
+                  <p>
+                    <strong>Phone:</strong>{' '}
+                    <a 
+                      href={`tel:${providerInfo.contact.phone}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.phone}
+                    </a>
+                  </p>
+                )}
+                {providerInfo.contact?.email && (
+                  <p>
+                    <strong>Email:</strong>{' '}
+                    <a 
+                      href={`mailto:${providerInfo.contact.email}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.email}
+                    </a>
+                  </p>
+                )}
+                {providerInfo.contact?.website && (
+                  <p>
+                    <strong>Website:</strong>{' '}
+                    <a 
+                      href={providerInfo.contact.website.startsWith('http') ? providerInfo.contact.website : `https://${providerInfo.contact.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.website}
+                    </a>
+                  </p>
+                )}
+                {providerAddressFormatted !== 'N/A' && googleMapsUrl && (
+                  <p>
+                    <strong>Address:</strong>{' '}
+                    <a 
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerAddressFormatted}
+                    </a>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
@@ -181,25 +293,6 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
             </CardContent>
           </Card>
 
-          {/* Provider Information (for patient role) */}
-          {userRole === 'patient' && event.provider ? (
-            <Card className="py-6">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-1.5">
-                  <Building2 className="h-4 w-4" />
-                  Provider Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ProviderInfoSection
-                  providerInfo={providerInfo}
-                  providerAddress={event.provider}
-                  loading={loadingProvider}
-                  showAddress={false}
-                />
-              </CardContent>
-            </Card>
-          ) : null}
 
           {/* Consent/Request Details */}
           {(event.consentId !== undefined || event.requestId !== undefined || event.dataType || event.purpose) && (
