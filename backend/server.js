@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+// Import logger first (used throughout)
+const logger = require('./utils/logger');
+
 // Auto-load mockup data when server starts
 const mockPatients = require('./data/mockup-patients');
 const mockProviders = require('./data/mockup-providers');
@@ -96,7 +99,7 @@ mockProviders.mockProviders.providers.forEach(provider => {
   }
 });
 
-console.log(`✅ Created lookup maps: ${patientById.size} patients, ${providerById.size} providers`);
+logger.info(`Created lookup maps: ${patientById.size} patients, ${providerById.size} providers`);
 
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
@@ -172,14 +175,14 @@ app.use('/api/events/', strictLimiter);
 app.use(express.json({ limit: '1mb' })); // Reduced from 10mb for security
 
 // Log loaded data on startup
-console.log('='.repeat(60));
-console.log('Healthcare Blockchain Backend Server Starting...');
-console.log('='.repeat(60));
-console.log(`Loaded ${mockPatients.mockPatients.patients.length} mock patients`);
-console.log(`Loaded ${mockProviders.mockProviders.providers.length} mock providers`);
-console.log(`Available data types: ${mockPatients.dataTypes.join(', ')}`);
-console.log(`Available purposes: ${mockPatients.purposes.join(', ')}`);
-console.log('='.repeat(60));
+logger.info('='.repeat(60));
+logger.info('Healthcare Blockchain Backend Server Starting...');
+logger.info('='.repeat(60));
+logger.info(`Loaded ${mockPatients.mockPatients.patients.length} mock patients`);
+logger.info(`Loaded ${mockProviders.mockProviders.providers.length} mock providers`);
+logger.info(`Available data types: ${mockPatients.dataTypes.join(', ')}`);
+logger.info(`Available purposes: ${mockPatients.purposes.join(', ')}`);
+logger.info('='.repeat(60));
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -861,7 +864,7 @@ app.get('/api/patient/:patientAddress/pending-requests', authenticate, verifyOwn
       requests = await consentService.getPatientRequests(patientAddress, 'pending');
     } catch (contractError) {
       // Fallback: Query events to reconstruct pending requests
-      console.warn('Contract getPatientRequests failed, using event-based fallback:', contractError.message);
+      logger.warn('Contract getPatientRequests failed, using event-based fallback', { error: contractError.message });
       
       try {
         // Get all access request events for this patient
@@ -896,7 +899,7 @@ app.get('/api/patient/:patientAddress/pending-requests', authenticate, verifyOwn
         // Filter out nulls
         requests = requests.filter(r => r !== null);
       } catch (eventError) {
-        console.error('Event-based fallback also failed:', eventError.message);
+        logger.error('Event-based fallback also failed', { error: eventError.message, stack: eventError.stack });
         // Return empty array if both methods fail
         requests = [];
       }
@@ -948,11 +951,11 @@ app.get('/api/contract/info', async (req, res, next) => {
       } catch (readError) {
         // File doesn't exist or can't be read - that's okay
         if (readError.code !== 'ENOENT') {
-          console.warn('Warning: Could not read deployment.json:', readError.message);
+          logger.warn('Warning: Could not read deployment.json', { error: readError.message });
         }
       }
     } catch (error) {
-      console.error('Error reading deployment info:', error.message);
+      logger.error('Error reading deployment info', { error: error.message, stack: error.stack });
     }
 
     // Get network info from Web3 service if initialized
@@ -963,7 +966,7 @@ app.get('/api/contract/info', async (req, res, next) => {
       }
     } catch (error) {
       // Web3 service not initialized or connection failed
-      console.warn('Web3 service not available:', error.message);
+      logger.warn('Web3 service not available', { error: error.message });
     }
 
     res.json({
@@ -1004,31 +1007,31 @@ app.use(errorHandler);
 async function startServer() {
   try {
     // Initialize cache service
-    console.log('Initializing cache service...');
+    logger.info('Initializing cache service...');
     await cacheService.initialize();
-    console.log('✅ Cache service initialized successfully\n');
+    logger.info('Cache service initialized successfully');
   } catch (error) {
-    console.error('⚠️  Warning: Cache service initialization failed:', error.message);
-    console.error('   Continuing without cache. Some endpoints may be slower.\n');
+    logger.warn('Warning: Cache service initialization failed', { error: error.message });
+    logger.warn('Continuing without cache. Some endpoints may be slower.');
   }
 
   try {
     // Initialize event indexer (PostgreSQL)
-    console.log('Initializing event indexer...');
+    logger.info('Initializing event indexer...');
     await eventIndexer.initialize();
     if (eventIndexer.isEventIndexingEnabled()) {
-      console.log('✅ Event indexer initialized successfully (PostgreSQL enabled)\n');
+      logger.info('Event indexer initialized successfully (PostgreSQL enabled)');
     } else {
-      console.log('📊 Event indexer disabled (PostgreSQL not enabled or unavailable)\n');
+      logger.info('Event indexer disabled (PostgreSQL not enabled or unavailable)');
     }
   } catch (error) {
-    console.error('⚠️  Warning: Event indexer initialization failed:', error.message);
-    console.error('   Continuing without event indexing. Event queries will use direct blockchain queries.\n');
+    logger.warn('Warning: Event indexer initialization failed', { error: error.message });
+    logger.warn('Continuing without event indexing. Event queries will use direct blockchain queries.');
   }
 
   try {
     // Initialize Web3 service
-    console.log('Initializing Web3 service...');
+    logger.info('Initializing Web3 service...');
     await web3Service.initialize();
     
     // Set up periodic RPC health checks (reliability improvement)
@@ -1056,42 +1059,23 @@ async function startServer() {
     process.on('SIGINT', () => {
       clearInterval(healthCheckInterval);
     });
-    console.log('✅ Web3 service initialized successfully\n');
+    logger.info('Web3 service initialized successfully');
   } catch (error) {
-    console.error('⚠️  Warning: Web3 service initialization failed:', error.message);
-    console.error('   Some endpoints may not be available. Ensure contract is deployed.\n');
+    logger.warn('Warning: Web3 service initialization failed', { error: error.message });
+    logger.warn('Some endpoints may not be available. Ensure contract is deployed.');
   }
 
   // Start server
   app.listen(PORT, () => {
-    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
-    console.log(`\nAvailable endpoints:`);
-    console.log(`  GET /health - Health check`);
-    console.log(`  GET /api/patients - Get all patients`);
-    console.log(`  GET /api/patients/:patientId - Get patient by ID`);
-    console.log(`  GET /api/patients/:patientId/data/:dataType - Get patient data by type`);
-    console.log(`  GET /api/providers - Get all providers`);
-    console.log(`  GET /api/providers/:providerId - Get provider by ID`);
-    console.log(`  GET /api/data-types - Get available data types`);
-    console.log(`  GET /api/purposes - Get available purposes`);
-    console.log(`  GET /api/contract/info - Get contract deployment info`);
-    console.log(`\n📋 Consent Management Endpoints (Web3):`);
-    console.log(`  GET /api/consent/status - Check consent status`);
-    console.log(`  GET /api/consent/:consentId - Get consent record`);
-    console.log(`  GET /api/consent/patient/:patientAddress - Get patient consents`);
-    console.log(`  GET /api/consent/provider/:providerAddress - Get provider consents`);
-    console.log(`  GET /api/requests/:requestId - Get access request`);
-    console.log(`  GET /api/requests/patient/:patientAddress - Get patient requests`);
-    console.log(`  GET /api/events/consent - Query consent events`);
-    console.log(`  GET /api/events/requests - Query access request events`);
-    console.log(`\n`);
+    logger.info(`Server running on http://localhost:${PORT}`);
+    logger.info(`API endpoints available at http://localhost:${PORT}/api`);
+    logger.debug('Available endpoints: /health, /api/patients, /api/providers, /api/consent/*, /api/requests/*, /api/events/*');
   });
 }
 
 // Start server with Web3 initialization
 startServer().catch(error => {
-  console.error('Failed to start server:', error);
+  logger.error('Failed to start server', { error: error.message, stack: error.stack });
   process.exit(1);
 });
 

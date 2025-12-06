@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const { normalizeAddress } = require('../utils/addressUtils');
+const logger = require('../utils/logger');
 
 /**
  * Event Indexer Service
@@ -28,7 +29,7 @@ class EventIndexer {
   async initialize() {
     // Check if PostgreSQL is enabled via environment variable
     if (process.env.POSTGRES_ENABLED !== 'true') {
-      console.log('📊 PostgreSQL event indexing is disabled (POSTGRES_ENABLED != true)');
+      logger.info('PostgreSQL event indexing is disabled (POSTGRES_ENABLED != true)');
       return false;
     }
 
@@ -56,11 +57,10 @@ class EventIndexer {
 
       this.isEnabled = true;
       this.isInitialized = true;
-      console.log('✅ PostgreSQL event indexer initialized successfully');
+      logger.info('PostgreSQL event indexer initialized successfully');
       return true;
     } catch (error) {
-      console.warn('⚠️  PostgreSQL event indexer initialization failed:', error.message);
-      console.warn('   Event indexing will use direct blockchain queries');
+      logger.warn('PostgreSQL event indexer initialization failed', { error: error.message, fallback: 'Event indexing will use direct blockchain queries' });
       if (this.pool) {
         await this.pool.end();
         this.pool = null;
@@ -170,7 +170,7 @@ class EventIndexer {
         ON access_request_events(request_id)
       `);
 
-      console.log('✅ Database schema initialized');
+      logger.info('✅ Database schema initialized');
     } finally {
       client.release();
     }
@@ -210,7 +210,7 @@ class EventIndexer {
         client.release();
       }
     } catch (error) {
-      console.error('Error getting last processed block:', error.message);
+      logger.error('Error getting last processed block:', error.message);
       return 0;
     }
   }
@@ -240,7 +240,7 @@ class EventIndexer {
         client.release();
       }
     } catch (error) {
-      console.error('Error updating last processed block:', error.message);
+      logger.error('Error updating last processed block:', error.message);
     }
   }
 
@@ -272,7 +272,7 @@ class EventIndexer {
         await this.updateLastProcessedBlock('ConsentRevoked', maxBlock);
       }
     } catch (error) {
-      console.error('Error storing consent events:', error.message);
+      logger.error('Error storing consent events:', error.message);
     }
   }
 
@@ -305,7 +305,7 @@ class EventIndexer {
         await this.updateLastProcessedBlock('AccessDenied', maxBlock);
       }
     } catch (error) {
-      console.error('Error storing access request events:', error.message);
+      logger.error('Error storing access request events:', error.message);
     }
   }
 
@@ -363,7 +363,7 @@ class EventIndexer {
         client.release();
       }
     } catch (error) {
-      console.error('Error querying consent events:', error.message);
+      logger.error('Error querying consent events:', error.message);
       return [];
     }
   }
@@ -429,7 +429,7 @@ class EventIndexer {
         client.release();
       }
     } catch (error) {
-      console.error('Error querying access request events:', error.message);
+      logger.error('Error querying access request events:', error.message);
       return [];
     }
   }

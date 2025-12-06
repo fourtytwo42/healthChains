@@ -8,6 +8,7 @@ const {
   ConfigurationError,
   BaseError
 } = require('../utils/errors');
+const logger = require('../utils/logger');
 
 /**
  * Centralized error handling middleware for Express
@@ -21,8 +22,8 @@ const {
  * @param {Function} next - Express next function
  */
 function errorHandler(err, req, res, next) {
-  // Log full error details server-side
-  console.error('Error:', {
+  // Log full error details server-side using structured logger
+  logger.error('Request error', {
     message: err.message,
     stack: err.stack,
     code: err.code,

@@ -1,5 +1,6 @@
 const { createClient } = require('redis');
 const { ConfigurationError } = require('../utils/errors');
+const logger = require('../utils/logger');
 
 /**
  * Cache Service - Redis caching layer
@@ -25,7 +26,7 @@ class CacheService {
    */
   async initialize() {
     if (!this.isEnabled) {
-      console.log('⚠️  Redis caching is disabled (REDIS_ENABLED=false)');
+      logger.info('⚠️  Redis caching is disabled (REDIS_ENABLED=false)');
       return;
     }
 
@@ -44,7 +45,7 @@ class CacheService {
         socket: {
           reconnectStrategy: (retries) => {
             if (retries > this.maxRetries) {
-              console.error('Redis: Max reconnection retries reached');
+              logger.error('Redis: Max reconnection retries reached');
               return new Error('Max retries reached');
             }
             return Math.min(retries * 100, 3000); // Exponential backoff, max 3s
@@ -54,22 +55,22 @@ class CacheService {
 
       // Error handlers
       this.client.on('error', (err) => {
-        console.error('Redis Client Error:', err.message);
+        logger.error('Redis Client Error', { error: err.message });
         this.isConnected = false;
       });
 
       this.client.on('connect', () => {
-        console.log('🔄 Redis: Connecting...');
+        logger.info('Redis: Connecting...');
       });
 
       this.client.on('ready', () => {
-        console.log('✅ Redis: Connected and ready');
+        logger.info('Redis: Connected and ready');
         this.isConnected = true;
         this.connectionRetries = 0;
       });
 
       this.client.on('reconnecting', () => {
-        console.log('🔄 Redis: Reconnecting...');
+        logger.info('Redis: Reconnecting...');
         this.connectionRetries++;
       });
 
@@ -78,9 +79,9 @@ class CacheService {
 
       // Test connection
       await this.client.ping();
-      console.log(`✅ Redis cache service initialized (${host}:${port})`);
+      logger.info(`Redis cache service initialized`, { host, port });
     } catch (error) {
-      console.warn('⚠️  Redis connection failed, continuing without cache:', error.message);
+      logger.warn('Redis connection failed, continuing without cache', { error: error.message });
       this.isConnected = false;
       this.client = null;
       // Don't throw - graceful degradation
@@ -114,7 +115,7 @@ class CacheService {
       }
       return JSON.parse(value);
     } catch (error) {
-      console.error(`Redis get error for key ${key}:`, error.message);
+      logger.error(`Redis get error for key ${key}:`, error.message);
       return null; // Graceful fallback
     }
   }
@@ -137,7 +138,7 @@ class CacheService {
       await this.client.setEx(key, ttlSeconds, serialized);
       return true;
     } catch (error) {
-      console.error(`Redis set error for key ${key}:`, error.message);
+      logger.error(`Redis set error for key ${key}`, { key, error: error.message });
       return false; // Graceful fallback
     }
   }
@@ -157,7 +158,7 @@ class CacheService {
       await this.client.del(key);
       return true;
     } catch (error) {
-      console.error(`Redis delete error for key ${key}:`, error.message);
+      logger.error(`Redis delete error for key ${key}:`, error.message);
       return false; // Graceful fallback
     }
   }
@@ -181,7 +182,7 @@ class CacheService {
       await this.client.del(keys);
       return keys.length;
     } catch (error) {
-      console.error(`Redis deletePattern error for pattern ${pattern}:`, error.message);
+      logger.error(`Redis deletePattern error for pattern ${pattern}:`, error.message);
       return 0; // Graceful fallback
     }
   }
@@ -352,9 +353,9 @@ class CacheService {
       try {
         await this.client.quit();
         this.isConnected = false;
-        console.log('Redis connection closed');
+        logger.info('Redis connection closed');
       } catch (error) {
-        console.error('Error closing Redis connection:', error.message);
+        logger.error('Error closing Redis connection:', error.message);
       }
     }
   }

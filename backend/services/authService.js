@@ -17,10 +17,10 @@ class AuthService {
     this.issuer = process.env.JWT_ISSUER || 'healthchains';
     
     if (!this.secret) {
-      console.warn('⚠️  JWT_SECRET not set. Authentication will not work properly.');
+      logger.warn('⚠️  JWT_SECRET not set. Authentication will not work properly.');
       // Generate a random secret for development (not secure for production)
       this.secret = 'development-secret-change-in-production-' + Math.random().toString(36);
-      console.warn('⚠️  Using temporary development secret. Set JWT_SECRET in production!');
+      logger.warn('⚠️  Using temporary development secret. Set JWT_SECRET in production!');
     }
   }
 

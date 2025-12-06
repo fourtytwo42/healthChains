@@ -3,6 +3,7 @@ const fs = require('fs').promises; // Use async file operations
 const fsSync = require('fs'); // Keep sync version for existsSync only
 const path = require('path');
 const { ConfigurationError, Web3ConnectionError } = require('../utils/errors');
+const logger = require('../utils/logger');
 
 /**
  * Web3 Service - Centralized blockchain connection and contract management
@@ -82,9 +83,9 @@ class Web3Service {
       this.chainId = Number(network.chainId);
       this.networkName = networkName;
 
-      console.log(`✅ Web3 Provider connected to ${rpcUrl}`);
-      console.log(`   Chain ID: ${this.chainId}`);
-      console.log(`   Network: ${this.networkName}`);
+      logger.info(`✅ Web3 Provider connected to ${rpcUrl}`);
+      logger.info(`   Chain ID: ${this.chainId}`);
+      logger.info(`   Network: ${this.networkName}`);
     } catch (error) {
       throw new Web3ConnectionError(
         `Failed to connect to RPC endpoint: ${rpcUrl}`,
@@ -157,16 +158,16 @@ class Web3Service {
           abi,
           this.signer
         );
-        console.log(`✅ Signer configured for write operations: ${this.signer.address}`);
+        logger.info(`Signer configured for write operations: ${this.signer.address}`);
       } catch (error) {
-        console.warn('⚠️  Warning: Failed to create signer. Write operations will not be available:', error.message);
+        logger.warn('Warning: Failed to create signer. Write operations will not be available', { error: error.message });
       }
     } else {
-      console.warn('⚠️  Warning: PRIVATE_KEY not set. Write operations will not be available.');
+      logger.warn('⚠️  Warning: PRIVATE_KEY not set. Write operations will not be available.');
     }
 
     this.isInitialized = true;
-    console.log(`✅ Contract instance created at ${this.contractAddress}`);
+    logger.info(`✅ Contract instance created at ${this.contractAddress}`);
   }
 
   /**
@@ -296,7 +297,7 @@ class Web3Service {
         }
       }
     } catch (error) {
-      console.warn('Warning: Could not read deployment.json:', error.message);
+      logger.warn('Warning: Could not read deployment.json:', error.message);
     }
 
     return null;
@@ -325,7 +326,7 @@ class Web3Service {
         return artifact.abi;
       }
     } catch (error) {
-      console.warn('Warning: Could not read contract artifact:', error.message);
+      logger.warn('Warning: Could not read contract artifact:', error.message);
     }
 
     return null;

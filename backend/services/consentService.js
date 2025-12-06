@@ -1,6 +1,7 @@
 const web3Service = require('./web3Service');
 const cacheService = require('./cacheService');
 const eventIndexer = require('./eventIndexer');
+const logger = require('../utils/logger');
 const { normalizeAddress, validateAddress } = require('../utils/addressUtils');
 const { 
   ValidationError, 
@@ -320,7 +321,7 @@ class ConsentService {
           try {
             return await contract.dataTypeHashToString(hash);
           } catch (error) {
-            console.warn('Failed to look up dataType from hash:', error.message);
+            logger.warn('Failed to look up dataType from hash', { hash, error: error.message });
             return hash; // Fallback to hash as string
           }
         })
@@ -331,7 +332,7 @@ class ConsentService {
           try {
             return await contract.purposeHashToString(hash);
           } catch (error) {
-            console.warn('Failed to look up purpose from hash:', error.message);
+            logger.warn('Failed to look up purpose from hash', { hash, error: error.message });
             return hash; // Fallback to hash as string
           }
         })
@@ -540,8 +541,7 @@ class ConsentService {
       return filtered;
     } catch (error) {
       // Log the underlying error for debugging
-      console.error('Error in getProviderConsents:', error.message);
-      console.error('Stack:', error.stack);
+      logger.error('Error in getProviderConsents', { error: error.message, stack: error.stack });
       throw new ContractError(
         'Failed to fetch provider consents',
         'getProviderConsents',
@@ -598,7 +598,7 @@ class ConsentService {
     validateAddress(patientAddress, 'patientAddress');
     // This function is deprecated - expiration is now checked client-side when reading events
     // No need to call the contract function which had unbounded loops
-    console.warn('checkAndExpireConsents is deprecated - expiration is checked client-side from events');
+    logger.warn('checkAndExpireConsents is deprecated - expiration is checked client-side from events');
     return 0;
   }
 
@@ -653,7 +653,7 @@ class ConsentService {
 
         return result;
       } catch (contractError) {
-        console.warn('Contract getAccessRequest failed, using event-based fallback:', contractError.message);
+        logger.warn('Contract getAccessRequest failed, using event-based fallback', { error: contractError.message });
         
         // Fallback to event-based query
         try {
@@ -796,7 +796,7 @@ class ConsentService {
           })
         );
       } catch (contractError) {
-        console.warn('Contract getPatientRequests failed, using event-based fallback:', contractError.message);
+        logger.warn('Contract getPatientRequests failed, using event-based fallback', { error: contractError.message });
         
         // Fallback to event-based query - build requests directly from events
         try {
@@ -1018,7 +1018,7 @@ class ConsentService {
       // TODO: In the future, we can store events in PostgreSQL and query from there
       if (usePostgres) {
         const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
-        console.log(`📊 PostgreSQL event index active. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg} to ${toBlockArg}`);
+        logger.debug('PostgreSQL event index active', { lastProcessedBlock, fromBlock: fromBlockArg, toBlock: toBlockArg });
       }
       
       // Build filter
@@ -1054,7 +1054,7 @@ class ConsentService {
             await eventIndexer.storeConsentEvents(grantedEvents);
           }
         } catch (filterError) {
-          console.error('Error querying ConsentGranted events:', filterError.message);
+          logger.error('Error querying ConsentGranted events', { error: filterError.message, stack: filterError.stack });
           grantedEvents = [];
         }
 
@@ -1080,7 +1080,7 @@ class ConsentService {
             await eventIndexer.storeConsentEvents(revokedEvents);
           }
         } catch (filterError) {
-          console.error('Error querying ConsentRevoked events:', filterError.message);
+          logger.error('Error querying ConsentRevoked events', { error: filterError.message, stack: filterError.stack });
           revokedEvents = [];
         }
       }
@@ -1128,14 +1128,17 @@ class ConsentService {
             }
           } catch (error) {
             // If consent record doesn't exist (e.g., was revoked), skip it
-            console.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event:`, error.message);
+            logger.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event`, { consentId, error: error.message });
           }
         }
       }
       
-      const events = [
-        ...grantedEventList,
-        ...(await Promise.all(revokedEvents.map(async (event) => {
+      // Process revoked events in batches to reduce memory usage (improvement #12)
+      const revokedEventsList = [];
+      const REVOKED_BATCH_SIZE = 50;
+      for (let i = 0; i < revokedEvents.length; i += REVOKED_BATCH_SIZE) {
+        const batch = revokedEvents.slice(i, i + REVOKED_BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(async (event) => {
           const consentId = Number(event.args.consentId);
           let provider = null;
           let dataType = null;
@@ -1172,7 +1175,7 @@ class ConsentService {
           } catch (error) {
             // If consent record lookup fails (e.g., consent already deleted), 
             // we'll still return the event with minimal info
-            console.warn(`Failed to look up consent record ${consentId} for revoked event:`, error.message);
+            logger.warn(`Failed to look up consent record ${consentId} for revoked event`, { consentId, error: error.message });
           }
           
           return {
@@ -1189,7 +1192,13 @@ class ConsentService {
             expirationTime: expirationTime,
             timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
           };
-        })))
+        }));
+        revokedEventsList.push(...batchResults);
+      }
+      
+      const events = [
+        ...grantedEventList,
+        ...revokedEventsList
       ];
 
       // Sort by block number
@@ -1198,7 +1207,12 @@ class ConsentService {
       return events;
     } catch (error) {
       // Log the actual error for debugging
-      console.error('Error querying consent events:', error.message, error.code, error.reason);
+      logger.error('Error querying consent events', { 
+        error: error.message, 
+        code: error.code, 
+        reason: error.reason,
+        stack: error.stack 
+      });
       throw new ContractError(
         'Failed to query consent events',
         'getConsentEvents',
@@ -1285,7 +1299,7 @@ class ConsentService {
       // TODO: In the future, we can store events in PostgreSQL and query from there
       if (usePostgres) {
         const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
-        console.log(`📊 PostgreSQL event index active for access requests. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg} to ${toBlockArg}`);
+        logger.debug('PostgreSQL event index active for access requests', { lastProcessedBlock, fromBlock: fromBlockArg, toBlock: toBlockArg });
       }
       
       // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
@@ -1310,7 +1324,7 @@ class ConsentService {
             requestedEvents = [];
           }
         } catch (filterError) {
-          console.error('Error querying AccessRequested events:', filterError.message);
+          logger.error('Error querying AccessRequested events', { error: filterError.message, stack: filterError.stack });
           requestedEvents = [];
         }
 
@@ -1330,7 +1344,7 @@ class ConsentService {
             approvedEvents = [];
           }
         } catch (filterError) {
-          console.error('Error querying AccessApproved events:', filterError.message);
+          logger.error('Error querying AccessApproved events', { error: filterError.message, stack: filterError.stack });
           approvedEvents = [];
         }
 
@@ -1350,7 +1364,7 @@ class ConsentService {
             deniedEvents = [];
           }
         } catch (filterError) {
-          console.error('Error querying AccessDenied events:', filterError.message);
+          logger.error('Error querying AccessDenied events', { error: filterError.message, stack: filterError.stack });
           deniedEvents = [];
         }
         
@@ -1402,7 +1416,7 @@ class ConsentService {
                 : new Date(Number(consentRecord.expirationTime) * 1000).toISOString();
             } catch (error) {
               // If consent record lookup fails, use request info
-              console.warn(`Failed to fetch consent record ${consentId} for AccessApproved event:`, error.message);
+              logger.warn(`Failed to fetch consent record ${consentId} for AccessApproved event`, { consentId, error: error.message });
             }
           }
           
@@ -1627,7 +1641,7 @@ class ConsentService {
           }
         }
       } catch (parseError) {
-        console.warn('Could not parse ConsentGranted event:', parseError);
+        logger.warn('Could not parse ConsentGranted event', { error: parseError.message, stack: parseError.stack });
       }
 
       return {
@@ -1821,7 +1835,7 @@ class ConsentService {
           }
         }
       } catch (parseError) {
-        console.warn('Could not parse AccessRequested event:', parseError);
+        logger.warn('Could not parse AccessRequested event', { error: parseError.message, stack: parseError.stack });
       }
 
       return {
