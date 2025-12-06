@@ -181,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem('auth_signing', signingKey);
       
       try {
+        console.log('[AuthContext] authenticate() - CALLING signer.signMessage() NOW - this is the ONLY call');
         const signature = await signer.signMessage(message);
         console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
         sessionStorage.removeItem('auth_signing');
