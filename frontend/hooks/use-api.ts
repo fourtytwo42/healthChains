@@ -655,11 +655,13 @@ export function useApproveRequest() {
       });
       queryClient.invalidateQueries({ queryKey: ['requests'] });
       queryClient.invalidateQueries({ queryKey: ['consents'] });
-      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents
+      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents - this will show the new consent in granted tab
+      queryClient.invalidateQueries({ queryKey: ['patientConsentsPaginated'] }); // Invalidate paginated patient consents
       queryClient.invalidateQueries({ queryKey: ['providerPatients'] }); // Invalidate provider patients list
       queryClient.invalidateQueries({ queryKey: ['providerConsents'] }); // Invalidate provider consents
       queryClient.invalidateQueries({ queryKey: ['patientPendingRequests'] }); // Remove from pending
       queryClient.invalidateQueries({ queryKey: ['accessRequestEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['patientConsentHistory'] }); // Invalidate history to show approval
     },
     onError: (error: Error) => {
       const message = error.message.includes('user rejected') || error.message.includes('User rejected')
