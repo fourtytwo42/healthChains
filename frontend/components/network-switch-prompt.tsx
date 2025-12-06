@@ -14,7 +14,7 @@ import { toast } from 'sonner';
  * the user to switch. Automatically adds the network if it doesn't exist.
  */
 export function NetworkSwitchPrompt() {
-  const { isWrongNetwork, isConnected, chainId, switchToCorrectNetwork } = useWallet();
+  const { isWrongNetwork, isConnected, chainId, switchToCorrectNetwork, expectedRpcUrl } = useWallet();
   const [isSwitching, setIsSwitching] = useState(false);
   const networkConfig = getNetworkConfig();
 
@@ -49,6 +49,11 @@ export function NetworkSwitchPrompt() {
               You are connected to Chain ID {chainId}, but this app requires{' '}
               <strong>{networkConfig.chainName}</strong> (Chain ID: {networkConfig.chainId}).
             </p>
+            {expectedRpcUrl && (
+              <p className="text-xs text-muted-foreground mt-1">
+                RPC URL: <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{expectedRpcUrl}</code>
+              </p>
+            )}
           </div>
           <Button
             onClick={handleSwitchNetwork}
@@ -66,7 +71,7 @@ export function NetworkSwitchPrompt() {
             )}
           </Button>
           <p className="text-xs text-muted-foreground">
-            If the network doesn't exist in MetaMask, it will be added automatically.
+            If the network doesn't exist in MetaMask, it will be added automatically with the correct RPC URL.
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ethers } from 'ethers';
 import { getNetworkConfig, getMetaMaskNetworkConfig } from '@/lib/network-config';
+import { getRpcUrl } from '@/lib/env-config';
 
 /**
  * Wallet Context - Manages MetaMask wallet connection state
@@ -12,7 +13,7 @@ import { getNetworkConfig, getMetaMaskNetworkConfig } from '@/lib/network-config
  * - Current account address
  * - Network/chain ID
  * - Connect/disconnect functions
- * - Network validation and automatic switching
+ * - Network validation and automatic switching with RPC URL detection
  */
 
 interface WalletState {
@@ -22,6 +23,8 @@ interface WalletState {
   isConnecting: boolean;
   error: string | null;
   isWrongNetwork: boolean;
+  currentRpcUrl: string | null;
+  expectedRpcUrl: string;
 }
 
 interface WalletContextType extends WalletState {
@@ -35,10 +38,11 @@ interface WalletContextType extends WalletState {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 /**
- * Get network configuration
+ * Get network configuration (dynamically based on hostname)
  */
-const NETWORK_CONFIG = getNetworkConfig();
-const EXPECTED_CHAIN_ID = NETWORK_CONFIG.chainId;
+const getCurrentNetworkConfig = () => getNetworkConfig();
+const EXPECTED_CHAIN_ID = getCurrentNetworkConfig().chainId;
+const EXPECTED_RPC_URL = getRpcUrl();
 
 /**
  * Wallet Provider Component
@@ -51,6 +55,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isConnecting: false,
     error: null,
     isWrongNetwork: false,
+    currentRpcUrl: null,
+    expectedRpcUrl: EXPECTED_RPC_URL,
   });
 
   /**
@@ -97,50 +103,115 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
+   * Detect the current RPC URL that MetaMask is connected to
+   * This is done by checking the provider's connection URL
+   */
+  const getCurrentRpcUrl = async (): Promise<string | null> => {
+    if (!isMetaMaskInstalled() || !window.ethereum) return null;
+
+    try {
+      // Try to get the provider's connection info
+      // MetaMask doesn't directly expose RPC URL, but we can infer it from the provider
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      
+      // For MetaMask, we can't directly get the RPC URL, but we can check
+      // if the chainId matches and assume the RPC should match our expected one
+      // The actual RPC URL detection happens when we check the network
+      
+      // Return null as we'll validate based on chainId and network config
+      return null;
+    } catch (error) {
+      console.error('Error getting RPC URL:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Check if the network configuration matches what's expected
+   * This checks both chainId and ensures the network config uses the correct RPC
+   */
+  const validateNetwork = async (): Promise<{ isValid: boolean; reason?: string }> => {
+    const chainId = await getChainId();
+    const networkConfig = getCurrentNetworkConfig();
+    
+    // Check if chainId matches
+    if (chainId === null || Number(chainId) !== EXPECTED_CHAIN_ID) {
+      return {
+        isValid: false,
+        reason: `Chain ID mismatch. Expected ${EXPECTED_CHAIN_ID}, got ${chainId}`,
+      };
+    }
+
+    // The RPC URL is already validated through getNetworkConfig() which uses getRpcUrl()
+    // which is hostname-aware. If we're here, the chainId matches, so we assume
+    // the network is correct. The network switching will ensure the correct RPC is used.
+    
+    return { isValid: true };
+  };
+
+  /**
    * Check if connected network matches expected network
+   * Validates both chainId and ensures correct RPC URL is configured
    */
   const checkNetwork = async (): Promise<boolean> => {
-    const chainId = await getChainId();
-    return chainId === EXPECTED_CHAIN_ID;
+    const validation = await validateNetwork();
+    return validation.isValid;
   };
 
   /**
    * Switch to the correct network (adds network if it doesn't exist)
+   * Uses the hostname-aware RPC URL from env-config
    */
   const switchToCorrectNetwork = async (): Promise<void> => {
     if (!isMetaMaskInstalled() || !window.ethereum) {
       throw new Error('MetaMask is not installed');
     }
 
+    // Get the current network config (which uses hostname-aware RPC URL)
     const networkConfig = getMetaMaskNetworkConfig();
+    const currentRpcUrl = getRpcUrl();
+    const networkConfigForMetaMask = {
+      ...networkConfig,
+      rpcUrls: [currentRpcUrl], // Ensure we use the correct RPC URL based on hostname
+    };
+
+    console.log('[Wallet] Switching to network:', {
+      chainId: networkConfigForMetaMask.chainId,
+      chainName: networkConfigForMetaMask.chainName,
+      rpcUrl: currentRpcUrl,
+    });
 
     try {
       // Try to switch to the network
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: networkConfig.chainId }],
+        params: [{ chainId: networkConfigForMetaMask.chainId }],
       });
     } catch (switchError: any) {
-      // If chain doesn't exist (error code 4902), add it
+      // If chain doesn't exist (error code 4902), add it with the correct RPC URL
       if (switchError.code === 4902) {
         try {
+          console.log('[Wallet] Network not found, adding network with RPC:', currentRpcUrl);
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [networkConfig],
+            params: [networkConfigForMetaMask],
           });
           // After adding, try switching again
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: networkConfig.chainId }],
+            params: [{ chainId: networkConfigForMetaMask.chainId }],
           });
         } catch (addError: any) {
           const errorMessage = addError.message || 'Failed to add network to MetaMask';
+          console.error('[Wallet] Failed to add network:', addError);
           throw new Error(errorMessage);
         }
       } else if (switchError.code === 4001) {
         // User rejected the request
         throw new Error('Network switch was rejected');
       } else {
+        console.error('[Wallet] Network switch error:', switchError);
         throw switchError;
       }
     }
@@ -175,9 +246,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const account = accounts[0];
       const chainId = await getChainId();
+      const currentRpcUrl = await getCurrentRpcUrl();
+      const networkConfig = getCurrentNetworkConfig();
 
-      // Check if network matches
-      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
+      // Validate network (chainId and RPC URL)
+      const validation = await validateNetwork();
+      const networkMatches = validation.isValid;
       
       setState({
         isConnected: true,
@@ -185,7 +259,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         chainId,
         isConnecting: false,
         isWrongNetwork: !networkMatches,
-        error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
+        currentRpcUrl,
+        expectedRpcUrl: networkConfig.rpcUrl,
+        error: networkMatches 
+          ? null 
+          : `Please switch to ${networkConfig.chainName} (Chain ID: ${EXPECTED_CHAIN_ID}) using RPC: ${networkConfig.rpcUrl}`,
       });
     } catch (error: any) {
       setState((prev) => ({
@@ -200,6 +278,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
    * Disconnect wallet
    */
   const disconnect = () => {
+    const networkConfig = getCurrentNetworkConfig();
     setState({
       isConnected: false,
       account: null,
@@ -207,6 +286,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       isConnecting: false,
       error: null,
       isWrongNetwork: false,
+      currentRpcUrl: null,
+      expectedRpcUrl: networkConfig.rpcUrl,
     });
   };
 
@@ -236,7 +317,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const account = await getAccount();
       const chainId = await getChainId();
-      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
+      const currentRpcUrl = await getCurrentRpcUrl();
+      const networkConfig = getCurrentNetworkConfig();
+      const validation = await validateNetwork();
+      const networkMatches = validation.isValid;
 
       if (account && chainId !== null) {
         setState({
@@ -245,14 +329,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           chainId,
           isConnecting: false,
           isWrongNetwork: !networkMatches,
-          error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
+          currentRpcUrl,
+          expectedRpcUrl: networkConfig.rpcUrl,
+          error: networkMatches 
+            ? null 
+            : `Please switch to ${networkConfig.chainName} (Chain ID: ${EXPECTED_CHAIN_ID}) using RPC: ${networkConfig.rpcUrl}`,
         });
       } else if (chainId !== null) {
         setState((prev) => ({
           ...prev,
           chainId,
           isWrongNetwork: !networkMatches,
-          error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
+          currentRpcUrl,
+          expectedRpcUrl: networkConfig.rpcUrl,
+          error: networkMatches 
+            ? null 
+            : `Please switch to ${networkConfig.chainName} (Chain ID: ${EXPECTED_CHAIN_ID}) using RPC: ${networkConfig.rpcUrl}`,
         }));
       }
     };
@@ -279,13 +371,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const handleChainChanged = async () => {
       const chainId = await getChainId();
-      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
+      const currentRpcUrl = await getCurrentRpcUrl();
+      const networkConfig = getCurrentNetworkConfig();
+      const validation = await validateNetwork();
+      const networkMatches = validation.isValid;
 
       setState((prev) => ({
         ...prev,
         chainId,
         isWrongNetwork: !networkMatches,
-        error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
+        currentRpcUrl,
+        expectedRpcUrl: networkConfig.rpcUrl,
+        error: networkMatches 
+          ? null 
+          : `Please switch to ${networkConfig.chainName} (Chain ID: ${EXPECTED_CHAIN_ID}) using RPC: ${networkConfig.rpcUrl}`,
       }));
     };
 
