@@ -119,12 +119,14 @@ describe('WalletConnector', () => {
       isConnected: true,
       account: mockAccount,
       chainId: 1, // Wrong chain ID
+      isWrongNetwork: true, // Wrong network flag
       isConnecting: false,
       error: null,
       connect: jest.fn(),
       disconnect: jest.fn(),
       checkNetwork: jest.fn(),
       switchNetwork: jest.fn(),
+      switchToCorrectNetwork: jest.fn(),
       getSigner: jest.fn(),
     });
     mockUseAuth.mockReturnValue({
@@ -139,8 +141,8 @@ describe('WalletConnector', () => {
 
     render(<WalletConnector />);
 
-    // Check for wrong network indicator (may be in different format)
-    const wrongNetworkText = screen.queryByText(/wrong network/i) || screen.queryByText(/switch network/i);
+    // Check for wrong network indicator
+    const wrongNetworkText = screen.getByText(/wrong network/i);
     expect(wrongNetworkText).toBeInTheDocument();
   });
 

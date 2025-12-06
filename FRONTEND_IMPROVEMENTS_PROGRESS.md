@@ -84,9 +84,12 @@
 
 ## Pending ⏳
 
-### 11. Component Size Reduction
-- `provider/page.tsx` (1975 lines) - needs splitting
-- `patient-details-card.tsx` (1208 lines) - needs splitting
+### 11. Component Size Reduction ✅
+- `provider/page.tsx` (2007 → 216 lines) - ✅ COMPLETED
+- `patient-details-card.tsx` (1239 → 429 lines) - ✅ COMPLETED
+- Created 10 new focused components
+- Created 2 custom hooks for business logic
+- See `docs/architecture/component-structure.md` for details
 
 ### 12. Additional Tests
 - Error boundary tests

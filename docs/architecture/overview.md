@@ -333,8 +333,20 @@ See [Scalability Documentation](docs/scalability/overview.md) for more details.
 | Testing Framework | Hardhat/Mocha + Jest + Playwright | Comprehensive testing coverage |
 | Process Management | PM2 | Production-ready process management |
 
+## Frontend Component Architecture
+
+The frontend has been refactored to follow a modular component architecture:
+
+- **Provider Dashboard**: Reduced from 2007 to 216 lines (89% reduction)
+- **Patient Details Card**: Reduced from 1239 to 429 lines (65% reduction)
+- **10 New Focused Components**: Extracted from large files
+- **2 Custom Hooks**: Business logic separated from UI
+
+See [Component Structure](component-structure.md) for detailed architecture and component breakdown.
+
 ## Next Steps
 
+- Read [Component Structure](component-structure.md) for frontend component architecture
 - Read [Smart Contract Design](smart-contract-design.md) for contract architecture details
 - Read [Logging Architecture](logging.md) for logging system details
 - Read [Data Flow](data-flow.md) for detailed interaction flows

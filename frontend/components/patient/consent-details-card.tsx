@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { Button } from '@/components/ui/button';
-import { Building2, Clock, FileCheck, X, Loader2, Calendar, CheckCircle, XCircle } from 'lucide-react';
+import { Building2, Clock, FileCheck, X, Loader2, Calendar, CheckCircle, XCircle, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { useRevokeConsent } from '@/hooks/use-api';
+import { useRevokeConsent, usePatientConsentHistory } from '@/hooks/use-api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +24,8 @@ import { DialogDescription } from '@/components/ui/dialog';
 import { apiClient } from '@/lib/api-client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProviderInfoSection } from '@/components/shared/provider-info-section';
+import type { ConsentHistoryEvent } from '@/types/consent';
+import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
 
 interface ConsentDetailsCardProps {
   consent: {
@@ -55,7 +57,103 @@ interface ConsentDetailsCardProps {
 export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps) {
   const [providerInfo, setProviderInfo] = useState<any>(null);
   const [loadingProvider, setLoadingProvider] = useState(true);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<ConsentHistoryEvent | null>(null);
+  const historyPerPage = 10;
   const revokeConsent = useRevokeConsent();
+
+  // Fetch patient consent history
+  const { data: patientHistoryData, isLoading: historyLoading } = usePatientConsentHistory(
+    consent.patientAddress,
+    !!consent.patientAddress
+  );
+
+  // Filter history to only show events for this specific provider
+  const providerHistory = useMemo(() => {
+    if (!patientHistoryData || !Array.isArray(patientHistoryData)) {
+      return [];
+    }
+
+    const normalizedProviderAddress = consent.providerAddress.toLowerCase().trim();
+    if (!normalizedProviderAddress) {
+      return [];
+    }
+
+    const filtered = patientHistoryData.filter((event: ConsentHistoryEvent) => {
+      // For consent events, check if provider matches
+      if (event.type === 'ConsentGranted' || event.type === 'ConsentRevoked' || event.type === 'ConsentExpired') {
+        const eventProviderAddress = (event.provider?.toLowerCase() || '').trim();
+        return eventProviderAddress === normalizedProviderAddress;
+      }
+      // For access request events, check if requester matches
+      if (event.type === 'AccessRequested' || event.type === 'AccessApproved' || event.type === 'AccessDenied') {
+        const eventRequesterAddress = (event.requester?.toLowerCase() || '').trim();
+        return eventRequesterAddress === normalizedProviderAddress;
+      }
+      return false;
+    });
+
+    return filtered.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeB - timeA; // Most recent first
+    });
+  }, [patientHistoryData, consent.providerAddress]);
+
+  // Determine event styling
+  const getEventStyling = (eventType: string) => {
+    switch (eventType) {
+      case 'ConsentGranted':
+        return {
+          icon: <CheckCircle className="h-3 w-3" />,
+          color: 'text-green-700 dark:text-green-400',
+          bgColor: 'bg-green-50 dark:bg-green-950/20',
+          borderColor: 'border-green-200 dark:border-green-800',
+        };
+      case 'ConsentRevoked':
+        return {
+          icon: <X className="h-3 w-3" />,
+          color: 'text-red-700 dark:text-red-400',
+          bgColor: 'bg-red-50 dark:bg-red-950/20',
+          borderColor: 'border-red-200 dark:border-red-800',
+        };
+      case 'ConsentExpired':
+        return {
+          icon: <Clock className="h-3 w-3" />,
+          color: 'text-orange-700 dark:text-orange-400',
+          bgColor: 'bg-orange-50 dark:bg-orange-950/20',
+          borderColor: 'border-orange-200 dark:border-orange-800',
+        };
+      case 'AccessRequested':
+        return {
+          icon: <Building2 className="h-3 w-3" />,
+          color: 'text-blue-700 dark:text-blue-400',
+          bgColor: 'bg-blue-50 dark:bg-blue-950/20',
+          borderColor: 'border-blue-200 dark:border-blue-800',
+        };
+      case 'AccessApproved':
+        return {
+          icon: <CheckCircle className="h-3 w-3" />,
+          color: 'text-green-700 dark:text-green-400',
+          bgColor: 'bg-green-50 dark:bg-green-950/20',
+          borderColor: 'border-green-200 dark:border-green-800',
+        };
+      case 'AccessDenied':
+        return {
+          icon: <X className="h-3 w-3" />,
+          color: 'text-red-700 dark:text-red-400',
+          bgColor: 'bg-red-50 dark:bg-red-950/20',
+          borderColor: 'border-red-200 dark:border-red-800',
+        };
+      default:
+        return {
+          icon: <FileCheck className="h-3 w-3" />,
+          color: 'text-gray-700 dark:text-gray-400',
+          bgColor: 'bg-gray-50 dark:bg-gray-950/20',
+          borderColor: 'border-gray-200 dark:border-gray-800',
+        };
+    }
+  };
 
   useEffect(() => {
     const fetchProviderInfo = async () => {
@@ -103,7 +201,7 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
             Consent Details
           </DialogTitle>
           <DialogDescription className="text-xs">
-            View all consent details for this provider
+            Provider information, active consents, and consent history
           </DialogDescription>
         </DialogHeader>
 
@@ -126,179 +224,234 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
             </CardContent>
           </Card>
 
-          {/* Consent Details */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Consent Details</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-3">
-              {/* Show all data types if there are multiple consents */}
-              {consent.allConsents && consent.allConsents.length > 1 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Data Types</p>
-                      <ColoredBadgeList
-                        type="dataType"
-                        values={Array.from(new Set(consent.allConsents.map(c => c.dataType)))}
-                        size="sm"
-                      />
-                    </div>
+          {/* Active Consents - Show what consent exists */}
+          {(() => {
+            // Collect all unique data types and purposes from the consent
+            const allDataTypes = new Set<string>();
+            const allPurposes = new Set<string>();
+            const expirationTimes: (string | null)[] = [];
 
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Purposes</p>
-                      <ColoredBadgeList
-                        type="purpose"
-                        values={Array.from(new Set(consent.allConsents.map(c => c.purpose)))}
-                        size="sm"
-                      />
-                    </div>
-                  </div>
+            // Handle both single and batch consents
+            if (consent.allConsents && consent.allConsents.length > 0) {
+              consent.allConsents.forEach((c) => {
+                if (c.dataType) allDataTypes.add(c.dataType);
+                if (c.purpose) allPurposes.add(c.purpose);
+                if (c.expirationTime) expirationTimes.push(c.expirationTime);
+              });
+            } else {
+              // Single consent
+              if (consent.dataTypes && Array.isArray(consent.dataTypes)) {
+                consent.dataTypes.forEach((dt: string) => allDataTypes.add(dt));
+              } else if (consent.dataType) {
+                allDataTypes.add(consent.dataType);
+              }
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Granted Date</p>
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs">
-                          {format(new Date(consent.timestamp), 'MMM d, yyyy HH:mm')}
-                        </span>
-                      </div>
-                    </div>
+              if (consent.purposes && Array.isArray(consent.purposes)) {
+                consent.purposes.forEach((p: string) => allPurposes.add(p));
+              } else if (consent.purpose) {
+                allPurposes.add(consent.purpose);
+              }
 
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Status</p>
-                      <div className="flex items-center gap-1.5">
-                        {consent.allConsents.some(c => c.isActive && !c.isExpired) ? (
-                          <>
-                            <CheckCircle className="h-3 w-3 text-green-500" />
-                            <Badge variant="default" className="text-xs h-5">Active</Badge>
-                          </>
+              if (consent.expirationTime) {
+                expirationTimes.push(consent.expirationTime);
+              }
+            }
+
+            const hasActiveConsents = allDataTypes.size > 0 || allPurposes.size > 0;
+
+            if (!hasActiveConsents) {
+              return null;
+            }
+
+            return (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Active Consents</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                        {allDataTypes.size > 0 ? (
+                          <ColoredBadgeList
+                            type="dataType"
+                            values={Array.from(allDataTypes)}
+                            size="sm"
+                          />
                         ) : (
-                          <>
-                            <XCircle className="h-3 w-3 text-red-500" />
-                            <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
-                          </>
+                          <span className="text-xs text-muted-foreground">None</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Purposes</p>
+                        {allPurposes.size > 0 ? (
+                          <ColoredBadgeList
+                            type="purpose"
+                            values={Array.from(allPurposes)}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">None</span>
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Expiration</p>
-                      <div className="space-y-0.5">
-                        {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).slice(0, 2).map((expTime, idx) => (
-                          <div key={idx} className="flex items-center gap-1.5">
-                            <Clock className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs">
-                              {format(new Date(expTime as string), 'MMM d, yyyy HH:mm')}
-                            </span>
-                          </div>
-                        ))}
-                        {Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length > 2 && (
-                          <p className="text-xs text-muted-foreground ml-4">
-                            +{Array.from(new Set(consent.allConsents.map(c => c.expirationTime).filter(Boolean))).length - 2} more
-                          </p>
-                        )}
-                        {consent.allConsents.some(c => !c.expirationTime) && (
-                          <Badge variant="secondary" className="text-xs h-5">Some have no expiration</Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Show detailed breakdown - all consents from batch approval */}
-                  {consent.allConsents && consent.allConsents.length > 1 && (
-                    <div className="pt-2 border-t">
-                      <p className="text-xs font-medium mb-1">Consent Breakdown ({consent.allConsents.length} total)</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {consent.allConsents.slice(0, 5).map((c, idx) => (
-                          <div key={idx} className="p-1.5 bg-muted/50 rounded text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex gap-1 flex-wrap">
-                                <ColoredBadge type="dataType" value={c.dataType} size="sm" />
-                                <ColoredBadge type="purpose" value={c.purpose} size="sm" />
-                              </div>
-                              {c.isActive && !c.isExpired ? (
-                                <Badge variant="default" className="text-[10px] h-4 px-1">Active</Badge>
-                              ) : (
-                                <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>
-                              )}
+                    {expirationTimes.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Expiration Dates</p>
+                        <div className="space-y-0.5">
+                          {Array.from(new Set(expirationTimes)).slice(0, 3).map((expTime, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs">
+                                {format(new Date(expTime as string), 'MMM d, yyyy HH:mm')}
+                              </span>
                             </div>
-                          </div>
-                        ))}
-                        {consent.allConsents.length > 5 && (
-                          <p className="text-xs text-muted-foreground text-center py-1">
-                            +{consent.allConsents.length - 5} more consents
-                          </p>
-                        )}
+                          ))}
+                          {Array.from(new Set(expirationTimes)).length > 3 && (
+                            <p className="text-xs text-muted-foreground ml-4">
+                              +{Array.from(new Set(expirationTimes)).length - 3} more
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Consent History */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Consent History
+                {providerHistory.length > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({providerHistory.length} event{providerHistory.length !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {historyLoading ? (
+                <div className="space-y-2 py-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : providerHistory.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-4 text-center">
+                  No consent history available for this provider.
+                </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Data Type</p>
-                      {consent.dataType ? (
-                        <ColoredBadge type="dataType" value={consent.dataType} size="sm" />
-                      ) : consent.dataTypes && consent.dataTypes.length > 0 ? (
-                        <ColoredBadgeList type="dataType" values={consent.dataTypes} size="sm" />
-                      ) : null}
-                    </div>
+                  {(() => {
+                    const totalPages = Math.ceil(providerHistory.length / historyPerPage);
+                    const startIndex = (historyPage - 1) * historyPerPage;
+                    const endIndex = startIndex + historyPerPage;
+                    const paginatedHistory = providerHistory.slice(startIndex, endIndex);
+                    const isFirstPage = historyPage === 1;
+                    const isLastPage = historyPage >= totalPages;
 
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Purpose</p>
-                      {consent.purpose ? (
-                        <ColoredBadge type="purpose" value={consent.purpose} size="sm" />
-                      ) : consent.purposes && consent.purposes.length > 0 ? (
-                        <ColoredBadgeList type="purpose" values={consent.purposes} size="sm" />
-                      ) : null}
-                    </div>
-                  </div>
+                    const eventTypeLabels: Record<string, string> = {
+                      'ConsentGranted': 'Granted',
+                      'ConsentRevoked': 'Revoked',
+                      'ConsentExpired': 'Expired',
+                      'AccessRequested': 'Request Sent',
+                      'AccessApproved': 'Approved',
+                      'AccessDenied': 'Denied',
+                    };
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Granted Date</p>
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs">
-                          {format(new Date(consent.timestamp), 'MMM d, yyyy HH:mm')}
-                        </span>
-                      </div>
-                    </div>
+                    return (
+                      <>
+                        <div className="space-y-1.5">
+                          {paginatedHistory.map((event: ConsentHistoryEvent, index: number) => {
+                            const styling = getEventStyling(event.type);
 
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Status</p>
-                      <div className="flex items-center gap-1.5">
-                        {consent.isActive && !consent.isExpired ? (
-                          <>
-                            <CheckCircle className="h-3 w-3 text-green-500" />
-                            <Badge variant="default" className="text-xs h-5">Active</Badge>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="h-3 w-3 text-red-500" />
-                            <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
-                          </>
+                            return (
+                              <div
+                                key={`${event.type}-${event.consentId || event.requestId}-${startIndex + index}`}
+                                className={`flex items-center gap-2 p-1.5 border-l-2 rounded ${styling.borderColor} ${styling.bgColor} cursor-pointer hover:opacity-80 transition-opacity`}
+                                onClick={() => setSelectedHistoryEvent(event)}
+                              >
+                                <div className={`flex-shrink-0 ${styling.color}`}>
+                                  {styling.icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className={`text-xs font-semibold ${styling.color}`}>
+                                      {eventTypeLabels[event.type] || event.type}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                      {format(new Date(event.timestamp), 'MMM d, yyyy')}
+                                    </span>
+                                  </div>
+                                  {(event.dataTypes || event.dataType) && (event.purposes || event.purpose) && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      {(event.dataTypes && event.dataTypes.length > 0) ? (
+                                        <ColoredBadgeList type="dataType" values={event.dataTypes.slice(0, 2)} size="sm" />
+                                      ) : event.dataType ? (
+                                        <ColoredBadge type="dataType" value={event.dataType} size="sm" />
+                                      ) : null}
+                                      {(event.purposes && event.purposes.length > 0) ? (
+                                        <ColoredBadgeList type="purpose" values={event.purposes.slice(0, 2)} size="sm" />
+                                      ) : event.purpose ? (
+                                        <ColoredBadge type="purpose" value={event.purpose} size="sm" />
+                                      ) : null}
+                                    </div>
+                                  )}
+                                  {event.expirationTime && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <Clock className="h-2.5 w-2.5 text-muted-foreground" />
+                                      <span className="text-[10px] text-muted-foreground">
+                                        Expires: {format(new Date(event.expirationTime), 'MMM d, yyyy')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                            <p className="text-xs text-muted-foreground">
+                              Showing {startIndex + 1}-{Math.min(endIndex, providerHistory.length)} of {providerHistory.length} events
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                                disabled={isFirstPage}
+                                className="h-7 px-2"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </Button>
+                              <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                                Page {historyPage} of {totalPages}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setHistoryPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={isLastPage}
+                                className="h-7 px-2"
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {consent.expirationTime && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Expiration</p>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs">
-                          {format(new Date(consent.expirationTime), 'MMM d, yyyy HH:mm')}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
@@ -386,6 +539,15 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
             </div>
           );
         })()}
+
+        {/* Consent History Event Detail Card */}
+        {selectedHistoryEvent && (
+          <ConsentHistoryEventCard
+            event={selectedHistoryEvent}
+            onClose={() => setSelectedHistoryEvent(null)}
+            userRole="patient"
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

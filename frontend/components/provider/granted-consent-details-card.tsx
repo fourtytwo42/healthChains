@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { Calendar, History, Clock, CheckCircle, X, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProviderPatientData, useProviderConsentHistory } from '@/hooks/use-api';
+import type { ConsentHistoryEvent } from '@/types/consent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { RequestConsentDialog } from '@/components/provider/request-consent-dialog';
+import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
 
 interface GrantedConsentDetailsCardProps {
   patientId: string;
@@ -28,7 +30,7 @@ interface GrantedConsentDetailsCardProps {
 
 /**
  * Granted Consent Details Card Component
- * Shows demographics, active consents, and consent history (no medical data)
+ * Shows demographics, active consents breakdown, and consent history for provider/patient combination (no medical data)
  */
 export function GrantedConsentDetailsCard({
   patientId,
@@ -38,15 +40,41 @@ export function GrantedConsentDetailsCard({
   onOpenMedicalChart,
 }: GrantedConsentDetailsCardProps) {
   const [historyPage, setHistoryPage] = useState(1);
-  const [consentsPage, setConsentsPage] = useState(1);
-  const historyPerPage = 5;
-  const consentsPerPage = 5;
+  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<ConsentHistoryEvent | null>(null);
+  const historyPerPage = 10; // Increased since this is now the main content
   
   // Fetch patient data filtered by consent
   const { data, isLoading, error } = useProviderPatientData(providerAddress, patientId);
 
-  // Fetch provider history - only when we have patient wallet address
-  const shouldFetchHistory = !!patientWalletAddress && !!providerAddress;
+  // Get patient wallet address from patient data if not provided as prop
+  // We need to get it from the data after it's loaded, so we'll use a ref or state
+  const [actualPatientWalletAddress, setActualPatientWalletAddress] = useState<string>(patientWalletAddress || '');
+  
+  // Update wallet address when data loads or prop changes
+  useEffect(() => {
+    // First try the prop
+    if (patientWalletAddress) {
+      setActualPatientWalletAddress(patientWalletAddress);
+      return;
+    }
+    
+    // Then try to get it from the fetched patient data
+    if (data?.data) {
+      const walletAddr = (data.data as any)?.blockchainIntegration?.walletAddress ||
+        (data.data as any)?.patientWalletAddress ||
+        '';
+      if (walletAddr) {
+        setActualPatientWalletAddress(walletAddr);
+      }
+    } else if (!patientWalletAddress) {
+      // Reset if no data and no prop
+      setActualPatientWalletAddress('');
+    }
+  }, [data?.data, patientWalletAddress]);
+  
+  // Fetch provider history - always fetch if we have provider address
+  // We'll filter by patient address client-side
+  const shouldFetchHistory = !!providerAddress;
   const { data: providerHistoryData } = useProviderConsentHistory(
     providerAddress,
     shouldFetchHistory
@@ -60,14 +88,41 @@ export function GrantedConsentDetailsCard({
 
   // Filter history to only show events for this specific patient
   const patientHistory = useMemo(() => {
-    if (!providerHistory || !Array.isArray(providerHistory)) return [];
-    if (!patientWalletAddress) return [];
+    if (!providerHistory || !Array.isArray(providerHistory)) {
+      return [];
+    }
     
-    return providerHistory.filter((event: any) => {
-      const eventPatientAddress = event.patient?.toLowerCase() || event.patientAddress?.toLowerCase();
-      return eventPatientAddress === patientWalletAddress.toLowerCase();
+    // If we don't have patient wallet address yet, return empty (will update when address is available)
+    if (!actualPatientWalletAddress) {
+      return [];
+    }
+    
+    const normalizedPatientAddress = actualPatientWalletAddress.toLowerCase().trim();
+    if (!normalizedPatientAddress) {
+      return [];
+    }
+    
+    const filtered = providerHistory.filter((event) => {
+      // Check patient address field - events have patient address in event.patient
+      // Some events might have it in different fields, so check multiple possibilities
+      const eventPatientAddress = (
+        event.patient?.toLowerCase() || 
+        (event as any).patientAddress?.toLowerCase() ||
+        ''
+      ).trim();
+      if (!eventPatientAddress) return false;
+      
+      const matches = eventPatientAddress === normalizedPatientAddress;
+      return matches;
     });
-  }, [providerHistory, patientWalletAddress]);
+    
+    return filtered.sort((a, b) => {
+      // Sort by timestamp, most recent first
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeB - timeA;
+    });
+  }, [providerHistory, actualPatientWalletAddress]);
 
   if (isLoading) {
     return (
@@ -107,8 +162,8 @@ export function GrantedConsentDetailsCard({
   }
 
   const patientData = data.data;
-  const consentInfo = (patientData as any).consentInfo || [];
-  const hasNoConsent = consentInfo.length === 0;
+  const consentInfo = (patientData as any)?.consentInfo || [];
+  const hasActiveConsents = consentInfo.length > 0;
 
   // Determine event styling
   const getEventStyling = (eventType: string) => {
@@ -212,9 +267,9 @@ export function GrantedConsentDetailsCard({
                       <strong>Patient ID:</strong> {patientData.patientId}
                     </p>
                   )}
-                  {patientWalletAddress && (
+                  {actualPatientWalletAddress && (
                     <p className="text-muted-foreground text-xs font-mono mt-1">
-                      <strong>Wallet:</strong> {patientWalletAddress.slice(0, 6)}...{patientWalletAddress.slice(-4)}
+                      <strong>Wallet:</strong> {actualPatientWalletAddress.slice(0, 6)}...{actualPatientWalletAddress.slice(-4)}
                     </p>
                   )}
                 </div>
@@ -238,113 +293,111 @@ export function GrantedConsentDetailsCard({
         <div className="flex-1 overflow-y-auto px-6 py-4 pr-1">
           <div className="space-y-3">
 
-          {/* Show message if no consent */}
-          {hasNoConsent && (
+          {/* Active Consents Breakdown - Show what consent exists */}
+          {hasActiveConsents && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">No Active Consents</CardTitle>
+                <CardTitle className="text-base">Active Consents</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    You don't have active consent to view this patient's data.
-                  </p>
+                <div className="space-y-3">
+                  {/* Collect all unique data types and purposes from all consents */}
+                  {(() => {
+                    const allDataTypes = new Set<string>();
+                    const allPurposes = new Set<string>();
+                    const expirationTimes: (string | null)[] = [];
+                    
+                    consentInfo.forEach((consent: any) => {
+                      if (consent.dataTypes && Array.isArray(consent.dataTypes)) {
+                        consent.dataTypes.forEach((dt: string) => allDataTypes.add(dt));
+                      } else if (consent.dataType) {
+                        allDataTypes.add(consent.dataType);
+                      }
+                      
+                      if (consent.purposes && Array.isArray(consent.purposes)) {
+                        consent.purposes.forEach((p: string) => allPurposes.add(p));
+                      } else if (consent.purpose) {
+                        allPurposes.add(consent.purpose);
+                      }
+                      
+                      if (consent.expirationTime) {
+                        expirationTimes.push(consent.expirationTime);
+                      }
+                    });
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                            {allDataTypes.size > 0 ? (
+                              <ColoredBadgeList
+                                type="dataType"
+                                values={Array.from(allDataTypes)}
+                                size="sm"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">None</span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Purposes</p>
+                            {allPurposes.size > 0 ? (
+                              <ColoredBadgeList
+                                type="purpose"
+                                values={Array.from(allPurposes)}
+                                size="sm"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">None</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {expirationTimes.length > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Expiration Dates</p>
+                            <div className="space-y-0.5">
+                              {Array.from(new Set(expirationTimes)).slice(0, 3).map((expTime, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5">
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs">
+                                    {format(new Date(expTime as string), 'MMM d, yyyy HH:mm')}
+                                  </span>
+                                </div>
+                              ))}
+                              {Array.from(new Set(expirationTimes)).length > 3 && (
+                                <p className="text-xs text-muted-foreground ml-4">
+                                  +{Array.from(new Set(expirationTimes)).length - 3} more
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Active Consents - Only show if there are consents */}
-          {!hasNoConsent && (() => {
-            if (consentInfo.length === 0) {
-              return (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Active Consents</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <p className="text-xs text-muted-foreground">No active consents</p>
-                  </CardContent>
-                </Card>
-              );
-            }
-            
-            const totalPages = Math.ceil(consentInfo.length / consentsPerPage);
-            const startIndex = (consentsPage - 1) * consentsPerPage;
-            const endIndex = startIndex + consentsPerPage;
-            const paginatedConsents = consentInfo.slice(startIndex, endIndex);
-            const isFirstPage = consentsPage === 1;
-            const isLastPage = consentsPage >= totalPages;
-            
-            return (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Active Consents</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-2">
-                    {paginatedConsents.map((consent: any, idx: number) => (
-                      <div key={startIndex + idx} className="flex items-center justify-between p-2 border rounded-lg">
-                        <div className="flex items-center gap-2">
-                          {(consent.dataTypes && consent.dataTypes.length > 0) ? (
-                            <ColoredBadgeList type="dataType" values={consent.dataTypes} size="sm" />
-                          ) : consent.dataType ? (
-                            <ColoredBadge type="dataType" value={consent.dataType} size="sm" />
-                          ) : null}
-                          {(consent.purposes && consent.purposes.length > 0) ? (
-                            <ColoredBadgeList type="purpose" values={consent.purposes} size="sm" />
-                          ) : consent.purpose ? (
-                            <ColoredBadge type="purpose" value={consent.purpose} size="sm" />
-                          ) : null}
-                        </div>
-                        {consent.expirationTime && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            Expires: {format(new Date(consent.expirationTime), 'MMM d, yyyy')}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                      <p className="text-xs text-muted-foreground">
-                        Showing {startIndex + 1}-{Math.min(endIndex, consentInfo.length)} of {consentInfo.length} consents
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConsentsPage(prev => Math.max(1, prev - 1))}
-                          disabled={isFirstPage}
-                          className="h-7 px-2"
-                        >
-                          <ChevronLeft className="h-3 w-3" />
-                        </Button>
-                        <span className="text-xs text-muted-foreground min-w-[60px] text-center">
-                          Page {consentsPage} of {totalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConsentsPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={isLastPage}
-                          className="h-7 px-2"
-                        >
-                          <ChevronRight className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
+          {/* Show message if no consent */}
+          {!hasActiveConsents && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">No Active Consents</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-xs text-muted-foreground">
+                  You don't have active consent to view this patient's data.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Consent History */}
-          {patientHistory.length > 0 && (() => {
+          {(() => {
             const totalPages = Math.ceil(patientHistory.length / historyPerPage);
             const startIndex = (historyPage - 1) * historyPerPage;
             const endIndex = startIndex + historyPerPage;
@@ -352,17 +405,39 @@ export function GrantedConsentDetailsCard({
             const isFirstPage = historyPage === 1;
             const isLastPage = historyPage >= totalPages;
             
+            // Debug info (can be removed later)
+            const debugInfo = actualPatientWalletAddress 
+              ? `Looking for: ${actualPatientWalletAddress.slice(0, 10)}... | Provider history: ${providerHistory.length} events | Filtered: ${patientHistory.length} events`
+              : `No wallet address yet | Provider history: ${providerHistory.length} events`;
+            
             return (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <History className="h-4 w-4" />
                     Consent History
+                    {patientHistory.length > 0 && (
+                      <span className="text-xs text-muted-foreground font-normal">
+                        ({patientHistory.length} event{patientHistory.length !== 1 ? 's' : ''})
+                      </span>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="space-y-1.5">
-                    {paginatedHistory.map((event: any, index: number) => {
+                  {patientHistory.length === 0 ? (
+                    <div className="text-xs text-muted-foreground py-4">
+                      <div className="text-center mb-2">
+                        No consent history available for this patient/provider combination.
+                      </div>
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="text-[10px] text-muted-foreground/70 mt-2 p-2 bg-muted/30 rounded">
+                          Debug: {debugInfo}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {paginatedHistory.map((event: ConsentHistoryEvent, index: number) => {
                       const styling = getEventStyling(event.type);
                       const eventTypeLabels: Record<string, string> = {
                         'ConsentGranted': 'Granted',
@@ -376,7 +451,8 @@ export function GrantedConsentDetailsCard({
                       return (
                         <div
                           key={`${event.type}-${event.consentId || event.requestId}-${startIndex + index}`}
-                          className={`flex items-center gap-2 p-1.5 border-l-2 rounded ${styling.borderColor} ${styling.bgColor}`}
+                          className={`flex items-center gap-2 p-1.5 border-l-2 rounded ${styling.borderColor} ${styling.bgColor} cursor-pointer hover:opacity-80 transition-opacity`}
+                          onClick={() => setSelectedHistoryEvent(event)}
                         >
                           <div className={`flex-shrink-0 ${styling.color}`}>
                             {styling.icon}
@@ -408,10 +484,11 @@ export function GrantedConsentDetailsCard({
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
                   
                   {/* Pagination Controls */}
-                  {totalPages > 1 && (
+                  {patientHistory.length > 0 && totalPages > 1 && (
                     <div className="flex items-center justify-between mt-3 pt-3 border-t">
                       <p className="text-xs text-muted-foreground">
                         Showing {startIndex + 1}-{Math.min(endIndex, patientHistory.length)} of {patientHistory.length} events
@@ -450,9 +527,9 @@ export function GrantedConsentDetailsCard({
 
         {/* Fixed Footer */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t flex-shrink-0 mt-2">
-          {patientWalletAddress && (
+          {actualPatientWalletAddress && (
             <RequestConsentDialog
-              patientAddress={patientWalletAddress}
+              patientAddress={actualPatientWalletAddress}
               patientId={patientId}
               patientName={patientName}
             />
