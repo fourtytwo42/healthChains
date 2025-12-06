@@ -1072,35 +1072,12 @@ class ConsentService {
         revokedEvents = [];
       }
 
-      // Query AccessApproved events (request approvals that created consents)
-      // AccessApproved event: (uint256 indexed requestId, address indexed patient, uint256[] consentIds, uint128 timestamp)
-      const accessApprovedFilter = filter.patient 
-        ? contract.filters.AccessApproved(null, filter.patient)
-        : contract.filters.AccessApproved(null, null);
-      
-      let accessApprovedEvents;
-      try {
-        accessApprovedEvents = await contract.queryFilter(
-          accessApprovedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        // Ensure it's an array
-        if (!Array.isArray(accessApprovedEvents)) {
-          accessApprovedEvents = [];
-        }
-      } catch (filterError) {
-        console.error('Error querying AccessApproved events:', filterError.message);
-        accessApprovedEvents = [];
-      }
-
-      // Transform and combine events
-      // ConsentGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
-      // AccessApproved event: (uint256 indexed requestId, address indexed patient, uint256[] consentIds, uint128 timestamp)
-      // Both create consents, so we transform both into ConsentGranted-like events for consistency
+      // Transform ConsentGranted events only
+      // Note: AccessApproved events are handled by getAccessRequestEvents() to avoid duplicates
+      // getConsentEvents() should only return actual ConsentGranted events (direct grants)
       const grantedEventList = [];
       
-      // Process ConsentGranted events (direct grants)
+      // Process ConsentGranted events (direct grants only)
       for (const event of grantedEvents) {
         const consentIds = event.args.consentIds || [];
         const patient = ethers.getAddress(event.args.patient);
@@ -1139,52 +1116,6 @@ class ConsentService {
           } catch (error) {
             // If consent record doesn't exist (e.g., was revoked), skip it
             console.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event:`, error.message);
-          }
-        }
-      }
-      
-      // Process AccessApproved events (request approvals that created consents)
-      // Transform them into ConsentGranted-like events for consistency
-      for (const event of accessApprovedEvents) {
-        const consentIds = event.args.consentIds || [];
-        const patient = ethers.getAddress(event.args.patient);
-        const timestamp = new Date(Number(event.args.timestamp) * 1000).toISOString();
-        
-        // For each consentId in the array, fetch the consent record and create an event
-        for (const consentIdBigInt of consentIds) {
-          const consentId = Number(consentIdBigInt);
-          try {
-            const consentRecord = await this.getConsentRecord(consentId);
-            
-            // Create an event for each dataType/purpose combination
-            const dataTypes = consentRecord.dataTypes || [];
-            const purposes = consentRecord.purposes || [];
-            
-            // Create one event per dataType/purpose combination
-            // Mark as AccessApproved type but include all consent data
-            for (const dataType of dataTypes) {
-              for (const purpose of purposes) {
-                grantedEventList.push({
-                  type: 'ConsentGranted', // Treat as ConsentGranted for consent tracking
-                  blockNumber: event.blockNumber,
-                  transactionHash: event.transactionHash,
-                  consentId: consentId,
-                  patient: patient,
-                  provider: consentRecord.providerAddress,
-                  dataType: dataType,
-                  dataTypes: dataTypes,
-                  expirationTime: consentRecord.expirationTime,
-                  purpose: purpose,
-                  purposes: purposes,
-                  timestamp: timestamp,
-                  // Include requestId for reference if needed
-                  requestId: Number(event.args.requestId)
-                });
-              }
-            }
-          } catch (error) {
-            // If consent record doesn't exist (e.g., was revoked), skip it
-            console.warn(`Failed to fetch consent record ${consentId} for AccessApproved event:`, error.message);
           }
         }
       }
