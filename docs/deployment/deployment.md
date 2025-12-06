@@ -130,28 +130,30 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_CHAIN_ID=1337
 ```
 
-### Step 5: Copy Contract ABI
+### Step 5: Contract ABI (Automatic)
 
-The frontend needs the contract ABI for direct contract interactions:
+**The deployment script automatically copies the contract ABI to the frontend**, so you typically don't need to do this manually.
+
+The ABI is copied to `frontend/public/contract-abi.json` in the correct format:
+```json
+{
+  "abi": [...]
+}
+```
+
+**If you need to manually copy the ABI** (e.g., if deployment script fails or you're updating after a contract change):
 
 ```bash
 # From project root
 cd backend
 npx hardhat compile
 
-# Copy ABI to frontend
+# Copy ABI to frontend (wrapped in {abi: [...]} format)
 cat artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json | \
-  jq -r '.abi' | \
-  jq '{abi: .}' > ../frontend/public/contract-abi.json
+  jq '{abi: .abi}' > ../frontend/public/contract-abi.json
 ```
 
-Or manually copy the ABI from `backend/artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json` to `frontend/public/contract-abi.json` with the structure:
-
-```json
-{
-  "abi": [...]
-}
-```
+**Important**: The ABI file must be wrapped in an object with an `abi` property (not just an array), as the frontend expects this structure.
 
 ### Step 6: Set Up Redis (Recommended for Caching)
 
