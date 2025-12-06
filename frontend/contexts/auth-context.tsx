@@ -90,13 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: existingToken,
         error: null,
       }));
+      // Clear flag if we had a valid token
+      isHandlingAccountChangeRef.current = false;
       return;
     }
 
     // Don't authenticate if already authenticating
-    // Note: We don't check isHandlingAccountChangeRef here because when handling account changes,
-    // we explicitly call authenticate() and want it to proceed
+    // This prevents duplicate calls from multiple sources
     if (state.isAuthenticating) {
+      console.log('[AuthContext] Already authenticating, skipping duplicate call');
       return;
     }
 
