@@ -111,11 +111,22 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
     }
   };
 
+  // Format provider information for display (matching consolidated format)
+  const providerInfo = (requestData as any).provider || null;
+  const providerAddress = requestData.requester || 'Unknown';
+  const providerName = providerInfo?.organizationName || 'Unknown Provider';
+  const providerType = providerInfo?.providerType 
+    ? providerInfo.providerType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+    : null;
+  const providerAddressFormatted = providerInfo?.address
+    ? `${providerInfo.address.street || ''}, ${providerInfo.address.city || ''}, ${providerInfo.address.state || ''} ${providerInfo.address.zipCode || ''}`
+    : 'N/A';
+
   return (
     <TooltipProvider>
       <Dialog open onOpenChange={onClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader className="pb-3 flex-shrink-0">
+          <DialogHeader className="pb-4 border-b flex-shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <FileText className="h-4 w-4" />
               Access Request
@@ -123,25 +134,50 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
             <DialogDescription className="text-xs">
               Review the provider's request for access to your health data
             </DialogDescription>
+            
+            {/* Provider Info - Consolidated format matching patient info format */}
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-semibold text-base mb-1">{providerName}</p>
+                {providerType && (
+                  <p className="text-muted-foreground text-xs capitalize">
+                    {providerType}
+                  </p>
+                )}
+                {providerInfo?.specialties && providerInfo.specialties.length > 0 && (
+                  <div className="mt-1">
+                    <ColoredBadgeList
+                      type="specialty"
+                      values={providerInfo.specialties}
+                      maxDisplay={3}
+                      size="sm"
+                    />
+                  </div>
+                )}
+                {providerAddress && providerAddress !== 'Unknown' && (
+                  <p className="text-muted-foreground text-xs font-mono mt-1">
+                    <strong>Wallet:</strong> {providerAddress.slice(0, 6)}...{providerAddress.slice(-4)}
+                  </p>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {providerInfo?.contact?.phone && (
+                  <p><strong>Phone:</strong> {providerInfo.contact.phone}</p>
+                )}
+                {providerInfo?.contact?.email && (
+                  <p><strong>Email:</strong> {providerInfo.contact.email}</p>
+                )}
+                {providerInfo?.contact?.website && (
+                  <p><strong>Website:</strong> {providerInfo.contact.website}</p>
+                )}
+                {providerAddressFormatted !== 'N/A' && (
+                  <p><strong>Address:</strong> {providerAddressFormatted}</p>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-1 space-y-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Building2 className="h-4 w-4" />
-              Provider Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ProviderInfoSection
-              providerInfo={(requestData as any).provider || null}
-              providerAddress={requestData.requester || 'Unknown'}
-              loading={false}
-              showAddress={false}
-            />
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader className="pb-3">
