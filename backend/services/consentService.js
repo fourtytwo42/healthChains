@@ -1435,8 +1435,8 @@ class ConsentService {
       // Sort by block number
       events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
 
-      // Cache result (30 sec - 1 min TTL)
-      const ttl = 45; // 45 seconds
+      // Use shorter TTL for request events (they change when requests are approved/denied)
+      const ttl = 15; // 15 seconds - requests can be approved/denied quickly
       await cacheService.set(cacheKey, events, ttl);
 
       return events;
