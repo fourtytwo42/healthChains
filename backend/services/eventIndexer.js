@@ -343,47 +343,53 @@ class EventIndexer {
       let maxBlock = 0;
 
       try {
-        for (const event of events) {
-          const blockNumber = typeof event.blockNumber === 'number' 
-            ? event.blockNumber 
-            : parseInt(event.blockNumber.toString(), 10);
-          if (blockNumber > maxBlock) {
-            maxBlock = blockNumber;
+        // Process events in batches to reduce memory usage (improvement #12)
+        const STORAGE_BATCH_SIZE = 100;
+        for (let i = 0; i < events.length; i += STORAGE_BATCH_SIZE) {
+          const batch = events.slice(i, i + STORAGE_BATCH_SIZE);
+          
+          for (const event of batch) {
+            const blockNumber = typeof event.blockNumber === 'number' 
+              ? event.blockNumber 
+              : parseInt(event.blockNumber.toString(), 10);
+            if (blockNumber > maxBlock) {
+              maxBlock = blockNumber;
+            }
+
+            // Extract log index from transaction hash if available (for uniqueness)
+            const logIndex = event.logIndex || 0;
+            const timestamp = event.timestamp 
+              ? Math.floor(new Date(event.timestamp).getTime() / 1000)
+              : null;
+            const expirationTime = event.expirationTime
+              ? (typeof event.expirationTime === 'string' 
+                  ? Math.floor(new Date(event.expirationTime).getTime() / 1000)
+                  : parseInt(event.expirationTime.toString(), 10))
+              : null;
+
+            await client.query(
+              `INSERT INTO access_request_events (
+                event_type, block_number, transaction_hash, log_index,
+                request_id, patient_address, provider_address,
+                timestamp, data_types, purposes, expiration_time, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+              ON CONFLICT (transaction_hash, log_index) DO NOTHING`,
+              [
+                event.type,
+                blockNumber,
+                event.transactionHash,
+                logIndex,
+                event.requestId || null,
+                event.patient ? normalizeAddress(event.patient) : null,
+                (event.provider || event.requester) ? normalizeAddress(event.provider || event.requester) : null,
+                timestamp,
+                event.dataTypes || null,
+                event.purposes || null,
+                expirationTime,
+                event.type // Use event type as status
+              ]
+            );
           }
-
-          // Extract log index from transaction hash if available (for uniqueness)
-          const logIndex = event.logIndex || 0;
-          const timestamp = event.timestamp 
-            ? Math.floor(new Date(event.timestamp).getTime() / 1000)
-            : null;
-          const expirationTime = event.expirationTime
-            ? (typeof event.expirationTime === 'string' 
-                ? Math.floor(new Date(event.expirationTime).getTime() / 1000)
-                : parseInt(event.expirationTime.toString(), 10))
-            : null;
-
-          await client.query(
-            `INSERT INTO access_request_events (
-              event_type, block_number, transaction_hash, log_index,
-              request_id, patient_address, provider_address,
-              timestamp, data_types, purposes, expiration_time, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            ON CONFLICT (transaction_hash, log_index) DO NOTHING`,
-            [
-              event.type,
-              blockNumber,
-              event.transactionHash,
-              logIndex,
-              event.requestId || null,
-              event.patient ? normalizeAddress(event.patient) : null,
-              (event.provider || event.requester) ? normalizeAddress(event.provider || event.requester) : null,
-              timestamp,
-              event.dataTypes || null,
-              event.purposes || null,
-              expirationTime,
-              event.type // Use event type as status
-            ]
-          );
         }
 
         // Update last processed block for all access request event types

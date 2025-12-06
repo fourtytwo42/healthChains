@@ -132,7 +132,13 @@ This document covers scalability considerations, limitations, and strategies for
 - ✅ O(1) Map lookups - **IMPLEMENTED** - Patient/provider lookups use Map instead of array searches
 - ✅ Pagination support - **IMPLEMENTED** - `/api/patients` and `/api/providers` support pagination
 - ✅ Optimized consent queries - **IMPLEMENTED** - `getProviderConsents()` optimized to reduce redundant contract calls
-- ✅ Batch event processing - **IMPLEMENTED** - Events processed in batches of 50 to reduce memory usage
+- ✅ Batch event processing - **IMPLEMENTED** - All event processing operations use batch processing:
+  - ConsentGranted events: 50 events per batch
+  - ConsentRevoked events: 50 events per batch
+  - Access request events: 50 events per batch (AccessRequested, AccessApproved, AccessDenied)
+  - PostgreSQL query results: 100 rows per batch for transformation
+  - PostgreSQL storage: 100 events per batch for database inserts
+  - Prevents memory spikes and ensures predictable memory consumption patterns
 - ✅ Request timeout middleware - **IMPLEMENTED** - Prevents resource exhaustion from hanging requests
 - ✅ RPC health checks - **IMPLEMENTED** - Automatic reconnection if blockchain connection fails
 - CDN for static assets (can be added)
