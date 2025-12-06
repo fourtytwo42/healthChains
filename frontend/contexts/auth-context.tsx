@@ -147,10 +147,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Failed to get signer');
       }
       console.log('[AuthContext] authenticate() - Step 2 complete, got signer');
+      console.log('[AuthContext] authenticate() - Signer address:', await signer.getAddress());
+
+      // Double-check ref one more time before signing (defense in depth)
+      if (isAuthenticatingRef.current === false) {
+        console.log('[AuthContext] authenticate() - Ref was cleared before signing, aborting');
+        return;
+      }
 
       console.log('[AuthContext] authenticate() - Step 3: Requesting signature from MetaMask');
+      console.log('[AuthContext] authenticate() - Message to sign:', message.substring(0, 50) + '...');
       const signature = await signer.signMessage(message);
-      console.log('[AuthContext] authenticate() - Step 3 complete, got signature');
+      console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
 
       // Step 3: Login and get JWT token
       const authToken = await login(account, signature, message, timestamp);
