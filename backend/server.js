@@ -78,7 +78,10 @@ attachDeterministicWallets();
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
 const consentService = require('./services/consentService');
+const cacheService = require('./services/cacheService');
 const { consentRouter, requestRouter, eventRouter } = require('./routes/consentRoutes');
+const authRouter = require('./routes/authRoutes');
+const { authenticate, verifyOwnership, verifyParticipant } = require('./middleware/auth');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -99,14 +102,16 @@ console.log(`Available purposes: ${mockPatients.purposes.join(', ')}`);
 console.log('='.repeat(60));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  const cacheHealth = await cacheService.healthCheck();
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     data: {
       patients: mockPatients.mockPatients.patients.length,
       providers: mockProviders.mockProviders.providers.length
-    }
+    },
+    cache: cacheHealth
   });
 });
 
@@ -354,7 +359,7 @@ function paginateArray(array, page = 1, limit = 10) {
 
 // Provider-specific endpoints
 // GET /api/provider/:providerAddress/consents
-app.get('/api/provider/:providerAddress/consents', async (req, res, next) => {
+app.get('/api/provider/:providerAddress/consents', authenticate, verifyOwnership('providerAddress'), async (req, res, next) => {
   try {
     const { providerAddress } = req.params;
     const { page = 1, limit = 10, includeExpired = false } = req.query;
@@ -381,7 +386,7 @@ app.get('/api/provider/:providerAddress/consents', async (req, res, next) => {
 });
 
 // GET /api/provider/:providerAddress/patients
-app.get('/api/provider/:providerAddress/patients', async (req, res, next) => {
+app.get('/api/provider/:providerAddress/patients', authenticate, verifyOwnership('providerAddress'), async (req, res, next) => {
   try {
     const { providerAddress } = req.params;
     const { page = 1, limit = 10 } = req.query;
@@ -439,7 +444,7 @@ app.get('/api/provider/:providerAddress/patients', async (req, res, next) => {
 });
 
 // GET /api/provider/:providerAddress/pending-requests
-app.get('/api/provider/:providerAddress/pending-requests', async (req, res, next) => {
+app.get('/api/provider/:providerAddress/pending-requests', authenticate, verifyOwnership('providerAddress'), async (req, res, next) => {
   try {
     const { providerAddress } = req.params;
     const { page = 1, limit = 10 } = req.query;
@@ -478,7 +483,7 @@ app.get('/api/provider/:providerAddress/pending-requests', async (req, res, next
 });
 
 // GET /api/provider/:providerAddress/patient/:patientId/data
-app.get('/api/provider/:providerAddress/patient/:patientId/data', async (req, res, next) => {
+app.get('/api/provider/:providerAddress/patient/:patientId/data', authenticate, verifyOwnership('providerAddress'), async (req, res, next) => {
   try {
     const { providerAddress, patientId } = req.params;
     
@@ -598,7 +603,7 @@ app.get('/api/provider/:providerAddress/patient/:patientId/data', async (req, re
 
 // Patient-specific endpoints
 // GET /api/patient/:patientAddress/consents
-app.get('/api/patient/:patientAddress/consents', async (req, res, next) => {
+app.get('/api/patient/:patientAddress/consents', authenticate, verifyOwnership('patientAddress'), async (req, res, next) => {
   try {
     const { patientAddress } = req.params;
     const { page = 1, limit = 10, includeExpired = false } = req.query;
@@ -643,7 +648,7 @@ app.get('/api/patient/:patientAddress/consents', async (req, res, next) => {
 });
 
 // GET /api/patient/:patientAddress/pending-requests
-app.get('/api/patient/:patientAddress/pending-requests', async (req, res, next) => {
+app.get('/api/patient/:patientAddress/pending-requests', authenticate, verifyOwnership('patientAddress'), async (req, res, next) => {
   try {
     const { patientAddress } = req.params;
     const { page = 1, limit = 10 } = req.query;
@@ -777,7 +782,11 @@ app.get('/api/contract/info', async (req, res, next) => {
   }
 });
 
+// Authentication routes (public)
+app.use('/api/auth', authRouter);
+
 // Consent management routes (Web3 integration)
+// Protect routes that require authentication
 app.use('/api/consent', consentRouter);
 app.use('/api/requests', requestRouter);
 app.use('/api/events', eventRouter);
@@ -788,6 +797,16 @@ app.use(errorHandler);
 
 // Initialize Web3 service and start server
 async function startServer() {
+  try {
+    // Initialize cache service
+    console.log('Initializing cache service...');
+    await cacheService.initialize();
+    console.log('✅ Cache service initialized successfully\n');
+  } catch (error) {
+    console.error('⚠️  Warning: Cache service initialization failed:', error.message);
+    console.error('   Continuing without cache. Some endpoints may be slower.\n');
+  }
+
   try {
     // Initialize Web3 service
     console.log('Initializing Web3 service...');

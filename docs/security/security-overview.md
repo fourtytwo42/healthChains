@@ -197,11 +197,15 @@ modifier validString(string memory str) {
 
 ### API Security
 
+**JWT Authentication**: All protected endpoints require JWT tokens obtained via MetaMask signature verification.
+
 **Input Validation**: All API endpoints validate inputs.
 
 **CORS Protection**: Cross-origin requests restricted.
 
 **Error Handling**: Secure error messages (no stack traces in production).
+
+**Ownership Verification**: Middleware ensures users can only access their own data.
 
 **Rate Limiting**: Can be added for production (not implemented in current version).
 
@@ -211,10 +215,17 @@ modifier validString(string memory str) {
 
 **No Hardcoded Secrets**: All secrets in environment variables.
 
+**JWT Secret**: Critical secret for token signing - must be:
+- At least 32 bytes (64 hex characters)
+- Cryptographically random
+- Stored securely
+- Rotated periodically
+
 **Production Best Practices**:
 - Use secrets management (AWS Secrets Manager, HashiCorp Vault)
-- Rotate secrets regularly
+- Rotate secrets regularly (especially JWT_SECRET)
 - Restrict access to secrets
+- Never commit secrets to version control
 
 ### Logging
 
@@ -349,6 +360,7 @@ modifier validString(string memory str) {
 3. **No Time-Locked Revocation**: Revocation is immediate (can add delay)
 4. **Public Transparency**: All consents are publicly visible (by design)
 5. **No Rate Limiting**: API doesn't have rate limiting (can be added)
+6. **JWT Token Storage**: Tokens stored in browser localStorage (consider httpOnly cookies for production)
 
 ### Future Security Enhancements
 

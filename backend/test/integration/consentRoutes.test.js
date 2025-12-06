@@ -1,5 +1,7 @@
 const { expect } = require('chai');
 process.env.HARDHAT_NETWORK = process.env.HARDHAT_NETWORK || 'localhost';
+// Disable authentication for integration tests
+process.env.AUTH_REQUIRED = 'false';
 const { ethers } = require('hardhat');
 const { time } = require('@nomicfoundation/hardhat-network-helpers');
 const request = require('supertest');
@@ -26,6 +28,12 @@ describe('Consent Routes - Integration Tests', function () {
   // Create Express app for testing
   before(function () {
     this.timeout(10000); // 10 second timeout for setup
+    // Ensure AUTH_REQUIRED is set before creating app
+    process.env.AUTH_REQUIRED = 'false';
+    // Clear module cache to ensure fresh middleware
+    delete require.cache[require.resolve('../../middleware/auth')];
+    delete require.cache[require.resolve('../../routes/consentRoutes')];
+    
     app = express();
     app.use(cors());
     app.use(express.json());
@@ -73,12 +81,16 @@ describe('Consent Routes - Integration Tests', function () {
     it('should return true when consent exists', async function () {
       // Grant consent
       const expirationTime = Math.floor(Date.now() / 1000) + 86400; // 1 day from now
-      await consentManager.connect(patient).grantConsent(
+      const tx = await consentManager.connect(patient).grantConsent(
         providerAddress,
-        'medical_records',
+        ['medical_records'],
         expirationTime,
-        'treatment'
+        ['treatment']
       );
+      await tx.wait(); // Wait for transaction to be mined
+
+      // Small delay to ensure event is indexed
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const res = await request(app)
         .get('/api/consent/status')
@@ -131,9 +143,9 @@ describe('Consent Routes - Integration Tests', function () {
       const expirationTime = Number(latestBlock.timestamp) + 86400;
       const tx = await consentManager.connect(patient).grantConsent(
         providerAddress,
-        'genetic_data',
+        ['genetic_data'],
         expirationTime,
-        'research'
+        ['research']
       );
       const receipt = await tx.wait();
       const event = receipt.logs.find(log => {
@@ -145,7 +157,11 @@ describe('Consent Routes - Integration Tests', function () {
       });
       if (event) {
         const parsed = consentManager.interface.parseLog(event);
-        consentId = Number(parsed.args.consentId);
+        // ConsentGranted event now emits consentIds as an array
+        const consentIds = parsed.args.consentIds || [];
+        if (consentIds.length > 0) {
+          consentId = Number(consentIds[0]);
+        }
       }
     });
 
@@ -158,7 +174,9 @@ describe('Consent Routes - Integration Tests', function () {
       expect(res.body.data.consentId).to.equal(consentId);
       expect(res.body.data.patientAddress.toLowerCase()).to.equal(patientAddress.toLowerCase());
       expect(res.body.data.providerAddress.toLowerCase()).to.equal(providerAddress.toLowerCase());
-      expect(res.body.data.dataType).to.equal('genetic_data');
+      // New structure uses dataTypes array
+      expect(res.body.data.dataTypes).to.be.an('array');
+      expect(res.body.data.dataTypes).to.include('genetic_data');
     });
 
     it('should return 404 for non-existent consent', async function () {
@@ -196,9 +214,9 @@ describe('Consent Routes - Integration Tests', function () {
       const expirationTime = Number(latestBlock.timestamp) + 60; // 1 minute ahead of chain time
       await consentManager.connect(patient).grantConsent(
         providerAddress,
-        'imaging_data',
+        ['imaging_data'],
         expirationTime,
-        'treatment'
+        ['treatment']
       );
 
       // Fast-forward time beyond expiration (checkAndExpireConsents removed - expiration checked off-chain)
@@ -233,8 +251,8 @@ describe('Consent Routes - Integration Tests', function () {
       const expirationTime = Math.floor(Date.now() / 1000) + 86400;
       const tx = await consentManager.connect(requester).requestAccess(
         patientAddress,
-        'medical_records',
-        'treatment',
+        ['medical_records'],
+        ['treatment'],
         expirationTime
       );
       const receipt = await tx.wait();
@@ -283,10 +301,11 @@ describe('Consent Routes - Integration Tests', function () {
     });
 
     it('should filter by status', async function () {
-      // Approve a request
-      const requests = await consentManager.getPatientRequests(patientAddress);
-      if (requests.length > 0) {
-        await consentManager.connect(patient).respondToAccessRequest(requests[0], true);
+      // Approve a request (getPatientRequests returns array of BigInt requestIds)
+      const requestIds = await consentManager.getPatientRequests(patientAddress);
+      if (requestIds.length > 0) {
+        const requestId = Number(requestIds[0]);
+        await consentManager.connect(patient).respondToAccessRequest(requestId, true);
       }
 
       const res = await request(app)

@@ -4,6 +4,7 @@ const requestRouter = express.Router();
 const eventRouter = express.Router();
 const consentService = require('../services/consentService');
 const web3Service = require('../services/web3Service');
+const { authenticate, verifyParticipant, verifyOwnership } = require('../middleware/auth');
 const {
   validateAddressParam,
   validateConsentId,
@@ -38,7 +39,7 @@ const { ValidationError } = require('../utils/errors');
  * - isExpired: boolean
  * - expirationTime: string (ISO) | null
  */
-consentRouter.get('/status', async (req, res, next) => {
+consentRouter.get('/status', authenticate, verifyParticipant(), async (req, res, next) => {
   try {
     const { patientAddress, providerAddress, dataType } = req.query;
 
@@ -280,6 +281,8 @@ consentRouter.get('/:consentId', validateConsentId(), async (req, res, next) => 
  */
 consentRouter.get(
   '/patient/:patientAddress',
+  authenticate,
+  verifyOwnership('patientAddress'),
   validateAddressParam('patientAddress'),
   validateIncludeExpired(),
   async (req, res, next) => {
@@ -329,6 +332,8 @@ consentRouter.get(
  */
 consentRouter.get(
   '/provider/:providerAddress',
+  authenticate,
+  verifyOwnership('providerAddress'),
   validateAddressParam('providerAddress'),
   validateIncludeExpired(),
   async (req, res, next) => {
@@ -429,6 +434,8 @@ requestRouter.get('/:requestId', validateRequestId(), async (req, res, next) => 
  */
 requestRouter.get(
   '/patient/:patientAddress',
+  authenticate,
+  verifyOwnership('patientAddress'),
   validateAddressParam('patientAddress'),
   validateStatus(),
   async (req, res, next) => {

@@ -150,20 +150,24 @@ healthChains/
 
 - **Smart Contracts**: Solidity ^0.8.20, OpenZeppelin Contracts
 - **Blockchain**: Hardhat (development), Ethereum-compatible
-- **Backend**: Node.js, Express, Ethers.js v6
+- **Backend**: Node.js, Express, Ethers.js v6, JWT Authentication, Redis Caching
 - **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS, shadcn/ui
 - **Testing**: Hardhat, Mocha, Chai, Jest, Playwright
 - **Process Management**: PM2
+- **Caching**: Redis (optional, graceful degradation)
 
 ## 🔐 Security Highlights
 
+- ✅ JWT authentication with MetaMask signature verification
 - ✅ ReentrancyGuard on all state-changing functions
 - ✅ Comprehensive input validation
 - ✅ Access control checks on all sensitive operations
+- ✅ Ownership verification middleware
 - ✅ Custom errors for gas-efficient reverts
 - ✅ Event-based off-chain queries (no unbounded loops)
 - ✅ No dangerous external calls
 - ✅ Defense-in-depth validation
+- ✅ Redis caching for performance (graceful degradation)
 
 See [Security Documentation](docs/security/security-overview.md) for complete details.
 

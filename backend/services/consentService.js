@@ -1,4 +1,5 @@
 const web3Service = require('./web3Service');
+const cacheService = require('./cacheService');
 const { normalizeAddress, validateAddress } = require('../utils/addressUtils');
 const { 
   ValidationError, 
@@ -167,6 +168,13 @@ class ConsentService {
     const normalizedPatient = normalizeAddress(patientAddress);
     const normalizedProvider = normalizeAddress(providerAddress);
 
+    // Check cache first
+    const cacheKey = `consent:status:${normalizedPatient}:${normalizedProvider}:${dataType}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     try {
       // Use event-based lookup instead of contract call
       // Get all consent events for this patient
@@ -235,21 +243,28 @@ class ConsentService {
       }
       
       // Return result
+      let result;
       if (activeConsent) {
-        return {
+        result = {
           hasConsent: true,
           consentId: activeConsent.consentId,
           isExpired: false,
           expirationTime: activeConsent.expirationTime
         };
       } else {
-        return {
+        result = {
           hasConsent: false,
           consentId: null,
           isExpired: false,
           expirationTime: null
         };
       }
+
+      // Cache result (5-10 minutes TTL)
+      const ttl = 7 * 60; // 7 minutes (middle of 5-10 range)
+      await cacheService.set(cacheKey, result, ttl);
+
+      return result;
     } catch (error) {
       if (error instanceof ValidationError || error instanceof ContractError) {
         throw error;
@@ -277,11 +292,18 @@ class ConsentService {
       throw new InvalidIdError(consentId, 'consentId');
     }
 
+    // Check cache first
+    const cacheKey = `consent:record:${consentId}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     try {
       const contract = await this._ensureContract();
       
       // Fetch consent record (always returns BatchConsentRecord, with backward compatibility for old ConsentRecords)
-      const result = await Promise.race([
+      const contractResult = await Promise.race([
         contract.getConsentRecord(consentId),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Request timeout')), 30000)
@@ -289,7 +311,7 @@ class ConsentService {
       ]);
       
       // getConsentRecord always returns BatchConsentRecord (new format)
-      const batchRecord = result;
+      const batchRecord = contractResult;
       
       // Look up strings from hashes for all data types and purposes
       const dataTypes = await Promise.all(
@@ -314,7 +336,7 @@ class ConsentService {
         })
       );
       
-      return {
+      const result = {
         consentId: Number(consentId),
         patientAddress: ethers.getAddress(batchRecord.patientAddress),
         providerAddress: ethers.getAddress(batchRecord.providerAddress),
@@ -329,6 +351,12 @@ class ConsentService {
         isExpired: batchRecord.expirationTime !== 0n && 
                    Number(batchRecord.expirationTime) < Math.floor(Date.now() / 1000)
       };
+
+      // Cache result (1-2 minutes TTL)
+      const ttl = 90; // 90 seconds (middle of 1-2 min range)
+      await cacheService.set(cacheKey, result, ttl);
+
+      return result;
     } catch (error) {
       if (error.code === 'CALL_EXCEPTION' || error.reason === 'ConsentNotFound()') {
         throw new NotFoundError('Consent', consentId);
@@ -356,6 +384,13 @@ class ConsentService {
   async getPatientConsents(patientAddress, includeExpired = false) {
     validateAddress(patientAddress, 'patientAddress');
     const normalizedAddress = normalizeAddress(patientAddress);
+
+    // Check cache first
+    const cacheKey = `consent:patient:${normalizedAddress}:${includeExpired}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
 
     try {
       const contract = await this._ensureContract();
@@ -388,6 +423,10 @@ class ConsentService {
         filtered = filtered.filter(r => !r.isExpired && r.isActive);
       }
 
+      // Cache result (1-2 minutes TTL)
+      const ttl = 90; // 90 seconds
+      await cacheService.set(cacheKey, filtered, ttl);
+
       return filtered;
     } catch (error) {
       if (error.message === 'Request timeout') {
@@ -413,6 +452,13 @@ class ConsentService {
   async getProviderConsents(providerAddress, includeExpired = false) {
     validateAddress(providerAddress, 'providerAddress');
     const normalizedAddress = normalizeAddress(providerAddress);
+
+    // Check cache first
+    const cacheKey = `consent:provider:${normalizedAddress}:${includeExpired}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
 
     try {
       const contract = await this._ensureContract();
@@ -474,6 +520,10 @@ class ConsentService {
       } else {
         filtered = uniqueConsents;
       }
+
+      // Cache result (1-2 minutes TTL)
+      const ttl = 90; // 90 seconds
+      await cacheService.set(cacheKey, filtered, ttl);
 
       return filtered;
     } catch (error) {
@@ -551,6 +601,13 @@ class ConsentService {
       throw new InvalidIdError(requestId, 'requestId');
     }
 
+    // Check cache first
+    const cacheKey = `request:${requestId}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     try {
       const contract = await this._ensureContract();
       
@@ -568,7 +625,13 @@ class ConsentService {
         const dataTypes = await contract.getRequestDataTypes(requestId);
         const purposes = await contract.getRequestPurposes(requestId);
 
-        return this._transformAccessRequest(request, requestId, dataTypes, purposes);
+        const result = this._transformAccessRequest(request, requestId, dataTypes, purposes);
+        
+        // Cache result (1-2 minutes TTL)
+        const ttl = 90; // 90 seconds
+        await cacheService.set(cacheKey, result, ttl);
+
+        return result;
       } catch (contractError) {
         console.warn('Contract getAccessRequest failed, using event-based fallback:', contractError.message);
         
@@ -605,7 +668,7 @@ class ConsentService {
           }
           
           // Build request object from event
-          return {
+          const result = {
             requestId: requestId,
             requester: requestedEvent.requester,
             patientAddress: requestedEvent.patient,
@@ -617,6 +680,12 @@ class ConsentService {
             status: status,
             isExpired: requestedEvent.expirationTime && new Date(requestedEvent.expirationTime) < new Date()
           };
+
+          // Cache result (1-2 minutes TTL)
+          const ttl = 90; // 90 seconds
+          await cacheService.set(cacheKey, result, ttl);
+
+          return result;
         } catch (eventError) {
           if (eventError instanceof NotFoundError) {
             throw eventError;
@@ -666,6 +735,13 @@ class ConsentService {
         'status',
         status
       );
+    }
+
+    // Check cache first
+    const cacheKey = `requests:patient:${normalizedAddress}:${status}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
     }
 
     try {
@@ -754,6 +830,10 @@ class ConsentService {
       if (status !== 'all') {
         filtered = filtered.filter(r => r.status === status);
       }
+
+      // Cache result (1-2 minutes TTL)
+      const ttl = 90; // 90 seconds
+      await cacheService.set(cacheKey, filtered, ttl);
 
       return filtered;
     } catch (error) {
@@ -871,6 +951,16 @@ class ConsentService {
       }
     }
 
+    // Check cache first
+    const normalizedPatient = patientAddress ? normalizeAddress(patientAddress) : 'all';
+    const fromBlockStr = fromBlock !== null ? fromBlock.toString() : 'null';
+    const toBlockStr = toBlock !== null ? toBlock.toString() : 'null';
+    const cacheKey = `events:consent:${normalizedPatient}:${fromBlockStr}:${toBlockStr}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     try {
       const contract = await this._ensureContract();
       
@@ -891,12 +981,11 @@ class ConsentService {
       const fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
       const toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
       
-      // ConsentGranted event: (uint256 indexed consentId, address indexed patient, address indexed provider, ...)
-      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
-      // In ethers v6, pass null for unfiltered indexed parameters
+      // ConsentGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
+      // Only patient is indexed, so filter by patient if provided
       const grantedFilter = filter.patient 
-        ? contract.filters.ConsentGranted(null, filter.patient, null)
-        : contract.filters.ConsentGranted(null, null, null);
+        ? contract.filters.ConsentGranted(filter.patient)
+        : contract.filters.ConsentGranted();
       
       let grantedEvents;
       try {
@@ -918,7 +1007,7 @@ class ConsentService {
       // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
       const revokedFilter = filter.patient
         ? contract.filters.ConsentRevoked(null, filter.patient)
-        : contract.filters.ConsentRevoked(null, null);
+        : contract.filters.ConsentRevoked();
       
       let revokedEvents;
       try {
@@ -937,50 +1026,53 @@ class ConsentService {
       }
 
       // Transform and combine events
+      // ConsentGranted event now has: (address indexed patient, uint256[] consentIds, uint128 timestamp)
+      // We need to fetch each consent record to get full details
+      const grantedEventList = [];
+      for (const event of grantedEvents) {
+        const consentIds = event.args.consentIds || [];
+        const patient = ethers.getAddress(event.args.patient);
+        const timestamp = new Date(Number(event.args.timestamp) * 1000).toISOString();
+        
+        // For each consentId in the array, fetch the consent record and create an event
+        for (const consentIdBigInt of consentIds) {
+          const consentId = Number(consentIdBigInt);
+          try {
+            const consentRecord = await this.getConsentRecord(consentId);
+            
+            // Create an event for each dataType/purpose combination
+            // Since we now use BatchConsentRecord, we have arrays of dataTypes and purposes
+            const dataTypes = consentRecord.dataTypes || [];
+            const purposes = consentRecord.purposes || [];
+            
+            // Create one event per dataType (use first purpose or all purposes)
+            for (const dataType of dataTypes) {
+              for (const purpose of purposes) {
+                grantedEventList.push({
+                  type: 'ConsentGranted',
+                  blockNumber: event.blockNumber,
+                  transactionHash: event.transactionHash,
+                  consentId: consentId,
+                  patient: patient,
+                  provider: consentRecord.providerAddress,
+                  dataType: dataType,
+                  dataTypes: dataTypes,
+                  expirationTime: consentRecord.expirationTime,
+                  purpose: purpose,
+                  purposes: purposes,
+                  timestamp: timestamp
+                });
+              }
+            }
+          } catch (error) {
+            // If consent record doesn't exist (e.g., was revoked), skip it
+            console.warn(`Failed to fetch consent record ${consentId} for event:`, error.message);
+          }
+        }
+      }
+      
       const events = [
-        ...(await Promise.all(grantedEvents.map(async (event) => {
-          // Event now emits bytes32 hashes, need to look up strings
-          let dataType = event.args.dataTypeHash || event.args.dataType;
-          let purpose = event.args.purposeHash || event.args.purpose;
-          
-          // If we have hashes, look up the strings
-          if (event.args.dataTypeHash && typeof event.args.dataTypeHash === 'string' && event.args.dataTypeHash.startsWith('0x')) {
-            try {
-              const lookup = await contract.dataTypeHashToString(event.args.dataTypeHash);
-              if (lookup && lookup.length > 0) {
-                dataType = lookup;
-              }
-            } catch (error) {
-              console.warn('Failed to look up dataType from hash in event:', error.message);
-            }
-          }
-          
-          if (event.args.purposeHash && typeof event.args.purposeHash === 'string' && event.args.purposeHash.startsWith('0x')) {
-            try {
-              const lookup = await contract.purposeHashToString(event.args.purposeHash);
-              if (lookup && lookup.length > 0) {
-                purpose = lookup;
-              }
-            } catch (error) {
-              console.warn('Failed to look up purpose from hash in event:', error.message);
-            }
-          }
-          
-          return {
-            type: 'ConsentGranted',
-            blockNumber: event.blockNumber,
-            transactionHash: event.transactionHash,
-            consentId: Number(event.args.consentId),
-            patient: ethers.getAddress(event.args.patient),
-            provider: ethers.getAddress(event.args.provider),
-            dataType: dataType,
-            expirationTime: event.args.expirationTime === 0n 
-              ? null 
-              : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
-            purpose: purpose,
-            timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-          };
-        }))),
+        ...grantedEventList,
         ...(await Promise.all(revokedEvents.map(async (event) => {
           const consentId = Number(event.args.consentId);
           let provider = null;
@@ -1083,6 +1175,16 @@ class ConsentService {
       if (toBlock - fromBlock > 10000) {
         throw new ValidationError('Block range cannot exceed 10000 blocks', 'toBlock', toBlock);
       }
+    }
+
+    // Check cache first
+    const normalizedPatient = patientAddress ? normalizeAddress(patientAddress) : 'all';
+    const fromBlockStr = fromBlock !== null ? fromBlock.toString() : 'null';
+    const toBlockStr = toBlock !== null ? toBlock.toString() : 'null';
+    const cacheKey = `events:requests:${normalizedPatient}:${fromBlockStr}:${toBlockStr}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached !== null) {
+      return cached;
     }
 
     try {
@@ -1234,6 +1336,10 @@ class ConsentService {
 
       // Sort by block number
       events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+
+      // Cache result (30 sec - 1 min TTL)
+      const ttl = 45; // 45 seconds
+      await cacheService.set(cacheKey, events, ttl);
 
       return events;
     } catch (error) {

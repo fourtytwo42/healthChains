@@ -11,9 +11,57 @@ Production: <your-backend-url>
 
 ## Authentication
 
-Currently, the API does not require authentication for read operations. Write operations are handled directly through MetaMask on the frontend.
+The API uses **JWT (JSON Web Token) authentication** for all protected endpoints. Authentication is based on MetaMask signature verification.
 
-**Future**: API authentication may be added for production deployments.
+### Authentication Flow
+
+1. **Get Sign Message**: Client requests a message to sign
+   ```
+   GET /api/auth/message?address=0x...
+   ```
+
+2. **Sign with MetaMask**: User signs the message with their private key
+
+3. **Login**: Client sends signature to get JWT token
+   ```
+   POST /api/auth/login
+   {
+     "address": "0x...",
+     "signature": "0x...",
+     "timestamp": 1234567890
+   }
+   ```
+
+4. **Use Token**: Include token in Authorization header for protected endpoints
+   ```
+   Authorization: Bearer <jwt_token>
+   ```
+
+### Protected Endpoints
+
+All endpoints except `/health` and `/api/contract/info` require authentication. The following endpoints are protected:
+
+- All `/api/patients/*` endpoints
+- All `/api/providers/*` endpoints
+- All `/api/consent/*` endpoints
+- All `/api/requests/*` endpoints
+- All `/api/events/*` endpoints
+- `/api/user/role`
+- `/api/data-types`
+- `/api/purposes`
+
+### Development Mode
+
+For development/testing, authentication can be disabled by setting:
+```
+AUTH_REQUIRED=false
+```
+
+**Warning**: Never disable authentication in production!
+
+### Write Operations
+
+Write operations (grant consent, revoke consent, request access, approve/deny requests) are **not** handled via REST API. These operations are performed directly through MetaMask on the frontend by calling the smart contract functions. The backend API is read-only for security and decentralization.
 
 ## Response Format
 
@@ -365,6 +413,71 @@ Get all pending access requests for a patient.
 **Path Parameters**:
 - `patientAddress`: Patient wallet address
 
+### Authentication Endpoints
+
+#### GET /api/auth/message
+
+Get a message to sign with MetaMask for authentication.
+
+**Query Parameters**:
+- `address` (required): Ethereum address
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Sign this message to authenticate...",
+    "timestamp": 1234567890
+  }
+}
+```
+
+#### POST /api/auth/login
+
+Authenticate with MetaMask signature and receive JWT token.
+
+**Body**:
+```json
+{
+  "address": "0x...",
+  "signature": "0x...",
+  "timestamp": 1234567890
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "address": "0x...",
+    "expiresIn": "1h"
+  }
+}
+```
+
+#### POST /api/auth/verify
+
+Verify JWT token validity (protected endpoint).
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Token is valid",
+    "user": {
+      "address": "0x..."
+    }
+  }
+}
+```
+
 ### Events
 
 #### GET /api/events/consent
@@ -393,6 +506,10 @@ Query access request events.
 
 | Code | Description |
 |------|-------------|
+| `AUTHENTICATION_REQUIRED` | JWT token required |
+| `TOKEN_EXPIRED` | JWT token has expired |
+| `INVALID_TOKEN` | Invalid JWT token |
+| `ACCESS_DENIED` | User does not have permission to access resource |
 | `INVALID_ADDRESS` | Invalid Ethereum address |
 | `CONSENT_NOT_FOUND` | Consent ID does not exist |
 | `REQUEST_NOT_FOUND` | Request ID does not exist |

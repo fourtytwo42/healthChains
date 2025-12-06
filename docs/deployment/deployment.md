@@ -20,6 +20,7 @@ Before deploying, ensure you have:
 - **Hardhat** (for smart contract deployment)
 - **MetaMask** (for frontend interactions)
 - **PM2** (for production process management) - `npm install -g pm2`
+- **Redis** (for caching) - See [Redis Setup](#redis-setup) below
 
 ## Local Development Deployment
 
@@ -95,11 +96,26 @@ CHAIN_ID=1337
 # Contract Configuration (auto-loaded from deployment.json)
 # CONTRACT_ADDRESS is read from deployment.json
 
+# Authentication Configuration
+JWT_SECRET=your_jwt_secret_here  # Generate a secure random string
+JWT_EXPIRES_IN=1h  # Token expiration time
+SIGNATURE_VALIDITY_DURATION=300  # Signature validity in seconds (5 minutes)
+AUTH_REQUIRED=true  # Set to 'false' for development/testing without auth
+
+# Redis Configuration (for caching)
+REDIS_URL=redis://localhost:6379  # Redis connection URL
+
 # Optional: Private key for automated operations (not recommended for production)
 # PRIVATE_KEY=your_private_key_here
 
 # Logging
 LOG_LEVEL=info
+```
+
+**Important**: Generate a secure JWT_SECRET for production:
+```bash
+# Generate a secure random secret
+openssl rand -hex 32
 ```
 
 #### Frontend Configuration
@@ -149,7 +165,7 @@ The backend will:
 - Connect to the Hardhat network
 - Display all available routes
 
-### Step 7: Start Frontend
+### Step 8: Start Frontend
 
 In a **new terminal**:
 
@@ -166,7 +182,7 @@ npm start
 
 The frontend will start on `http://localhost:3000`.
 
-### Step 8: Configure MetaMask
+### Step 9: Configure MetaMask
 
 1. **Install MetaMask** browser extension
 2. **Add Network**:
@@ -434,6 +450,11 @@ See [PM2_SETUP.md](../../PM2_SETUP.md) for detailed PM2 setup.
 | `NETWORK_NAME` | Yes | - | Network name (`localhost`, `mainnet`, `polygon`) |
 | `CHAIN_ID` | Yes | - | Chain ID (`1337`, `1`, `137`) |
 | `CONTRACT_ADDRESS` | Yes* | - | Deployed contract address (*auto-loaded from deployment.json if not set) |
+| `JWT_SECRET` | Yes | - | Secret key for JWT token signing (generate with `openssl rand -hex 32`) |
+| `JWT_EXPIRES_IN` | No | `1h` | JWT token expiration time |
+| `SIGNATURE_VALIDITY_DURATION` | No | `300` | MetaMask signature validity in seconds (5 minutes) |
+| `AUTH_REQUIRED` | No | `true` | Require JWT authentication (`false` for development) |
+| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL for caching |
 | `PRIVATE_KEY` | No | - | Private key for automated operations (not recommended) |
 | `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
 
@@ -460,12 +481,25 @@ curl http://localhost:3001/health
   "timestamp": "2024-...",
   "data": {
     "patients": 10,
-    "providers": 10
+    "providers": 10,
+    "redis": {
+      "connected": true,
+      "message": "Redis is up and running"
+    }
   }
 }
 
-# Check contract info
+# Check contract info (no auth required)
 curl http://localhost:3001/api/contract/info
+
+# Test authentication (requires MetaMask signature)
+# 1. Get message to sign
+curl "http://localhost:3001/api/auth/message?address=0x..."
+
+# 2. Sign message with MetaMask, then login
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"address":"0x...","signature":"0x...","timestamp":1234567890}'
 ```
 
 ### Verify Frontend Deployment

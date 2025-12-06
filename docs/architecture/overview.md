@@ -20,8 +20,10 @@ HealthChains is a decentralized patient consent management system that leverages
         │  Backend Tier  │    │ MetaMask Wallet │
         │ Node.js/Express│    │  (User Signer)  │
         │  - REST API    │    │                 │
-        │  - Read-only   │    │  Direct to      │
-        │    Contract    │    │  Blockchain     │
+        │  - JWT Auth    │    │  Direct to      │
+        │  - Redis Cache │    │  Blockchain     │
+        │  - Read-only   │    │                 │
+        │    Contract    │    │                 │
         │    Calls       │    │                 │
         └───────┬────────┘    └────────┬────────┘
                 │                       │
@@ -262,9 +264,11 @@ User (Provider)                   Frontend              MetaMask         Smart C
    - Custom errors for gas-efficient reverts
 
 2. **Backend Layer**:
+   - JWT authentication (MetaMask signature-based)
    - Read-only contract interactions
    - Input validation on API endpoints
    - CORS protection
+   - Redis caching for performance
    - Rate limiting (can be added)
 
 3. **Frontend Layer**:

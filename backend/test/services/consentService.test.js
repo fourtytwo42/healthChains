@@ -22,6 +22,10 @@ describe('ConsentService - Unit Tests', function () {
       isConsentExpired: sinon.stub(),
       getAccessRequest: sinon.stub(),
       getPatientRequests: sinon.stub(),
+      getRequestDataTypes: sinon.stub(),
+      getRequestPurposes: sinon.stub(),
+      dataTypeHashToString: sinon.stub(),
+      purposeHashToString: sinon.stub(),
       queryFilter: sinon.stub(),
       filters: {
         ConsentGranted: sinon.stub().returns({}),
@@ -64,16 +68,29 @@ describe('ConsentService - Unit Tests', function () {
       const dataType = 'medical_records';
 
       // Mock event-based lookup (now uses getConsentEvents instead of hasActiveConsent)
+      // New ConsentGranted event structure: (address indexed patient, uint256[] consentIds, uint128 timestamp)
       const mockGrantedEvent = {
-        type: 'ConsentGranted',
-        consentId: 1,
-        patient: patientAddress,
-        provider: providerAddress,
-        dataType: dataType,
-        dataTypes: [dataType],
-        timestamp: new Date().toISOString(),
-        expirationTime: null
+        args: {
+          patient: patientAddress,
+          consentIds: [1n], // Array of consentIds
+          timestamp: BigInt(Math.floor(Date.now() / 1000))
+        },
+        blockNumber: 1,
+        transactionHash: '0x123'
       };
+
+      // Mock getConsentRecord to return the consent record for consentId 1
+      mockContract.getConsentRecord.resolves({
+        patientAddress: patientAddress,
+        providerAddress: providerAddress,
+        timestamp: BigInt(Math.floor(Date.now() / 1000)),
+        expirationTime: 0n,
+        isActive: true,
+        dataTypeHashes: [ethers.keccak256(ethers.toUtf8Bytes(dataType))],
+        purposeHashes: [ethers.keccak256(ethers.toUtf8Bytes('treatment'))]
+      });
+      mockContract.dataTypeHashToString.resolves(dataType);
+      mockContract.purposeHashToString.resolves('treatment');
 
       mockContract.queryFilter.onFirstCall().resolves([mockGrantedEvent]);
       mockContract.queryFilter.onSecondCall().resolves([]); // No revoked events
@@ -132,11 +149,13 @@ describe('ConsentService - Unit Tests', function () {
         timestamp: 1000000n,
         expirationTime: 0n,
         isActive: true,
-        dataType: 'medical_records',
-        purpose: 'treatment'
+        dataTypeHashes: [ethers.keccak256(ethers.toUtf8Bytes('medical_records'))],
+        purposeHashes: [ethers.keccak256(ethers.toUtf8Bytes('treatment'))]
       };
 
       mockContract.getConsentRecord.resolves(mockRecord);
+      mockContract.dataTypeHashToString.resolves('medical_records');
+      mockContract.purposeHashToString.resolves('treatment');
 
       const result = await consentService.getConsentRecord(consentId);
 
@@ -171,12 +190,14 @@ describe('ConsentService - Unit Tests', function () {
         timestamp: 1000000n,
         expirationTime: 0n,
         isActive: true,
-        dataType: 'medical_records',
-        purpose: 'treatment'
+        dataTypeHashes: [ethers.keccak256(ethers.toUtf8Bytes('medical_records'))],
+        purposeHashes: [ethers.keccak256(ethers.toUtf8Bytes('treatment'))]
       };
 
       mockContract.getPatientConsents.resolves(mockConsentIds);
       mockContract.getConsentRecord.resolves(mockRecord);
+      mockContract.dataTypeHashToString.resolves('medical_records');
+      mockContract.purposeHashToString.resolves('treatment');
 
       const result = await consentService.getPatientConsents(patientAddress);
 
@@ -195,12 +216,14 @@ describe('ConsentService - Unit Tests', function () {
         timestamp: 1000000n,
         expirationTime: BigInt(expiredTime),
         isActive: false,
-        dataType: 'medical_records',
-        purpose: 'treatment'
+        dataTypeHashes: [ethers.keccak256(ethers.toUtf8Bytes('medical_records'))],
+        purposeHashes: [ethers.keccak256(ethers.toUtf8Bytes('treatment'))]
       };
 
       mockContract.getPatientConsents.resolves(mockConsentIds);
       mockContract.getConsentRecord.resolves(mockRecord);
+      mockContract.dataTypeHashToString.resolves('medical_records');
+      mockContract.purposeHashToString.resolves('treatment');
 
       const result = await consentService.getPatientConsents(patientAddress, false);
 
@@ -222,12 +245,12 @@ describe('ConsentService - Unit Tests', function () {
         timestamp: 1000000n,
         expirationTime: 0n,
         isProcessed: false,
-        status: 0, // Pending
-        dataType: 'medical_records',
-        purpose: 'treatment'
+        status: 0 // Pending
       };
 
       mockContract.getAccessRequest.resolves(mockRequest);
+      mockContract.getRequestDataTypes.resolves(['medical_records']);
+      mockContract.getRequestPurposes.resolves(['treatment']);
 
       const result = await consentService.getAccessRequest(requestId);
 
@@ -264,7 +287,16 @@ describe('ConsentService - Unit Tests', function () {
       };
 
       mockContract.getPatientRequests.resolves(mockRequestIds);
-      mockContract.getAccessRequest.resolves(mockRequest);
+      mockContract.getAccessRequest.resolves({
+        requester: '0x1111111111111111111111111111111111111111',
+        patientAddress: patientAddress,
+        timestamp: 1000000n,
+        expirationTime: 0n,
+        isProcessed: false,
+        status: 0
+      });
+      mockContract.getRequestDataTypes.resolves(['medical_records']);
+      mockContract.getRequestPurposes.resolves(['treatment']);
 
       const result = await consentService.getPatientRequests(patientAddress);
 
@@ -297,8 +329,26 @@ describe('ConsentService - Unit Tests', function () {
       };
 
       mockContract.getPatientRequests.resolves(mockRequestIds);
-      mockContract.getAccessRequest.onFirstCall().resolves(pendingRequest);
-      mockContract.getAccessRequest.onSecondCall().resolves(approvedRequest);
+      mockContract.getAccessRequest.onFirstCall().resolves({
+        requester: '0x1111111111111111111111111111111111111111',
+        patientAddress: patientAddress,
+        timestamp: 1000000n,
+        expirationTime: 0n,
+        isProcessed: false,
+        status: 0
+      });
+      mockContract.getAccessRequest.onSecondCall().resolves({
+        requester: '0x1111111111111111111111111111111111111111',
+        patientAddress: patientAddress,
+        timestamp: 1000000n,
+        expirationTime: 0n,
+        isProcessed: true,
+        status: 1
+      });
+      mockContract.getRequestDataTypes.onFirstCall().resolves(['medical_records']);
+      mockContract.getRequestDataTypes.onSecondCall().resolves(['medical_records']);
+      mockContract.getRequestPurposes.onFirstCall().resolves(['treatment']);
+      mockContract.getRequestPurposes.onSecondCall().resolves(['treatment']);
 
       const result = await consentService.getPatientRequests(patientAddress, 'pending');
 
@@ -317,20 +367,29 @@ describe('ConsentService - Unit Tests', function () {
   describe('getConsentEvents', function () {
     it('should return array of consent events', async function () {
       const patientAddress = '0x1234567890123456789012345678901234567890';
+      // New ConsentGranted event structure: (address indexed patient, uint256[] consentIds, uint128 timestamp)
       const mockGrantedEvent = {
         blockNumber: 100,
         transactionHash: '0xabc123',
         args: {
-          consentId: 1n,
           patient: patientAddress,
-          provider: '0x0987654321098765432109876543210987654321',
-          dataType: 'medical_records',
-          expirationTime: 0n,
-          purpose: 'treatment',
+          consentIds: [1n], // Array of consentIds
           timestamp: 1000000n
         }
       };
 
+      // Mock getConsentRecord to return the consent record for consentId 1
+      mockContract.getConsentRecord.resolves({
+        patientAddress: patientAddress,
+        providerAddress: '0x0987654321098765432109876543210987654321',
+        timestamp: 1000000n,
+        expirationTime: 0n,
+        isActive: true,
+        dataTypeHashes: [ethers.keccak256(ethers.toUtf8Bytes('medical_records'))],
+        purposeHashes: [ethers.keccak256(ethers.toUtf8Bytes('treatment'))]
+      });
+      mockContract.dataTypeHashToString.resolves('medical_records');
+      mockContract.purposeHashToString.resolves('treatment');
       mockContract.queryFilter.onFirstCall().resolves([mockGrantedEvent]);
       mockContract.queryFilter.onSecondCall().resolves([]);
 
@@ -362,8 +421,8 @@ describe('ConsentService - Unit Tests', function () {
           requestId: 1n,
           requester: '0x1111111111111111111111111111111111111111',
           patient: patientAddress,
-          dataType: 'medical_records',
-          purpose: 'treatment',
+          dataTypes: ['medical_records'],
+          purposes: ['treatment'],
           expirationTime: 0n,
           timestamp: 1000000n
         }
