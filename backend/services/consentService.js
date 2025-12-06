@@ -431,6 +431,20 @@ class ConsentService {
 
       return filtered;
     } catch (error) {
+      // Handle empty result case (fresh deployment with no consents yet)
+      // When contract returns empty array, ethers.js might throw BAD_DATA error
+      if (error.code === 'BAD_DATA' && 
+          (error.message?.includes('could not decode result data') || 
+           error.message?.includes('value="0x"'))) {
+        logger.info('No consents found for patient (empty result)', {
+          patientAddress: normalizedAddress
+        });
+        // Return empty array for fresh deployments
+        const emptyResult = [];
+        await cacheService.set(cacheKey, emptyResult, 15);
+        return emptyResult;
+      }
+      
       // Log the original error for debugging
       logger.error('Error in getPatientConsents', {
         patientAddress: normalizedAddress,
