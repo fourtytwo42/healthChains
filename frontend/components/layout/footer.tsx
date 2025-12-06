@@ -55,9 +55,6 @@ export function Footer() {
             </a>
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t text-center text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} HealthChains. All rights reserved.</p>
-        </div>
       </div>
     </footer>
   );
