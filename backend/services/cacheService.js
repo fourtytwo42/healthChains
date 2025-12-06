@@ -209,6 +209,38 @@ class CacheService {
   }
 
   /**
+   * Invalidate cache for a specific request
+   * 
+   * @param {number} requestId - Request ID
+   * @param {string} patientAddress - Optional patient address for request list invalidation
+   * @returns {Promise<number>} Number of keys invalidated
+   */
+  async invalidateRequest(requestId, patientAddress = null) {
+    const patterns = [
+      `request:${requestId}`, // Individual request cache
+      `requests:patient:*:pending`, // All pending request lists (they may include this request)
+      `requests:patient:*:all`, // All request lists
+    ];
+
+    // If patient address provided, also invalidate their specific caches
+    if (patientAddress) {
+      const normalizedAddress = patientAddress.toLowerCase();
+      patterns.push(
+        `requests:patient:${normalizedAddress}:pending`,
+        `requests:patient:${normalizedAddress}:approved`,
+        `requests:patient:${normalizedAddress}:all`
+      );
+    }
+
+    let totalDeleted = 0;
+    for (const pattern of patterns) {
+      totalDeleted += await this.deletePattern(pattern);
+    }
+
+    return totalDeleted;
+  }
+
+  /**
    * Invalidate cache for a specific patient
    * 
    * @param {string} patientAddress - Patient address

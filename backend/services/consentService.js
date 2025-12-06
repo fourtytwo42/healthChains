@@ -627,8 +627,13 @@ class ConsentService {
 
         const result = this._transformAccessRequest(request, requestId, dataTypes, purposes);
         
-        // Cache result (1-2 minutes TTL)
-        const ttl = 90; // 90 seconds
+        // Use shorter TTL for pending requests, longer for processed ones
+        let ttl;
+        if (result.status === 'pending') {
+          ttl = 10; // 10 seconds for pending - they can be approved/denied quickly
+        } else {
+          ttl = 300; // 5 minutes for approved/denied - they don't change
+        }
         await cacheService.set(cacheKey, result, ttl);
 
         return result;
@@ -831,8 +836,16 @@ class ConsentService {
         filtered = filtered.filter(r => r.status === status);
       }
 
-      // Cache result (1-2 minutes TTL)
-      const ttl = 90; // 90 seconds
+      // Use shorter TTL for pending requests (they change frequently)
+      // Longer TTL for approved/denied (they don't change once set)
+      let ttl;
+      if (status === 'pending') {
+        ttl = 10; // 10 seconds for pending - they can be approved/denied quickly
+      } else if (status === 'approved' || status === 'denied') {
+        ttl = 300; // 5 minutes for approved/denied - they don't change
+      } else {
+        ttl = 30; // 30 seconds for 'all' - balance between freshness and performance
+      }
       await cacheService.set(cacheKey, filtered, ttl);
 
       return filtered;
