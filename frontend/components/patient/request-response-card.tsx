@@ -60,14 +60,17 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   if (isLoading) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader className="pb-3">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="pb-3 flex-shrink-0">
             <DialogTitle className="text-lg">Access Request</DialogTitle>
             <DialogDescription className="text-xs">Loading request details...</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1 overflow-y-auto pr-1">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
+          </div>
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
+            <Button size="sm" onClick={onClose}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -77,14 +80,16 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   if (error || !request) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader className="pb-3">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="pb-3 flex-shrink-0">
             <DialogTitle className="text-lg">Error</DialogTitle>
             <DialogDescription className="text-xs">
               Failed to load request details. {error?.message || 'Unknown error'}
             </DialogDescription>
           </DialogHeader>
-          <Button size="sm" onClick={onClose}>Close</Button>
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
+            <Button size="sm" onClick={onClose}>Close</Button>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -109,8 +114,8 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   return (
     <TooltipProvider>
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader className="pb-3">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="pb-3 flex-shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <FileText className="h-4 w-4" />
               Access Request
@@ -120,6 +125,7 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
             </DialogDescription>
           </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto pr-1 space-y-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -216,8 +222,9 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
             )}
           </CardContent>
         </Card>
+        </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t">
+        <div className="flex justify-end gap-2 pt-3 border-t flex-shrink-0 mt-2">
           <Button variant="outline" size="sm" onClick={onClose}>
             {isProcessed ? 'Close' : 'Cancel'}
           </Button>

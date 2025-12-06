@@ -96,8 +96,8 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader className="pb-3">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="pb-3 flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileCheck className="h-4 w-4" />
             Consent Details
@@ -107,7 +107,7 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 flex-1 overflow-y-auto pr-1">
           {/* Provider Information */}
           <Card>
             <CardHeader className="pb-3">

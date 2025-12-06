@@ -235,13 +235,14 @@ export function RequestConsentDialog({
       <DialogTrigger asChild>
         {trigger || <Button size="sm">Request Consent</Button>}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Request Consent from {patientName}</DialogTitle>
           <DialogDescription>
             Request access to patient data. The patient will be notified and can approve or deny your request.
           </DialogDescription>
         </DialogHeader>
+        <div className="flex-1 overflow-y-auto pr-1">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label id="dataTypes-label" htmlFor="dataTypes">
@@ -316,7 +317,7 @@ export function RequestConsentDialog({
             </Popover>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -332,6 +333,7 @@ export function RequestConsentDialog({
             </Button>
           </div>
         </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -128,8 +128,8 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader className="pb-2">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="pb-2 flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             {eventIcon && React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
             {eventType}
@@ -139,7 +139,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
           {/* Status and Timestamp */}
           <Card className="py-6">
             <CardHeader className="pb-2">
@@ -321,7 +321,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           )}
         </div>
 
-        <div className="flex justify-end pt-1.5 border-t">
+        <div className="flex justify-end pt-1.5 border-t flex-shrink-0 mt-2">
           <Button size="sm" onClick={onClose}>Close</Button>
         </div>
       </DialogContent>

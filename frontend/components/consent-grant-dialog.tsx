@@ -248,13 +248,14 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
       <DialogTrigger asChild>
         {trigger || defaultTrigger}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Grant Consent</DialogTitle>
           <DialogDescription>
             Grant consent to providers to access your healthcare data. Select multiple options to create multiple consents efficiently.
           </DialogDescription>
         </DialogHeader>
+        <div className="flex-1 overflow-y-auto pr-1">
         {!isConnected ? (
           <div className="py-4 text-center text-sm text-muted-foreground">
             Please connect your wallet to grant consent.
@@ -427,7 +428,7 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
               <Button
                 type="button"
                 variant="outline"
@@ -451,6 +452,7 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
             </div>
           </form>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

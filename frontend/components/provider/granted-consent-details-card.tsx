@@ -72,13 +72,16 @@ export function GrantedConsentDetailsCard({
   if (isLoading) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Loading Patient Details...</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 overflow-y-auto pr-1">
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-32 w-full" />
+          </div>
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
+            <Button onClick={onClose}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -88,14 +91,14 @@ export function GrantedConsentDetailsCard({
   if (error || !data?.data) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Error Loading Patient Data</DialogTitle>
             <DialogDescription>
               {error?.message || 'Failed to load patient data'}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
             <Button onClick={onClose}>Close</Button>
           </div>
         </DialogContent>
@@ -171,7 +174,7 @@ export function GrantedConsentDetailsCard({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="border-b pb-4">
+        <DialogHeader className="border-b pb-4 flex-shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <DialogTitle className="text-lg">
@@ -232,7 +235,7 @@ export function GrantedConsentDetailsCard({
         </DialogHeader>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 pr-1">
           <div className="space-y-3">
 
           {/* Show message if no consent */}
@@ -446,7 +449,7 @@ export function GrantedConsentDetailsCard({
         </div>
 
         {/* Fixed Footer */}
-        <div className="flex justify-end gap-2 px-6 py-4 border-t">
+        <div className="flex justify-end gap-2 px-6 py-4 border-t flex-shrink-0 mt-2">
           {patientWalletAddress && (
             <RequestConsentDialog
               patientAddress={patientWalletAddress}

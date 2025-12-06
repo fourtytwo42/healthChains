@@ -745,14 +745,17 @@ export function PatientDetailsCard({
   if (isLoading) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Loading Patient Chart...</DialogTitle>
             <DialogDescription>Fetching patient medical data...</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 overflow-y-auto pr-1">
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-32 w-full" />
+          </div>
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
+            <Button onClick={onClose}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -762,14 +765,14 @@ export function PatientDetailsCard({
   if (error || !patientData) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-6xl">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Error Loading Patient Chart</DialogTitle>
             <DialogDescription>
               {error?.message || 'Failed to load patient data'}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
             <Button onClick={onClose}>Close</Button>
           </div>
         </DialogContent>
