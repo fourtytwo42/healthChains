@@ -431,9 +431,27 @@ class ConsentService {
 
       return filtered;
     } catch (error) {
+      // Log the original error for debugging
+      logger.error('Error in getPatientConsents', {
+        patientAddress: normalizedAddress,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorReason: error.reason,
+        stack: error.stack
+      });
+      
       if (error.message === 'Request timeout') {
         throw new Web3ConnectionError('Request timed out while fetching patient consents');
       }
+      
+      // Check for specific ethers.js errors
+      if (error.code === 'CALL_EXCEPTION' || error.code === 'NETWORK_ERROR') {
+        throw new Web3ConnectionError(
+          `RPC connection error while fetching patient consents: ${error.message}`,
+          error
+        );
+      }
+      
       throw new ContractError(
         'Failed to fetch patient consents',
         'getPatientConsents',

@@ -243,7 +243,7 @@ export function RequestConsentDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto pr-1">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="request-consent-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label id="dataTypes-label" htmlFor="dataTypes">
               Data Types <span className="text-destructive">*</span>
@@ -316,23 +316,31 @@ export function RequestConsentDialog({
               </PopoverContent>
             </Popover>
           </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!isFormValid || requestAccess.isPending}>
-              {requestAccess.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Requesting...
-                </>
-              ) : (
-                'Request Consent'
-              )}
-            </Button>
-          </div>
         </form>
+        </div>
+
+        {/* Fixed Footer - Buttons */}
+        <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            type="button"
+            disabled={!isFormValid || requestAccess.isPending}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSubmit(e as any);
+            }}
+          >
+            {requestAccess.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Requesting...
+              </>
+            ) : (
+              'Request Consent'
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

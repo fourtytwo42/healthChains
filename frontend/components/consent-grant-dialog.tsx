@@ -261,7 +261,7 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
             Please connect your wallet to grant consent.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form id="grant-consent-form" onSubmit={handleSubmit} className="space-y-6">
             {/* Providers Selection */}
             <div className="space-y-2">
               <Label id="providers-label" htmlFor="providers">Providers</Label>
@@ -427,32 +427,39 @@ export function GrantConsentDialog({ trigger }: GrantConsentDialogProps) {
                 </ul>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                disabled={grantConsent.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  grantConsent.isPending ||
-                  selectedProviders.length === 0 ||
-                  selectedDataTypes.length === 0 ||
-                  selectedPurposes.length === 0
-                }
-              >
-                {grantConsent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Grant {totalConsents > 0 ? `${totalConsents} Consent${totalConsents > 1 ? 's' : ''}` : 'Consent'}
-              </Button>
-            </div>
           </form>
         )}
         </div>
+
+        {/* Fixed Footer - Buttons */}
+        {isConnected && (
+          <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0 mt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={grantConsent.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                grantConsent.isPending ||
+                selectedProviders.length === 0 ||
+                selectedDataTypes.length === 0 ||
+                selectedPurposes.length === 0
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                handleSubmit(e as any);
+              }}
+            >
+              {grantConsent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Grant {totalConsents > 0 ? `${totalConsents} Consent${totalConsents > 1 ? 's' : ''}` : 'Consent'}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

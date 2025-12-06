@@ -303,89 +303,89 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* Actions */}
-          {(() => {
-            // Check if any consent is active
-            const hasActiveConsents = consent.allConsents 
-              ? consent.allConsents.some(c => c.isActive && !c.isExpired)
-              : (consent.isActive && !consent.isExpired);
+        {/* Fixed Footer - Actions */}
+        {(() => {
+          // Check if any consent is active
+          const hasActiveConsents = consent.allConsents 
+            ? consent.allConsents.some(c => c.isActive && !c.isExpired)
+            : (consent.isActive && !consent.isExpired);
 
-            if (hasActiveConsents) {
-              return (
-                <div className="flex justify-end gap-2 pt-3 border-t">
-                  <Button variant="outline" size="sm" onClick={onClose}>
-                    Close
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={revokeConsent.isPending}
-                      >
-                        {revokeConsent.isPending ? (
-                          <>
-                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                            Revoking...
-                          </>
-                        ) : (
-                          'Revoke All Consents'
-                        )}
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Revoke Consent</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          {consent.allConsents && consent.allConsents.length > 1 ? (
-                            <>
-                              Are you sure you want to revoke all {consent.allConsents.length} consents with this provider? 
-                              This action cannot be undone. The provider will immediately lose access to all your data.
-                            </>
-                          ) : (
-                            <>
-                              Are you sure you want to revoke this consent? This action cannot be undone.
-                              The provider will immediately lose access to your data.
-                            </>
-                          )}
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => {
-                            // Revoke all active consents for this provider
-                            if (consent.allConsents && consent.allConsents.length > 1) {
-                              // Revoke all active consents
-                              const activeConsents = consent.allConsents.filter(c => c.isActive && !c.isExpired);
-                              // For now, revoke the first one - in a real app, you'd want to revoke all
-                              // But the contract might require one at a time
-                              handleRevoke();
-                            } else {
-                              handleRevoke();
-                            }
-                          }}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Revoke
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              );
-            }
-
+          if (hasActiveConsents) {
             return (
-              <div className="flex justify-end pt-3 border-t">
+              <div className="flex justify-end gap-2 pt-3 border-t flex-shrink-0 mt-2">
                 <Button variant="outline" size="sm" onClick={onClose}>
                   Close
                 </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={revokeConsent.isPending}
+                    >
+                      {revokeConsent.isPending ? (
+                        <>
+                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                          Revoking...
+                        </>
+                      ) : (
+                        'Revoke All Consents'
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Revoke Consent</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {consent.allConsents && consent.allConsents.length > 1 ? (
+                          <>
+                            Are you sure you want to revoke all {consent.allConsents.length} consents with this provider? 
+                            This action cannot be undone. The provider will immediately lose access to all your data.
+                          </>
+                        ) : (
+                          <>
+                            Are you sure you want to revoke this consent? This action cannot be undone.
+                            The provider will immediately lose access to your data.
+                          </>
+                        )}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          // Revoke all active consents for this provider
+                          if (consent.allConsents && consent.allConsents.length > 1) {
+                            // Revoke all active consents
+                            const activeConsents = consent.allConsents.filter(c => c.isActive && !c.isExpired);
+                            // For now, revoke the first one - in a real app, you'd want to revoke all
+                            // But the contract might require one at a time
+                            handleRevoke();
+                          } else {
+                            handleRevoke();
+                          }
+                        }}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Revoke
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             );
-          })()}
-        </div>
+          }
+
+          return (
+            <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
+              <Button variant="outline" size="sm" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );
