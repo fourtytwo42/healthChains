@@ -268,8 +268,14 @@ sudo -u postgres psql
 ```sql
 CREATE DATABASE healthchains_events;
 CREATE USER healthchains WITH PASSWORD 'healthchains123';
+ALTER DATABASE healthchains_events OWNER TO healthchains;
 GRANT ALL PRIVILEGES ON DATABASE healthchains_events TO healthchains;
 \q
+```
+
+3. **Grant schema permissions** (run as postgres user):
+```bash
+sudo -u postgres psql -d healthchains_events -c "GRANT ALL ON SCHEMA public TO healthchains;"
 ```
 
 3. **Verify connection**:
