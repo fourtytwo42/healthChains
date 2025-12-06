@@ -122,6 +122,12 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
     }
   };
 
+  // Copy patient wallet address handler
+  const handleCopyPatientWalletAddress = async () => {
+    if (!event.patient) return;
+    await handleCopyWalletAddress(event.patient);
+  };
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
@@ -196,9 +202,19 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     {event.patient && (
-                      <p className="text-muted-foreground text-xs font-mono">
-                        <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-muted-foreground text-xs font-mono">
+                          <strong>Wallet:</strong>{' '}
+                          <button
+                            onClick={handleCopyPatientWalletAddress}
+                            className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                            title="Click to copy full wallet address"
+                          >
+                            {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </p>
+                      </div>
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground">
