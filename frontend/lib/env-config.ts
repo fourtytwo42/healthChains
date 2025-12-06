@@ -35,12 +35,11 @@ export function getApiBaseUrl(): string {
 }
 
 /**
- * Get the RPC URL - always uses Hardhat Remote (rpc.qrmk.us)
- * No longer uses localhost RPC - all connections go through the remote endpoint
+ * Get the RPC URL from environment variable
+ * Defaults to rpc.qrmk.us but can be set to localhost:8545 or 127.0.0.1:8545 via NEXT_PUBLIC_RPC_URL
  */
 export function getRpcUrl(): string {
-  // Always use the remote RPC endpoint
-  // Can be overridden with environment variable if needed
+  // Use environment variable if set, otherwise default to remote RPC
   return process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.qrmk.us';
 }
 

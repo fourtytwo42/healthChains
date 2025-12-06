@@ -17,15 +17,16 @@ export interface NetworkConfig {
 }
 
 /**
- * Get network configuration - always uses Hardhat Remote
- * All connections use the remote RPC endpoint (rpc.qrmk.us)
+ * Get network configuration
+ * Uses RPC URL from environment variable (NEXT_PUBLIC_RPC_URL)
+ * Network name defaults to "Hardhat" but can be overridden
  */
 export function getNetworkConfig(): NetworkConfig {
-  // Always use the remote RPC URL
+  // Get RPC URL from env-config (which respects NEXT_PUBLIC_RPC_URL)
   const rpcUrl = typeof window !== 'undefined' ? getRpcUrl() : (process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.qrmk.us');
   
-  // Always use "Hardhat Remote" as the network name
-  const chainName = process.env.NEXT_PUBLIC_NETWORK_NAME || 'Hardhat Remote';
+  // Use "Hardhat" as the default network name (can be overridden with env var)
+  const chainName = process.env.NEXT_PUBLIC_NETWORK_NAME || 'Hardhat';
   
   return {
     chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10),

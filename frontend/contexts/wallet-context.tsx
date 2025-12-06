@@ -122,9 +122,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * Check if the network configuration matches what's expected
-   * This checks chainId and ensures we're using "Hardhat Remote" with rpc.qrmk.us
-   * 
-   * All connections now use the remote RPC endpoint regardless of hostname.
+   * This checks chainId and ensures we're using the correct network
+   * RPC URL comes from NEXT_PUBLIC_RPC_URL environment variable
    */
   const validateNetwork = async (): Promise<{ isValid: boolean; reason?: string }> => {
     const chainId = await getChainId();
@@ -139,7 +138,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     // If chainId matches, the network is valid
-    // Network switching will ensure MetaMask uses "Hardhat Remote" with rpc.qrmk.us
+    // Network switching will ensure MetaMask uses the correct RPC URL from env
     
     return { isValid: true };
   };
@@ -155,25 +154,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * Switch to the correct network (adds network if it doesn't exist)
-   * Always uses "Hardhat Remote" with rpc.qrmk.us regardless of hostname
+   * Uses network name and RPC URL from environment variables
    */
   const switchToCorrectNetwork = async (): Promise<void> => {
     if (!isMetaMaskInstalled() || !window.ethereum) {
       throw new Error('MetaMask is not installed');
     }
 
-    // Get the network config - always uses "Hardhat Remote" with rpc.qrmk.us
+    // Get the network config - uses env variables (defaults to "Hardhat" and rpc.qrmk.us)
     const networkConfig = getCurrentNetworkConfig();
     const currentRpcUrl = getRpcUrl();
     const networkConfigForMetaMask = {
       chainId: `0x${networkConfig.chainId.toString(16)}`,
-      chainName: networkConfig.chainName, // Always "Hardhat Remote"
+      chainName: networkConfig.chainName, // "Hardhat" by default, can be overridden
       nativeCurrency: {
         name: networkConfig.currencyName,
         symbol: networkConfig.currencySymbol,
         decimals: 18,
       },
-      rpcUrls: [currentRpcUrl], // Always rpc.qrmk.us
+      rpcUrls: [currentRpcUrl], // From NEXT_PUBLIC_RPC_URL env var
       blockExplorerUrls: networkConfig.blockExplorerUrl ? [networkConfig.blockExplorerUrl] : null,
     };
 
