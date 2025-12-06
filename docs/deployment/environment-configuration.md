@@ -6,13 +6,15 @@ This document explains how the application automatically detects the environment
 
 The application automatically detects whether it's running on localhost or the production domain (`app.qrmk.us`) and uses the appropriate endpoints:
 
-- **Localhost/127.0.0.1**: Uses local ports
+- **Localhost/127.0.0.1**: Uses local API, remote RPC
   - API: `http://localhost:3001`
-  - RPC: `http://127.0.0.1:8545`
+  - RPC: `https://rpc.qrmk.us` (always uses remote)
 
 - **app.qrmk.us**: Uses Cloudflare tunnel endpoints
   - API: `https://api.qrmk.us`
-  - RPC: `https://rpc.qrmk.us`
+  - RPC: `https://rpc.qrmk.us` (always uses remote)
+
+**Note**: All RPC connections now use the remote endpoint (`rpc.qrmk.us`) regardless of hostname. The network is always configured as "Hardhat Remote".
 
 ## Frontend Configuration
 

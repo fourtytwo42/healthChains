@@ -105,16 +105,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   /**
    * Detect the current RPC URL that MetaMask is connected to
    * Note: MetaMask doesn't directly expose the RPC URL, so we can't detect it directly.
-   * However, we can infer it needs to be updated if the chainId matches but we're
-   * on a different hostname context (e.g., on app.qrmk.us but MetaMask might be using localhost RPC).
+   * We always use the remote RPC endpoint (rpc.qrmk.us) for all connections.
    */
   const getCurrentRpcUrl = async (): Promise<string | null> => {
     if (!isMetaMaskInstalled() || !window.ethereum) return null;
 
     try {
       // MetaMask doesn't expose the RPC URL directly
-      // We'll use the expected RPC URL as the "current" for display purposes
-      // The actual validation will ensure we switch to the correct network
+      // We always use the remote RPC endpoint
       return EXPECTED_RPC_URL;
     } catch (error) {
       console.error('Error getting RPC URL:', error);
@@ -124,12 +122,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * Check if the network configuration matches what's expected
-   * This checks chainId and ensures we're using the correct network name and RPC
-   * for the current hostname context.
+   * This checks chainId and ensures we're using "Hardhat Remote" with rpc.qrmk.us
    * 
-   * Since MetaMask doesn't expose the RPC URL directly, we can't detect if it's
-   * using the wrong RPC. However, we can ensure the network is configured correctly
-   * by always checking and prompting to switch if needed.
+   * All connections now use the remote RPC endpoint regardless of hostname.
    */
   const validateNetwork = async (): Promise<{ isValid: boolean; reason?: string }> => {
     const chainId = await getChainId();
@@ -143,21 +138,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Even if chainId matches, we need to ensure MetaMask is using the correct
-    // network name and RPC URL for the current hostname context.
-    // 
-    // The issue: MetaMask might have the network configured with:
-    // - Wrong name (e.g., "Hardhat Local" when on app.qrmk.us)
-    // - Wrong RPC (e.g., localhost RPC when on app.qrmk.us)
-    //
-    // Solution: We'll always return isValid: true for now, but the network switching
-    // function will ensure the correct network configuration is used when called.
-    // The UI will show the network switch prompt based on isWrongNetwork state,
-    // which we'll set based on chainId mismatch only.
-    //
-    // When the user clicks "Switch Network", it will add/update the network with
-    // the correct name and RPC for the current hostname, ensuring MetaMask uses
-    // the right configuration.
+    // If chainId matches, the network is valid
+    // Network switching will ensure MetaMask uses "Hardhat Remote" with rpc.qrmk.us
     
     return { isValid: true };
   };
@@ -173,26 +155,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * Switch to the correct network (adds network if it doesn't exist)
-   * Uses the hostname-aware RPC URL and network name from env-config
-   * This ensures MetaMask uses the correct network configuration for the current hostname.
+   * Always uses "Hardhat Remote" with rpc.qrmk.us regardless of hostname
    */
   const switchToCorrectNetwork = async (): Promise<void> => {
     if (!isMetaMaskInstalled() || !window.ethereum) {
       throw new Error('MetaMask is not installed');
     }
 
-    // Get the current network config (which uses hostname-aware RPC URL and network name)
+    // Get the network config - always uses "Hardhat Remote" with rpc.qrmk.us
     const networkConfig = getCurrentNetworkConfig();
     const currentRpcUrl = getRpcUrl();
     const networkConfigForMetaMask = {
       chainId: `0x${networkConfig.chainId.toString(16)}`,
-      chainName: networkConfig.chainName, // "Hardhat Local" or "Hardhat Remote" based on hostname
+      chainName: networkConfig.chainName, // Always "Hardhat Remote"
       nativeCurrency: {
         name: networkConfig.currencyName,
         symbol: networkConfig.currencySymbol,
         decimals: 18,
       },
-      rpcUrls: [currentRpcUrl], // Correct RPC URL based on hostname
+      rpcUrls: [currentRpcUrl], // Always rpc.qrmk.us
       blockExplorerUrls: networkConfig.blockExplorerUrl ? [networkConfig.blockExplorerUrl] : null,
     };
 
@@ -200,7 +181,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       chainId: networkConfigForMetaMask.chainId,
       chainName: networkConfigForMetaMask.chainName,
       rpcUrl: currentRpcUrl,
-      hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
     });
 
     try {

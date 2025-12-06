@@ -17,29 +17,15 @@ export interface NetworkConfig {
 }
 
 /**
- * Get network configuration from environment variables
- * Network name and RPC URL are dynamically determined based on hostname
- * - localhost/127.0.0.1 → "Hardhat Local" with http://127.0.0.1:8545
- * - app.qrmk.us → "Hardhat Remote" with https://rpc.qrmk.us
+ * Get network configuration - always uses Hardhat Remote
+ * All connections use the remote RPC endpoint (rpc.qrmk.us)
  */
 export function getNetworkConfig(): NetworkConfig {
-  // Get RPC URL dynamically based on hostname
-  const rpcUrl = typeof window !== 'undefined' ? getRpcUrl() : (process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545');
+  // Always use the remote RPC URL
+  const rpcUrl = typeof window !== 'undefined' ? getRpcUrl() : (process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.qrmk.us');
   
-  // Determine network name based on hostname
-  let chainName = process.env.NEXT_PUBLIC_NETWORK_NAME;
-  if (!chainName && typeof window !== 'undefined') {
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      chainName = 'Hardhat Local';
-    } else if (hostname === 'app.qrmk.us' || hostname.endsWith('.qrmk.us')) {
-      chainName = 'Hardhat Remote';
-    } else {
-      chainName = 'Hardhat Local'; // Default
-    }
-  } else if (!chainName) {
-    chainName = 'Hardhat Local'; // Server-side default
-  }
+  // Always use "Hardhat Remote" as the network name
+  const chainName = process.env.NEXT_PUBLIC_NETWORK_NAME || 'Hardhat Remote';
   
   return {
     chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10),
