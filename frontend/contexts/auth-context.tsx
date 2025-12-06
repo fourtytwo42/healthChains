@@ -105,9 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    // If state.isAuthenticating is true but ref isn't, it means we're in the account change flow
-    // where state was set to block auto-authenticate effect, but authenticate() hasn't started yet
-    // In this case, allow it to proceed - authenticate() will set the ref below
+    // Also check if we're handling an account change - if so, only proceed if this is the explicit call
+    // The auto-authenticate effect should be blocked by the flag
+    if (isHandlingAccountChangeRef.current && state.isAuthenticating) {
+      // This is the explicit call from account change handler - allow it to proceed
+      // The ref will be set below to prevent duplicate calls
+    } else if (state.isAuthenticating) {
+      // State says authenticating but we're not handling account change
+      // This shouldn't happen, but be safe and skip
+      console.log('[AuthContext] Already authenticating (state check), skipping duplicate call');
+      return;
+    }
 
     // Set both state and ref immediately to prevent race conditions
     isAuthenticatingRef.current = true;
