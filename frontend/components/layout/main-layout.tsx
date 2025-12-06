@@ -2,9 +2,10 @@
 
 import { Sidebar } from './sidebar';
 import { Header } from './header';
+import { Footer } from './footer';
 
 /**
- * Main Layout - Provides sidebar and header shell
+ * Main Layout - Provides sidebar, header, and footer shell
  */
 export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,8 +13,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-background p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto bg-background p-6 flex flex-col">
+          <div className="flex-1">
+            {children}
+          </div>
+          <Footer />
         </main>
       </div>
     </div>
