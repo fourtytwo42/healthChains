@@ -382,9 +382,9 @@
           "type": "uint128"
         },
         {
-          "internalType": "uint128",
+          "internalType": "uint112",
           "name": "expirationTime",
-          "type": "uint128"
+          "type": "uint112"
         },
         {
           "internalType": "bool",
@@ -558,9 +558,9 @@
               "type": "uint128"
             },
             {
-              "internalType": "uint128",
+              "internalType": "uint112",
               "name": "expirationTime",
-              "type": "uint128"
+              "type": "uint112"
             },
             {
               "internalType": "bool",
@@ -736,6 +736,44 @@
           "internalType": "uint256[]",
           "name": "",
           "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "requestId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getRequestDataTypes",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "requestId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getRequestPurposes",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "",
+          "type": "string[]"
         }
       ],
       "stateMutability": "view",
@@ -998,12 +1036,12 @@
           "type": "uint256"
         }
       ],
-      "name": "requestDataTypes",
+      "name": "requestDataTypeHashes",
       "outputs": [
         {
-          "internalType": "string",
+          "internalType": "bytes32",
           "name": "",
-          "type": "string"
+          "type": "bytes32"
         }
       ],
       "stateMutability": "view",
@@ -1022,12 +1060,12 @@
           "type": "uint256"
         }
       ],
-      "name": "requestPurposes",
+      "name": "requestPurposeHashes",
       "outputs": [
         {
-          "internalType": "string",
+          "internalType": "bytes32",
           "name": "",
-          "type": "string"
+          "type": "bytes32"
         }
       ],
       "stateMutability": "view",
