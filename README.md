@@ -18,6 +18,7 @@ HealthChains provides a complete solution for managing patient consent in health
 
 - **[Architecture Overview](docs/architecture/overview.md)** - System architecture, design decisions, and technical choices
 - **[Smart Contract Design](docs/architecture/smart-contract-design.md)** - Contract structure, data models, and design rationale
+- **[Logging Architecture](docs/architecture/logging.md)** - Winston logging system, log levels, and best practices
 
 ### 🚀 Getting Started
 
