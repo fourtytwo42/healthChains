@@ -93,23 +93,16 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ---
 
-### 7. ⚠️ Redundant Event Queries
+### 7. ✅ Redundant Event Queries - **COMPLETED**
 
-**Problem**: `getConsentEvents()` and `getAccessRequestEvents()` query from block 0 every time.
+**Status**: ✅ **IMPLEMENTED** - PostgreSQL event indexing with incremental queries
+- PostgreSQL tracks last processed block number per event type
+- Only queries new events from blockchain (from last processed block + 1)
+- Automatic schema creation on first connection
+- Graceful degradation if PostgreSQL unavailable (falls back to block 0 queries)
+- Optional feature - can be enabled via `POSTGRES_ENABLED=true` environment variable
 
-**Impact**: 
-- Slow queries as blockchain grows
-- Unnecessary RPC calls
-- Timeout risks on large block ranges
-
-**Recommendation**:
-- Store last processed block number
-- Query incrementally from last processed block
-- Use indexed event storage (The Graph, custom indexer, or database)
-
-**Implementation Priority**: 🟡 **HIGH**
-
-**Estimated Effort**: 1-2 days for incremental queries, 1 week for indexed storage
+**Implementation**: See `backend/services/eventIndexer.js` and `backend/services/consentService.js`
 
 ---
 

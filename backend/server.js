@@ -102,6 +102,7 @@ console.log(`✅ Created lookup maps: ${patientById.size} patients, ${providerBy
 const web3Service = require('./services/web3Service');
 const consentService = require('./services/consentService');
 const cacheService = require('./services/cacheService');
+const eventIndexer = require('./services/eventIndexer');
 const { consentRouter, requestRouter, eventRouter } = require('./routes/consentRoutes');
 const authRouter = require('./routes/authRoutes');
 const { authenticate, verifyOwnership, verifyParticipant } = require('./middleware/auth');
@@ -1001,6 +1002,20 @@ async function startServer() {
   } catch (error) {
     console.error('⚠️  Warning: Cache service initialization failed:', error.message);
     console.error('   Continuing without cache. Some endpoints may be slower.\n');
+  }
+
+  try {
+    // Initialize event indexer (PostgreSQL)
+    console.log('Initializing event indexer...');
+    await eventIndexer.initialize();
+    if (eventIndexer.isEventIndexingEnabled()) {
+      console.log('✅ Event indexer initialized successfully (PostgreSQL enabled)\n');
+    } else {
+      console.log('📊 Event indexer disabled (PostgreSQL not enabled or unavailable)\n');
+    }
+  } catch (error) {
+    console.error('⚠️  Warning: Event indexer initialization failed:', error.message);
+    console.error('   Continuing without event indexing. Event queries will use direct blockchain queries.\n');
   }
 
   try {

@@ -1,5 +1,6 @@
 const web3Service = require('./web3Service');
 const cacheService = require('./cacheService');
+const eventIndexer = require('./eventIndexer');
 const { normalizeAddress, validateAddress } = require('../utils/addressUtils');
 const { 
   ValidationError, 
@@ -996,22 +997,41 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
+      // Check if PostgreSQL event indexing is enabled
+      const usePostgres = eventIndexer.isEventIndexingEnabled();
+      let fromBlockArg = fromBlock !== null && fromBlock !== undefined ? fromBlock : undefined;
+      let toBlockArg = toBlock !== null && toBlock !== undefined ? toBlock : undefined;
+      
+      // If PostgreSQL is enabled and no explicit block range is provided, use incremental querying
+      if (usePostgres && fromBlock === null && toBlock === null) {
+        // Get last processed block from PostgreSQL
+        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('ConsentGranted');
+        
+        // Only query new events from blockchain (from last processed block + 1)
+        if (lastProcessedBlock > 0) {
+          fromBlockArg = lastProcessedBlock + 1;
+        } else {
+          // First time indexing - query from deployment block (0)
+          fromBlockArg = 0;
+        }
+        toBlockArg = 'latest';
+        
+        console.log(`📊 Using PostgreSQL event index. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg}`);
+      } else if (!usePostgres) {
+        // PostgreSQL not enabled - use current behavior (query from block 0 if not specified)
+        if (fromBlockArg === undefined) {
+          fromBlockArg = 0;
+        }
+        if (toBlockArg === undefined) {
+          toBlockArg = 'latest';
+        }
+      }
+      
       // Build filter
       const filter = {};
       if (patientAddress) {
         filter.patient = normalizeAddress(patientAddress);
       }
-      if (fromBlock !== null) {
-        filter.fromBlock = fromBlock;
-      }
-      if (toBlock !== null) {
-        filter.toBlock = toBlock;
-      }
-
-      // Query ConsentGranted events
-      // Handle null/undefined for fromBlock and toBlock
-      const fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
-      const toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
       
       // ConsentGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
       // Only patient is indexed, so filter by patient if provided
@@ -1019,42 +1039,56 @@ class ConsentService {
         ? contract.filters.ConsentGranted(filter.patient)
         : contract.filters.ConsentGranted();
       
-      let grantedEvents;
-      try {
-        grantedEvents = await contract.queryFilter(
-          grantedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        // Ensure it's an array
-        if (!Array.isArray(grantedEvents)) {
+      let grantedEvents = [];
+      let revokedEvents = [];
+      
+      // Only query blockchain if we need new events (PostgreSQL enabled) or if PostgreSQL is disabled
+      if (!usePostgres || (fromBlockArg !== undefined && fromBlockArg >= 0)) {
+        try {
+          grantedEvents = await contract.queryFilter(
+            grantedFilter,
+            fromBlockArg,
+            toBlockArg
+          );
+          // Ensure it's an array
+          if (!Array.isArray(grantedEvents)) {
+            grantedEvents = [];
+          }
+          
+          // Store new events in PostgreSQL if enabled
+          if (usePostgres && grantedEvents.length > 0) {
+            await eventIndexer.storeConsentEvents(grantedEvents);
+          }
+        } catch (filterError) {
+          console.error('Error querying ConsentGranted events:', filterError.message);
           grantedEvents = [];
         }
-      } catch (filterError) {
-        console.error('Error querying ConsentGranted events:', filterError.message);
-        grantedEvents = [];
-      }
 
-      // ConsentRevoked event: (uint256 indexed consentId, address indexed patient, ...)
-      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
-      const revokedFilter = filter.patient
-        ? contract.filters.ConsentRevoked(null, filter.patient)
-        : contract.filters.ConsentRevoked();
-      
-      let revokedEvents;
-      try {
-        revokedEvents = await contract.queryFilter(
-          revokedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        // Ensure it's an array
-        if (!Array.isArray(revokedEvents)) {
+        // ConsentRevoked event: (uint256 indexed consentId, address indexed patient, ...)
+        // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+        const revokedFilter = filter.patient
+          ? contract.filters.ConsentRevoked(null, filter.patient)
+          : contract.filters.ConsentRevoked();
+        
+        try {
+          revokedEvents = await contract.queryFilter(
+            revokedFilter,
+            fromBlockArg,
+            toBlockArg
+          );
+          // Ensure it's an array
+          if (!Array.isArray(revokedEvents)) {
+            revokedEvents = [];
+          }
+          
+          // Store new events in PostgreSQL if enabled
+          if (usePostgres && revokedEvents.length > 0) {
+            await eventIndexer.storeConsentEvents(revokedEvents);
+          }
+        } catch (filterError) {
+          console.error('Error querying ConsentRevoked events:', filterError.message);
           revokedEvents = [];
         }
-      } catch (filterError) {
-        console.error('Error querying ConsentRevoked events:', filterError.message);
-        revokedEvents = [];
       }
 
       // Transform ConsentGranted events only
@@ -1236,10 +1270,35 @@ class ConsentService {
         filter.toBlock = toBlock;
       }
 
-      // Query all access request event types
-      // Handle null/undefined for fromBlock and toBlock
-      const fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
-      const toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
+      // Check if PostgreSQL event indexing is enabled
+      const usePostgres = eventIndexer.isEventIndexingEnabled();
+      let fromBlockArg = filter.fromBlock !== null && filter.fromBlock !== undefined ? filter.fromBlock : undefined;
+      let toBlockArg = filter.toBlock !== null && filter.toBlock !== undefined ? filter.toBlock : undefined;
+      
+      // If PostgreSQL is enabled and no explicit block range is provided, use incremental querying
+      if (usePostgres && fromBlock === null && toBlock === null) {
+        // Get last processed block from PostgreSQL (use AccessRequested as the event type)
+        const lastProcessedBlock = await eventIndexer.getLastProcessedBlock('AccessRequested');
+        
+        // Only query new events from blockchain (from last processed block + 1)
+        if (lastProcessedBlock > 0) {
+          fromBlockArg = lastProcessedBlock + 1;
+        } else {
+          // First time indexing - query from deployment block (0)
+          fromBlockArg = 0;
+        }
+        toBlockArg = 'latest';
+        
+        console.log(`📊 Using PostgreSQL event index for access requests. Last processed block: ${lastProcessedBlock}, querying from block ${fromBlockArg}`);
+      } else if (!usePostgres) {
+        // PostgreSQL not enabled - use current behavior (query from block 0 if not specified)
+        if (fromBlockArg === undefined) {
+          fromBlockArg = 0;
+        }
+        if (toBlockArg === undefined) {
+          toBlockArg = 'latest';
+        }
+      }
       
       // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
       // If patient filter is provided, filter by patient (third indexed parameter), otherwise get all events
@@ -1247,61 +1306,73 @@ class ConsentService {
         ? contract.filters.AccessRequested(null, null, filter.patient)
         : contract.filters.AccessRequested(null, null, null);
       
-      let requestedEvents;
-      try {
-        requestedEvents = await contract.queryFilter(
-          requestedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        if (!Array.isArray(requestedEvents)) {
+      let requestedEvents = [];
+      let approvedEvents = [];
+      let deniedEvents = [];
+      
+      // Only query blockchain if we need new events (PostgreSQL enabled) or if PostgreSQL is disabled
+      if (!usePostgres || (fromBlockArg !== undefined && fromBlockArg >= 0)) {
+        try {
+          requestedEvents = await contract.queryFilter(
+            requestedFilter,
+            fromBlockArg,
+            toBlockArg
+          );
+          if (!Array.isArray(requestedEvents)) {
+            requestedEvents = [];
+          }
+        } catch (filterError) {
+          console.error('Error querying AccessRequested events:', filterError.message);
           requestedEvents = [];
         }
-      } catch (filterError) {
-        console.error('Error querying AccessRequested events:', filterError.message);
-        requestedEvents = [];
-      }
 
-      // AccessApproved event: (uint256 indexed requestId, address indexed patient, ...)
-      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
-      const approvedFilter = filter.patient
-        ? contract.filters.AccessApproved(null, filter.patient)
-        : contract.filters.AccessApproved(null, null);
-      
-      let approvedEvents;
-      try {
-        approvedEvents = await contract.queryFilter(
-          approvedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        if (!Array.isArray(approvedEvents)) {
+        // AccessApproved event: (uint256 indexed requestId, address indexed patient, ...)
+        // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+        const approvedFilter = filter.patient
+          ? contract.filters.AccessApproved(null, filter.patient)
+          : contract.filters.AccessApproved(null, null);
+        
+        try {
+          approvedEvents = await contract.queryFilter(
+            approvedFilter,
+            fromBlockArg,
+            toBlockArg
+          );
+          if (!Array.isArray(approvedEvents)) {
+            approvedEvents = [];
+          }
+        } catch (filterError) {
+          console.error('Error querying AccessApproved events:', filterError.message);
           approvedEvents = [];
         }
-      } catch (filterError) {
-        console.error('Error querying AccessApproved events:', filterError.message);
-        approvedEvents = [];
-      }
 
-      // AccessDenied event: (uint256 indexed requestId, address indexed patient, ...)
-      // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
-      const deniedFilter = filter.patient
-        ? contract.filters.AccessDenied(null, filter.patient)
-        : contract.filters.AccessDenied(null, null);
-      
-      let deniedEvents;
-      try {
-        deniedEvents = await contract.queryFilter(
-          deniedFilter,
-          fromBlockArg,
-          toBlockArg
-        );
-        if (!Array.isArray(deniedEvents)) {
+        // AccessDenied event: (uint256 indexed requestId, address indexed patient, ...)
+        // If patient filter is provided, filter by patient (second indexed parameter), otherwise get all events
+        const deniedFilter = filter.patient
+          ? contract.filters.AccessDenied(null, filter.patient)
+          : contract.filters.AccessDenied(null, null);
+        
+        try {
+          deniedEvents = await contract.queryFilter(
+            deniedFilter,
+            fromBlockArg,
+            toBlockArg
+          );
+          if (!Array.isArray(deniedEvents)) {
+            deniedEvents = [];
+          }
+        } catch (filterError) {
+          console.error('Error querying AccessDenied events:', filterError.message);
           deniedEvents = [];
         }
-      } catch (filterError) {
-        console.error('Error querying AccessDenied events:', filterError.message);
-        deniedEvents = [];
+        
+        // Store new events in PostgreSQL if enabled
+        if (usePostgres) {
+          const allRequestEvents = [...requestedEvents, ...approvedEvents, ...deniedEvents];
+          if (allRequestEvents.length > 0) {
+            await eventIndexer.storeAccessRequestEvents(allRequestEvents);
+          }
+        }
       }
 
       // Create a map of requestId -> AccessRequested event to look up requester for approved/denied events

@@ -21,6 +21,7 @@ Before deploying, ensure you have:
 - **MetaMask** (for frontend interactions)
 - **PM2** (for production process management) - `npm install -g pm2`
 - **Redis** (recommended for caching, optional) - See [Redis Setup](#step-6-set-up-redis-recommended-for-caching) below
+- **PostgreSQL** (optional, for event indexing) - See [PostgreSQL Setup](#step-7-set-up-postgresql-optional-for-event-indexing) below
 
 ## Local Development Deployment
 
@@ -107,6 +108,14 @@ AUTH_REQUIRED=true  # Set to 'false' for development/testing without auth
 
 # Redis Configuration (for caching)
 REDIS_URL=redis://localhost:6379  # Redis connection URL
+
+# PostgreSQL Configuration (for event indexing - optional)
+POSTGRES_ENABLED=false  # Set to 'true' to enable PostgreSQL event indexing
+POSTGRES_HOST=localhost  # PostgreSQL host
+POSTGRES_PORT=5432  # PostgreSQL port
+POSTGRES_DATABASE=healthchains_events  # Database name
+POSTGRES_USER=healthchains  # Database user
+POSTGRES_PASSWORD=healthchains123  # Database password
 
 # Optional: Private key for automated operations (not recommended for production)
 # PRIVATE_KEY=your_private_key_here
@@ -218,7 +227,87 @@ REDIS_URL=redis://username:password@host:port
 
 This ensures the system remains functional even if Redis is unavailable, making it safe to deploy without Redis for development or testing.
 
-### Step 7: Start Backend Server
+### Step 7: Set Up PostgreSQL (Optional for Event Indexing)
+
+**PostgreSQL is optional** but recommended for production deployments. It provides long-term event caching and significantly improves query performance by only fetching new events from the blockchain.
+
+#### Why PostgreSQL?
+
+- **Performance**: Only queries new events from blockchain (incremental queries)
+- **Scalability**: Handles large block ranges efficiently
+- **Cost Savings**: Reduces blockchain RPC calls (important on mainnet)
+- **Reliability**: Long-term event storage for audit trails
+
+#### Installation
+
+**On Ubuntu/Debian**:
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+**On macOS**:
+```bash
+brew install postgresql
+brew services start postgresql
+```
+
+**On Windows**:
+Download from https://www.postgresql.org/download/windows/ or use WSL.
+
+#### Database Setup
+
+1. **Create database and user**:
+```bash
+sudo -u postgres psql
+```
+
+2. **In PostgreSQL prompt**:
+```sql
+CREATE DATABASE healthchains_events;
+CREATE USER healthchains WITH PASSWORD 'healthchains123';
+GRANT ALL PRIVILEGES ON DATABASE healthchains_events TO healthchains;
+\q
+```
+
+3. **Verify connection**:
+```bash
+psql -h localhost -U healthchains -d healthchains_events
+# Enter password when prompted
+```
+
+#### Configuration
+
+Enable PostgreSQL in your `backend/.env`:
+
+```env
+POSTGRES_ENABLED=true
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DATABASE=healthchains_events
+POSTGRES_USER=healthchains
+POSTGRES_PASSWORD=healthchains123
+```
+
+#### How It Works
+
+When PostgreSQL is enabled:
+- **First Run**: Queries all events from block 0 and stores the last processed block
+- **Subsequent Runs**: Only queries new events from the last processed block + 1
+- **Block Tracking**: Tracks last processed block per event type (ConsentGranted, ConsentRevoked, AccessRequested, etc.)
+- **Automatic Schema**: Database schema is automatically created on first connection
+
+**Important**: If PostgreSQL is not enabled or unavailable, the backend will:
+- ✅ Continue operating normally
+- ✅ Log a warning about PostgreSQL unavailability
+- ✅ Fall back to direct blockchain queries (querying from block 0)
+- ✅ Return data without event indexing
+
+This ensures the system remains functional even if PostgreSQL is unavailable, making it safe to deploy without PostgreSQL for development or testing.
+
+### Step 8: Start Backend Server
 
 In a **new terminal**:
 
@@ -235,7 +324,7 @@ The backend will:
 - Initialize JWT authentication (if `AUTH_REQUIRED=true`)
 - Display all available routes
 
-### Step 8: Start Frontend
+### Step 9: Start Frontend
 
 In a **new terminal**:
 
@@ -525,6 +614,12 @@ See [PM2_SETUP.md](../../PM2_SETUP.md) for detailed PM2 setup.
 | `SIGNATURE_VALIDITY_DURATION` | No | `300` | MetaMask signature validity in seconds (5 minutes) |
 | `AUTH_REQUIRED` | No | `true` | Require JWT authentication (`false` for development) |
 | `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL for caching (optional, graceful degradation if unavailable) |
+| `POSTGRES_ENABLED` | No | `false` | Enable PostgreSQL event indexing (`true` to enable) |
+| `POSTGRES_HOST` | No | `localhost` | PostgreSQL host |
+| `POSTGRES_PORT` | No | `5432` | PostgreSQL port |
+| `POSTGRES_DATABASE` | No | `healthchains_events` | PostgreSQL database name |
+| `POSTGRES_USER` | No | `healthchains` | PostgreSQL user |
+| `POSTGRES_PASSWORD` | No | `healthchains123` | PostgreSQL password |
 | `PRIVATE_KEY` | No | - | Private key for automated operations (not recommended) |
 | `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
 
