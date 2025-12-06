@@ -233,6 +233,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Skip if we're handling an account change (that effect will handle authentication)
     if (isHandlingAccountChangeRef.current) {
+      console.log('[AuthContext] Auto-authenticate effect skipped - account change in progress');
+      return;
+    }
+
+    // Skip if already authenticating (ref check)
+    if (isAuthenticatingRef.current) {
+      console.log('[AuthContext] Auto-authenticate effect skipped - already authenticating (ref)');
+      return;
+    }
+
+    // Skip if state says authenticating
+    if (state.isAuthenticating) {
+      console.log('[AuthContext] Auto-authenticate effect skipped - already authenticating (state)');
       return;
     }
 
@@ -244,19 +257,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Only authenticate if wallet is connected and we don't have a valid token
-    // Also check the flag and ref to prevent duplicate authentication during account changes
-    if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating && !isHandlingAccountChangeRef.current && !isAuthenticatingRef.current) {
+    if (account && isConnected && !state.isAuthenticated) {
+      console.log('[AuthContext] Auto-authenticate effect setting up timer');
       // Small delay to ensure wallet is fully connected
       const timer = setTimeout(() => {
-        // Triple-check: flag, ref, and state (account change might have happened during delay)
-        if (!isHandlingAccountChangeRef.current && !isAuthenticatingRef.current && !state.isAuthenticating) {
-          authenticate();
-        } else {
-          console.log('[AuthContext] Auto-authenticate skipped - account change in progress or already authenticating');
+        // Final check: flag, ref, and state (account change might have happened during delay)
+        if (isHandlingAccountChangeRef.current) {
+          console.log('[AuthContext] Auto-authenticate timer skipped - account change detected');
+          return;
         }
+        if (isAuthenticatingRef.current) {
+          console.log('[AuthContext] Auto-authenticate timer skipped - already authenticating (ref)');
+          return;
+        }
+        if (state.isAuthenticating) {
+          console.log('[AuthContext] Auto-authenticate timer skipped - already authenticating (state)');
+          return;
+        }
+        console.log('[AuthContext] Auto-authenticate timer firing - calling authenticate()');
+        authenticate();
       }, 500);
 
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('[AuthContext] Auto-authenticate timer cleared');
+        clearTimeout(timer);
+      };
     }
   }, [account, isConnected, state.isAuthenticated, state.isAuthenticating, authenticate]);
 
