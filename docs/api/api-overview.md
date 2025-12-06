@@ -102,13 +102,45 @@ Get all patients.
 }
 ```
 
-#### GET /api/patients/:id
+#### GET /api/patients/:patientId
 
 Get specific patient by ID.
 
-#### GET /api/patients/address/:address
+**Path Parameters**:
+- `patientId`: Patient ID (e.g., "PAT-000001")
 
-Get patient by wallet address.
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "patientId": "PAT-000001",
+    "walletAddress": "0x...",
+    "demographics": { ... },
+    "medicalHistory": [ ... ]
+  }
+}
+```
+
+#### GET /api/patients/:patientId/data/:dataType
+
+Get patient data by type (with optional consent checking).
+
+**Path Parameters**:
+- `patientId`: Patient ID
+- `dataType`: Type of data (e.g., "medical_records", "genetic_data")
+
+**Query Parameters**:
+- `providerAddress` (optional): Provider address for consent verification
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { ... },
+  "hasConsent": true
+}
+```
 
 ### Providers
 
@@ -116,25 +148,98 @@ Get patient by wallet address.
 
 Get all providers.
 
-#### GET /api/providers/:id
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "providerId": "PROV-000001",
+      "walletAddress": "0x...",
+      "organizationName": "...",
+      "providerType": "..."
+    }
+  ]
+}
+```
+
+#### GET /api/providers/:providerId
 
 Get specific provider by ID.
 
-#### GET /api/providers/address/:address
+**Path Parameters**:
+- `providerId`: Provider ID (e.g., "PROV-000001")
 
-Get provider by wallet address.
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "providerId": "PROV-000001",
+    "walletAddress": "0x...",
+    "organizationName": "..."
+  }
+}
+```
+
+#### GET /api/provider/:providerAddress/consents
+
+Get all consents for a provider.
+
+**Path Parameters**:
+- `providerAddress`: Provider wallet address
+
+**Query Parameters**:
+- `includeExpired` (optional): Include expired consents (default: false)
+
+#### GET /api/provider/:providerAddress/patients
+
+Get all patients with active consents for a provider.
+
+**Path Parameters**:
+- `providerAddress`: Provider wallet address
+
+#### GET /api/provider/:providerAddress/pending-requests
+
+Get all pending access requests created by a provider.
+
+**Path Parameters**:
+- `providerAddress`: Provider wallet address
+
+#### GET /api/provider/:providerAddress/patient/:patientId/data
+
+Get patient data for a provider (with consent verification).
+
+**Path Parameters**:
+- `providerAddress`: Provider wallet address
+- `patientId`: Patient ID
+
+**Query Parameters**:
+- `dataType` (optional): Filter by data type
 
 ### Consents
 
 #### GET /api/consent/status
 
-Check consent status.
+Check consent status between patient and provider for a specific data type.
 
 **Query Parameters**:
-- `patient`: Patient address
-- `provider`: Provider address
-- `dataType`: Data type hash
-- `purpose`: Purpose hash
+- `patientAddress` (required): Patient wallet address
+- `providerAddress` (required): Provider wallet address
+- `dataType` (required): Data type string (e.g., "medical_records")
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "hasConsent": true,
+    "consentId": 123,
+    "isExpired": false,
+    "expirationTime": "2024-12-31T23:59:59.000Z"
+  }
+}
+```
 
 #### GET /api/consent/:consentId
 
@@ -156,7 +261,109 @@ Get access request by ID.
 
 #### GET /api/requests/patient/:patientAddress
 
-Get all requests for a patient.
+Get all access requests for a patient.
+
+**Path Parameters**:
+- `patientAddress`: Patient wallet address
+
+**Query Parameters**:
+- `status` (optional): Filter by status ('pending', 'approved', 'denied', 'all') (default: 'all')
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "requestId": 1,
+      "requester": "0x...",
+      "patientAddress": "0x...",
+      "dataTypes": ["medical_records"],
+      "purposes": ["treatment"],
+      "status": "pending",
+      "timestamp": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "metadata": {
+    "statusFilter": "all",
+    "count": 1
+  }
+}
+```
+
+### User & Data Types
+
+#### GET /api/user/role
+
+Get user role (patient or provider) by wallet address.
+
+**Query Parameters**:
+- `address` (required): Wallet address
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "address": "0x...",
+    "role": "patient",
+    "id": "PAT-000001"
+  }
+}
+```
+
+#### GET /api/data-types
+
+Get all available data types.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    "medical_records",
+    "genetic_data",
+    "lab_results",
+    ...
+  ]
+}
+```
+
+#### GET /api/purposes
+
+Get all available purposes.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    "treatment",
+    "research",
+    "billing",
+    ...
+  ]
+}
+```
+
+### Patient Endpoints
+
+#### GET /api/patient/:patientAddress/consents
+
+Get all consents for a patient.
+
+**Path Parameters**:
+- `patientAddress`: Patient wallet address
+
+**Query Parameters**:
+- `includeExpired` (optional): Include expired consents (default: false)
+
+#### GET /api/patient/:patientAddress/pending-requests
+
+Get all pending access requests for a patient.
+
+**Path Parameters**:
+- `patientAddress`: Patient wallet address
 
 ### Events
 
@@ -201,9 +408,12 @@ Currently not implemented. May be added for production.
 
 CORS is enabled for frontend domain. Configure in backend for production.
 
+## Write Operations
+
+**Note**: Write operations (grant consent, revoke consent, request access, approve/deny requests) are **not** handled via REST API. These operations are performed directly through MetaMask on the frontend by calling the smart contract functions. The backend API is read-only for security and decentralization.
+
 ## See Also
 
-- [Endpoints Reference](endpoints.md) - Complete endpoint documentation
-- [Error Handling](error-handling.md) - Error codes and handling
 - [Backend README](../../backend/README.md) - Backend-specific docs
+- [Smart Contract Design](../architecture/smart-contract-design.md) - Contract function reference
 

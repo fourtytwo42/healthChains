@@ -93,16 +93,23 @@ struct AccessRequest {
     bool isProcessed;            // 1 byte (slot 3, next byte)
     RequestStatus status;        // 1 byte (slot 3, last byte)
     // Slot 3: Perfect 32-byte fit!
-    string dataType;             // Dynamic (slot 4+)
-    string purpose;              // Dynamic (slot 5+)
+    string dataType;             // Dynamic (slot 4+) - stores FIRST dataType for compatibility
+    string purpose;              // Dynamic (slot 5+) - stores FIRST purpose for compatibility
 }
 ```
+
+**Note**: The struct stores only the **first** `dataType` and `purpose` for backward compatibility. The full arrays are stored separately in mappings:
+- `mapping(uint256 => bytes32[]) private requestDataTypes;`
+- `mapping(uint256 => bytes32[]) private requestPurposes;`
+
+Use `getRequestDataTypes(requestId)` and `getRequestPurposes(requestId)` to retrieve the full arrays.
 
 **Design Decisions**:
 - **uint112 for expirationTime**: Reduced from uint128 to achieve perfect packing
 - **uint112 is sufficient**: Still covers timestamps until year 584 million
 - **Enum instead of bool**: More expressive than boolean flag
 - **Perfect packing**: All fields in slot 3 fit exactly in 32 bytes
+- **Array storage**: Full arrays stored as hashes in separate mappings for gas efficiency
 
 **Gas Savings**: Saves 1 storage slot per request (~20,000 gas)
 
@@ -217,6 +224,22 @@ function grantConsent(
 
 **Purpose**: Request access to patient data
 
+**Function Signature**:
+```solidity
+function requestAccess(
+    address patient,
+    string[] calldata dataTypes,
+    string[] calldata purposes,
+    uint256 expirationTime
+) external returns (uint256 requestId)
+```
+
+**Implementation**: 
+- Takes arrays of `dataTypes` and `purposes` (not single strings)
+- Stores first dataType/purpose in struct for compatibility
+- Stores arrays of hashes in separate mappings for gas efficiency
+- Use `getRequestDataTypes(requestId)` and `getRequestPurposes(requestId)` to retrieve full arrays
+
 **Security Measures**:
 - Cannot request from self
 - Array validation
@@ -265,8 +288,7 @@ function grantConsent(
 All view functions are marked `external` (not `public`) to save gas:
 - `getPatientConsents()` - Returns array of consent IDs
 - `getPatientRequests()` - Returns array of request IDs
-- `getConsentRecord()` - Returns single consent record
-- `getBatchConsentRecord()` - Returns batch consent record
+- `getConsentRecord()` - Returns consent record (automatically handles both legacy ConsentRecord and BatchConsentRecord)
 - `getAccessRequest()` - Returns access request
 - `getRequestDataTypes()` - Reconstructs string array from hashes
 - `getRequestPurposes()` - Reconstructs string array from hashes
@@ -283,9 +305,8 @@ All view functions are marked `external` (not `public`) to save gas:
 
 ### Event Types
 
-- `ConsentGranted` - Single consent granted
+- `ConsentGranted` - Consent granted (emits array of consent IDs, typically one for BatchConsentRecord)
 - `ConsentRevoked` - Consent revoked
-- `ConsentBatchGranted` - Batch consent granted
 - `AccessRequested` - Access request created
 - `AccessApproved` - Request approved
 - `AccessDenied` - Request denied

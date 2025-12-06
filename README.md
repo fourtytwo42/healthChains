@@ -18,60 +18,41 @@ HealthChains provides a complete solution for managing patient consent in health
 
 - **[Architecture Overview](docs/architecture/overview.md)** - System architecture, design decisions, and technical choices
 - **[Smart Contract Design](docs/architecture/smart-contract-design.md)** - Contract structure, data models, and design rationale
-- **[Data Flow & Interactions](docs/architecture/data-flow.md)** - How data flows through the system
-- **[Technology Stack](docs/architecture/technology-stack.md)** - Technologies used and why they were chosen
 
 ### 🚀 Getting Started
 
 - **[Quick Start Guide](QUICK_START.md)** - Get up and running in minutes
-- **[Installation Guide](docs/guides/installation.md)** - Detailed installation instructions
 - **[Deployment Guide](docs/deployment/deployment.md)** - Deploy to various environments
-- **[Development Setup](docs/guides/development-setup.md)** - Setting up your development environment
 
 ### 📖 User Guides
 
 - **[Frontend User Guide](docs/guides/frontend-usage.md)** - How to use the web application
-- **[Provider Guide](docs/guides/provider-guide.md)** - Guide for healthcare providers
-- **[Patient Guide](docs/guides/patient-guide.md)** - Guide for patients
 - **[Test Accounts](docs/TEST_ACCOUNTS.md)** - List of test accounts and credentials
 
 ### 🧪 Testing
 
 - **[Testing Overview](docs/TESTING.md)** - Complete testing documentation
 - **[Test Accounts](docs/TEST_ACCOUNTS.md)** - Test account credentials
-- **[Running Tests](docs/guides/running-tests.md)** - How to run all test suites
 
 ### 🔒 Security
 
 - **[Security Overview](docs/security/security-overview.md)** - Security architecture and practices
-- **[Smart Contract Security](docs/security/smart-contract-security.md)** - Contract security measures
-- **[Access Control](docs/security/access-control.md)** - Permission and authorization model
-- **[Best Practices](docs/security/best-practices.md)** - Security best practices for developers
 
 ### ⚡ Features
 
 - **[Core Features](docs/features/core-features.md)** - Main functionality overview
-- **[Consent Management](docs/features/consent-management.md)** - Granting and revoking consent
-- **[Access Requests](docs/features/access-requests.md)** - Request and approval workflow
-- **[Batch Operations](docs/features/batch-operations.md)** - Efficient batch consent operations
-- **[Event System](docs/features/event-system.md)** - Blockchain event logging and querying
 
 ### 🔧 API Documentation
 
 - **[API Overview](docs/api/api-overview.md)** - REST API documentation
-- **[Endpoints Reference](docs/api/endpoints.md)** - Complete endpoint reference
-- **[Error Handling](docs/api/error-handling.md)** - API error codes and handling
 
 ### 📈 Scalability & Performance
 
 - **[Scalability Overview](docs/scalability/overview.md)** - Scaling considerations and strategies
-- **[Gas Optimization](docs/scalability/gas-optimization.md)** - Contract gas optimization techniques
-- **[Performance Tuning](docs/scalability/performance.md)** - Backend and frontend performance
-- **[Limitations & Future Work](docs/scalability/limitations.md)** - Current limitations and improvements
 
 ### 📝 Additional Documentation
 
-- **[Smart Contract Reference](docs/SMART_CONTRACT.md)** - Detailed contract documentation
+- **[Smart Contract Design](docs/architecture/smart-contract-design.md)** - Complete contract design and API reference
 - **[Backend README](backend/README.md)** - Backend-specific documentation
 - **[Frontend README](frontend/README.md)** - Frontend-specific documentation
 - **[PM2 Setup](PM2_SETUP.md)** - Process management setup

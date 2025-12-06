@@ -228,18 +228,17 @@ User (Provider)                   Frontend              MetaMask         Smart C
 
 ### On-Chain Data (Smart Contract)
 
-**Consent Storage - Two Types**:
+**Consent Storage**:
 
-1. **ConsentRecord**: Individual consent record
-   - One data type, one purpose per record
-   - Created by `grantConsent()` or `grantConsentBatch()`
-   - Each gets its own consent ID
-
-2. **BatchConsentRecord**: Batch consent record
+**BatchConsentRecord**: The standard consent record structure
    - Arrays of data types and purposes in ONE record
-   - Created by `respondToAccessRequest()` when approved
+   - Created by `grantConsent()` (always creates BatchConsentRecord)
+   - Also created by `respondToAccessRequest()` when approved
    - More gas-efficient for large combinations
-   - ONE consent ID covers all combinations
+   - ONE consent ID covers all combinations (dataTypes.length × purposes.length)
+   - Works for single or multiple items - always uses BatchConsentRecord
+
+**Note**: The old `ConsentRecord` struct exists for backward compatibility with legacy consents, but all new consents use `BatchConsentRecord`. The `getConsentRecord()` function automatically handles both types.
 
 **Other Data**:
 - **AccessRequest**: Request for access with requester, patient, data types, purposes, status
