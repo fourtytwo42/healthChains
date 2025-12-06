@@ -627,7 +627,7 @@ See [PM2_SETUP.md](../../PM2_SETUP.md) for detailed PM2 setup.
 | `POSTGRES_USER` | No | `healthchains` | PostgreSQL user |
 | `POSTGRES_PASSWORD` | No | `healthchains123` | PostgreSQL password |
 | `PRIVATE_KEY` | No | - | Private key for automated operations (not recommended) |
-| `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
+| `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warn`, `error`). Uses Winston logger with file output to `backend/logs/` |
 
 ### Frontend Environment Variables
 

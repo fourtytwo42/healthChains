@@ -379,9 +379,16 @@ modifier validString(string memory str) {
 
 1. **Secure Infrastructure**: Harden servers, use firewalls
 2. **Monitor Logs**: Regular log review for suspicious activity
+   - Check `backend/logs/error.log` for errors
+   - Review `backend/logs/combined.log` for patterns
+   - Use structured logging (JSON) for automated analysis
 3. **Update Software**: Keep all software updated
 4. **Backup Data**: Regular backups of off-chain data
 5. **Incident Response**: Have a plan for security incidents
+6. **Log Management**: 
+   - Monitor log file sizes (automatic rotation at 5MB)
+   - Archive old logs for compliance
+   - Set appropriate log levels (`LOG_LEVEL=info` for production)
 
 ## Known Limitations
 

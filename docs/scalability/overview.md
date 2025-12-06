@@ -132,6 +132,7 @@ This document covers scalability considerations, limitations, and strategies for
 - ✅ O(1) Map lookups - **IMPLEMENTED** - Patient/provider lookups use Map instead of array searches
 - ✅ Pagination support - **IMPLEMENTED** - `/api/patients` and `/api/providers` support pagination
 - ✅ Optimized consent queries - **IMPLEMENTED** - `getProviderConsents()` optimized to reduce redundant contract calls
+- ✅ Batch event processing - **IMPLEMENTED** - Events processed in batches of 50 to reduce memory usage
 - ✅ Request timeout middleware - **IMPLEMENTED** - Prevents resource exhaustion from hanging requests
 - ✅ RPC health checks - **IMPLEMENTED** - Automatic reconnection if blockchain connection fails
 - CDN for static assets (can be added)
