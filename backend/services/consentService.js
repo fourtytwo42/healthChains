@@ -657,8 +657,9 @@ class ConsentService {
         ]);
 
         // Read arrays from mappings
-        const dataTypes = await contract.requestDataTypes(requestId);
-        const purposes = await contract.requestPurposes(requestId);
+        // Use helper functions to get string arrays from hashes
+        const dataTypes = await contract.getRequestDataTypes(requestId);
+        const purposes = await contract.getRequestPurposes(requestId);
 
         return this._transformAccessRequest(request, requestId, dataTypes, purposes);
       } catch (contractError) {
