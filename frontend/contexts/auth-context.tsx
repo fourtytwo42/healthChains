@@ -129,7 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Invalidate all queries to refetch data with new authentication
       // This ensures the page updates automatically after authentication
-      queryClient.invalidateQueries();
+      // Use a small delay to ensure state is fully updated first
+      setTimeout(() => {
+        queryClient.invalidateQueries();
+      }, 100);
       
       // Don't show toast on automatic authentication
       // Only show on manual authentication attempts
