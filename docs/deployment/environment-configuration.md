@@ -28,8 +28,8 @@ The frontend automatically detects the hostname and uses the appropriate endpoin
 // Detects hostname and returns appropriate API URL
 getApiBaseUrl() → 'http://localhost:3001' or 'https://api.qrmk.us'
 
-// Detects hostname and returns appropriate RPC URL
-getRpcUrl() → 'http://127.0.0.1:8545' or 'https://rpc.qrmk.us'
+// Always returns remote RPC URL (no hostname detection)
+getRpcUrl() → 'https://rpc.qrmk.us' (always)
 ```
 
 ### Usage
@@ -47,7 +47,7 @@ You can still override the automatic detection using environment variables:
 ```env
 # .env.local
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
+NEXT_PUBLIC_RPC_URL=https://rpc.qrmk.us  # Always uses remote RPC
 ```
 
 **Note**: If environment variables are set, they take precedence over automatic detection.
