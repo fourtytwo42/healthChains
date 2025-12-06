@@ -150,7 +150,36 @@ Or manually copy the ABI from `backend/artifacts/contracts/PatientConsentManager
 }
 ```
 
-### Step 6: Start Backend Server
+### Step 6: Set Up Redis (for Caching)
+
+Redis is used for caching to improve performance. Install and start Redis:
+
+**On Ubuntu/Debian**:
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+**On macOS**:
+```bash
+brew install redis
+brew services start redis
+```
+
+**On Windows**:
+Download from https://redis.io/download or use WSL.
+
+**Verify Redis is running**:
+```bash
+redis-cli ping
+# Should return: PONG
+```
+
+**Note**: If Redis is not available, the backend will gracefully degrade and continue operating without caching.
+
+### Step 7: Start Backend Server
 
 In a **new terminal**:
 
@@ -163,6 +192,7 @@ The backend will:
 - Start on `http://localhost:3001`
 - Load mockup data automatically
 - Connect to the Hardhat network
+- Connect to Redis (if available)
 - Display all available routes
 
 ### Step 8: Start Frontend
