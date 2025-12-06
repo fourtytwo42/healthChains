@@ -207,17 +207,6 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
               </div>
             </div>
 
-            {/* Show cartesian product count */}
-            {requestData.dataTypes && requestData.purposes && 
-             (requestData.dataTypes.length > 1 || requestData.purposes.length > 1) && (
-              <div className="bg-muted/50 p-2 rounded-md">
-                <p className="text-xs font-medium text-muted-foreground">
-                  This will grant {requestData.dataTypes.length * requestData.purposes.length} consent{requestData.dataTypes.length * requestData.purposes.length !== 1 ? 's' : ''} 
-                  {' '}({requestData.dataTypes.length} data type{requestData.dataTypes.length !== 1 ? 's' : ''} × {requestData.purposes.length} purpose{requestData.purposes.length !== 1 ? 's' : ''})
-                </p>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               {requestData.expirationTime && (
                 <div>
