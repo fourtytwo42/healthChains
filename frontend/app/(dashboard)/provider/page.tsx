@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePatients } from '@/hooks/use-api';
 import { useWallet } from '@/contexts/wallet-context';
+import { useAuth } from '@/contexts/auth-context';
 import { useRole } from '@/hooks/use-role';
 import { useProviderPatients, useProviderConsentsPaginated, useProviderConsentHistory, useProviderPendingRequests, useProviders } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,9 +47,11 @@ export default function ProviderDashboardPage() {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Fetch all patients for "All Users" tab
+  const { isAuthenticated } = useAuth();
+
+  // Fetch all patients for "All Users" tab (only when authenticated)
   const { data: allPatientsData, isLoading: allPatientsLoading } = usePatients({
-    enabled: !!account,
+    enabled: !!account && isAuthenticated,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
@@ -76,30 +79,30 @@ export default function ProviderDashboardPage() {
     }
   }, [allPatientsData]); // Only depend on allPatientsData, not stablePatients
   
-  // Fetch pending requests for "Pending" tab
+  // Fetch pending requests for "Pending" tab (only when authenticated)
   const { data: pendingRequestsData, isLoading: pendingRequestsLoading } = useProviderPendingRequests(
     account || '',
     page,
     limit,
-    activeTab === 'pending' && !!account
+    activeTab === 'pending' && !!account && isAuthenticated
   );
   
-  // Fetch patients with granted consents for "Granted Consent" tab
+  // Fetch patients with granted consents for "Granted Consent" tab (only when authenticated)
   const { data: grantedPatientsData, isLoading: grantedPatientsLoading } = useProviderPatients(
     account || '',
     page,
     limit,
-    activeTab === 'granted' && !!account
+    activeTab === 'granted' && !!account && isAuthenticated
   );
 
   // Use data directly - React Query already handles caching and stability
   const stablePendingRequests = pendingRequestsData;
   const stableGrantedPatients = grantedPatientsData;
 
-  // Fetch consent history for "History" tab
+  // Fetch consent history for "History" tab (only when authenticated)
   const { data: historyData, isLoading: historyLoading } = useProviderConsentHistory(
     account || '',
-    activeTab === 'history' && !!account
+    activeTab === 'history' && !!account && isAuthenticated
   );
 
   // Fetch all provider consents to determine consent status for each patient

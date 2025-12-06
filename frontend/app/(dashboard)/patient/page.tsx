@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useWallet } from '@/contexts/wallet-context';
+import { useAuth } from '@/contexts/auth-context';
 import { useRole } from '@/hooks/use-role';
 import { usePatientPendingRequests, usePatientConsentsPaginated, useRevokeConsent, usePatientConsentHistory, usePatientInfo } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,29 +56,30 @@ export default function PatientDashboardPage() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
+  const { isAuthenticated } = useAuth();
   const revokeConsent = useRevokeConsent();
 
-  // Fetch pending requests
+  // Fetch pending requests (only when authenticated)
   const { data: requestsData, isLoading: requestsLoading } = usePatientPendingRequests(
     account || '',
     page,
     limit,
-    activeTab === 'pending' && !!account
+    activeTab === 'pending' && !!account && isAuthenticated
   );
 
-  // Fetch granted consents
+  // Fetch granted consents (only when authenticated)
   const { data: consentsData, isLoading: consentsLoading } = usePatientConsentsPaginated(
     account || '',
     page,
     limit,
     false,
-    activeTab === 'granted' && !!account
+    activeTab === 'granted' && !!account && isAuthenticated
   );
 
-  // Fetch consent history
+  // Fetch consent history (only when authenticated)
   const { data: historyData, isLoading: historyLoading } = usePatientConsentHistory(
     account || '',
-    activeTab === 'history' && !!account
+    activeTab === 'history' && !!account && isAuthenticated
   );
 
   // Fetch current patient's own information

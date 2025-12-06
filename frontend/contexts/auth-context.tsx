@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
 import { useWallet } from './wallet-context';
 import { getAuthMessage, login, storeToken, getToken, clearToken, isTokenExpired } from '@/lib/auth';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 /**
@@ -31,6 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { account, getSigner, isConnected } = useWallet();
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     isAuthenticating: false,
@@ -125,6 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: null,
       });
 
+      // Invalidate all queries to refetch data with new authentication
+      // This ensures the page updates automatically after authentication
+      queryClient.invalidateQueries();
+      
       // Don't show toast on automatic authentication
       // Only show on manual authentication attempts
     } catch (error) {
