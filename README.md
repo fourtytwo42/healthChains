@@ -1,38 +1,136 @@
-# Healthcare Blockchain Assessment
+# HealthChains - Healthcare Blockchain Consent Management System
 
-## Overview
+A decentralized patient consent management system built on Ethereum, enabling secure, transparent, and auditable healthcare data access permissions. This system allows patients to grant, manage, and revoke consent for healthcare providers to access their medical data, with all consent records stored immutably on the blockchain.
 
-This assessment project is designed to evaluate candidates for the **Senior Blockchain & Web3 Developer** position at AI Health Chains. The project focuses on building a decentralized patient consent management system using blockchain technology.
+## 🎯 Overview
 
-## Project Structure
+HealthChains provides a complete solution for managing patient consent in healthcare settings using blockchain technology. It ensures:
+
+- **Transparency**: All consent decisions are recorded on-chain
+- **Security**: Patient private keys never leave their wallets
+- **Auditability**: Complete immutable audit trail of all consent activities
+- **User Control**: Patients maintain full control over their data access permissions
+- **Efficiency**: Gas-optimized smart contracts with batch operations support
+
+## 📚 Documentation Index
+
+### 🏗️ Architecture & Design
+
+- **[Architecture Overview](docs/architecture/overview.md)** - System architecture, design decisions, and technical choices
+- **[Smart Contract Design](docs/architecture/smart-contract-design.md)** - Contract structure, data models, and design rationale
+- **[Data Flow & Interactions](docs/architecture/data-flow.md)** - How data flows through the system
+- **[Technology Stack](docs/architecture/technology-stack.md)** - Technologies used and why they were chosen
+
+### 🚀 Getting Started
+
+- **[Quick Start Guide](QUICK_START.md)** - Get up and running in minutes
+- **[Installation Guide](docs/guides/installation.md)** - Detailed installation instructions
+- **[Deployment Guide](docs/deployment/deployment.md)** - Deploy to various environments
+- **[Development Setup](docs/guides/development-setup.md)** - Setting up your development environment
+
+### 📖 User Guides
+
+- **[Frontend User Guide](docs/guides/frontend-usage.md)** - How to use the web application
+- **[Provider Guide](docs/guides/provider-guide.md)** - Guide for healthcare providers
+- **[Patient Guide](docs/guides/patient-guide.md)** - Guide for patients
+- **[Test Accounts](docs/TEST_ACCOUNTS.md)** - List of test accounts and credentials
+
+### 🧪 Testing
+
+- **[Testing Overview](docs/TESTING.md)** - Complete testing documentation
+- **[Test Accounts](docs/TEST_ACCOUNTS.md)** - Test account credentials
+- **[Running Tests](docs/guides/running-tests.md)** - How to run all test suites
+
+### 🔒 Security
+
+- **[Security Overview](docs/security/security-overview.md)** - Security architecture and practices
+- **[Smart Contract Security](docs/security/smart-contract-security.md)** - Contract security measures
+- **[Access Control](docs/security/access-control.md)** - Permission and authorization model
+- **[Best Practices](docs/security/best-practices.md)** - Security best practices for developers
+
+### ⚡ Features
+
+- **[Core Features](docs/features/core-features.md)** - Main functionality overview
+- **[Consent Management](docs/features/consent-management.md)** - Granting and revoking consent
+- **[Access Requests](docs/features/access-requests.md)** - Request and approval workflow
+- **[Batch Operations](docs/features/batch-operations.md)** - Efficient batch consent operations
+- **[Event System](docs/features/event-system.md)** - Blockchain event logging and querying
+
+### 🔧 API Documentation
+
+- **[API Overview](docs/api/api-overview.md)** - REST API documentation
+- **[Endpoints Reference](docs/api/endpoints.md)** - Complete endpoint reference
+- **[Error Handling](docs/api/error-handling.md)** - API error codes and handling
+
+### 📈 Scalability & Performance
+
+- **[Scalability Overview](docs/scalability/overview.md)** - Scaling considerations and strategies
+- **[Gas Optimization](docs/scalability/gas-optimization.md)** - Contract gas optimization techniques
+- **[Performance Tuning](docs/scalability/performance.md)** - Backend and frontend performance
+- **[Limitations & Future Work](docs/scalability/limitations.md)** - Current limitations and improvements
+
+### 📝 Additional Documentation
+
+- **[Smart Contract Reference](docs/SMART_CONTRACT.md)** - Detailed contract documentation
+- **[Backend README](backend/README.md)** - Backend-specific documentation
+- **[Frontend README](frontend/README.md)** - Frontend-specific documentation
+- **[PM2 Setup](PM2_SETUP.md)** - Process management setup
+
+## 🏃 Quick Start
+
+```bash
+# 1. Install dependencies
+npm install
+cd backend && npm install
+cd ../frontend && npm install
+
+# 2. Start Hardhat blockchain
+cd backend && npx hardhat node
+
+# 3. Deploy contract (in new terminal)
+cd backend && npm run deploy:hardhat
+
+# 4. Start backend (in new terminal)
+cd backend && npm run dev
+
+# 5. Start frontend (in new terminal)
+cd frontend && npm run dev
+```
+
+See [Quick Start Guide](QUICK_START.md) for detailed instructions.
+
+## 📁 Project Structure
 
 ```
-.
-├── backend/                 # Node.js backend server
+healthChains/
+├── backend/                 # Node.js/Express backend
 │   ├── contracts/          # Solidity smart contracts
-│   ├── services/           # Business logic services (Web3, Consent)
+│   ├── services/           # Business logic (Web3, Consent)
 │   ├── routes/             # Express API routes
 │   ├── middleware/         # Validation and error handling
-│   ├── data/               # Complex mockup data files (auto-loads on startup)
+│   ├── data/               # Mockup data (auto-loads)
 │   ├── scripts/            # Deployment scripts
-│   ├── test/              # Unit and integration tests
-│   ├── server.js           # Express server
-│   ├── API.md             # Complete API documentation
-│   └── README.md          # Backend setup guide
-├── frontend/               # Next.js App Router frontend
-│   ├── app/               # Next.js App Router pages
-│   ├── components/        # React components
-│   ├── contexts/          # React contexts (Wallet)
-│   ├── hooks/             # Custom hooks (API, mutations)
-│   ├── lib/               # Utilities (API client, theme)
-│   └── README.md          # Frontend setup guide
-├── docs/                   # Documentation
-│   ├── SMART_CONTRACT.md  # Smart contract documentation
-│   └── ...
+│   ├── test/               # Unit and integration tests
+│   └── server.js           # Express server entry point
+├── frontend/               # Next.js frontend
+│   ├── app/                # Next.js App Router pages
+│   ├── components/         # React components
+│   ├── contexts/           # React contexts (Wallet)
+│   ├── hooks/              # Custom React hooks
+│   ├── lib/                # Utilities (API, contract)
+│   └── public/             # Static assets
+├── docs/                   # Comprehensive documentation
+│   ├── architecture/       # Architecture documentation
+│   ├── deployment/         # Deployment guides
+│   ├── guides/             # User and developer guides
+│   ├── security/           # Security documentation
+│   ├── scalability/        # Scalability considerations
+│   ├── features/           # Feature documentation
+│   └── api/                # API documentation
 └── README.md              # This file
 ```
 
-## Architecture
+## 🏛️ Architecture Overview
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌─────────────┐
@@ -56,272 +154,68 @@ This assessment project is designed to evaluate candidates for the **Senior Bloc
 4. **Transaction Status**: Frontend waits for transaction confirmation, displays via toasts
 5. **Security**: Private keys never leave MetaMask; backend never signs user transactions
 
-## Assessment Requirements
+## ✨ Key Features
 
-### 1. Smart Contract Development (Primary Focus)
+- **🔐 Secure Consent Management**: Grant, revoke, and manage patient consents with full blockchain transparency
+- **📋 Access Request Workflow**: Providers can request access; patients approve or deny
+- **⚡ Batch Operations**: Efficient batch consent operations to reduce gas costs
+- **⏰ Expiration Handling**: Automatic expiration checks for time-limited consents
+- **📊 Comprehensive Events**: Full audit trail via blockchain events
+- **🎨 Modern UI**: Beautiful, responsive interface built with Next.js and Tailwind CSS
+- **🔒 Security First**: Reentrancy protection, input validation, access control
+- **💰 Gas Optimized**: Efficient storage layout, custom errors, hash-based string storage
 
-**Task:** Build and deploy the `PatientConsentManager.sol` smart contract.
+## 🛠️ Technology Stack
 
-**Requirements:**
-- The contract should handle patient consent management
-- Implement functions for granting, revoking, and checking consent
-- Include access request functionality
-- Add proper events for all state changes
-- Ensure security best practices (access control, input validation)
-- Write comprehensive comments and documentation
+- **Smart Contracts**: Solidity ^0.8.20, OpenZeppelin Contracts
+- **Blockchain**: Hardhat (development), Ethereum-compatible
+- **Backend**: Node.js, Express, Ethers.js v6
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS, shadcn/ui
+- **Testing**: Hardhat, Mocha, Chai, Jest, Playwright
+- **Process Management**: PM2
 
-**What to Evaluate:**
-- Code quality and organization
-- Security considerations
-- Gas optimization
-- Event design
-- Error handling
-- Solidity best practices
+## 🔐 Security Highlights
 
-### 2. Backend Integration
+- ✅ ReentrancyGuard on all state-changing functions
+- ✅ Comprehensive input validation
+- ✅ Access control checks on all sensitive operations
+- ✅ Custom errors for gas-efficient reverts
+- ✅ Event-based off-chain queries (no unbounded loops)
+- ✅ No dangerous external calls
+- ✅ Defense-in-depth validation
 
-**Task:** The backend is already set up with complex mockup data that auto-loads.
+See [Security Documentation](docs/security/security-overview.md) for complete details.
 
-**What's Provided:**
-- Express server with REST API endpoints
-- Complex patient data structures (demographics, medical history, lab results, imaging studies, genetic data)
-- Complex provider data structures (staff, facilities, equipment, compliance records)
-- Automatic data loading on server startup
+## 📊 Test Coverage
 
-**What to Evaluate:**
-- Understanding of the existing backend structure
-- Ability to integrate Web3/blockchain functionality
-- API design and data handling
+- **Smart Contract**: 79 tests, comprehensive coverage
+- **Backend**: Unit and integration tests
+- **Frontend**: Unit and E2E tests
 
-### 3. Frontend Development (Nice to have)
+## 🚢 Deployment
 
-**Task:** Build a React frontend that connects to Web3 and interacts with the smart contract.
+See the [Deployment Guide](docs/deployment/deployment.md) for:
+- Local development deployment
+- Production deployment considerations
+- Environment configuration
+- PM2 process management
 
-**Requirements:**
-- Connect to Web3 wallet (MetaMask)
-- Display patient and provider data from backend
-- Interact with smart contract functions
-- Simple, clean UI
-- Handle transaction states and errors
+## 🤝 Contributing
 
-**What to Evaluate:**
-- Web3 integration skills
-- React component structure
-- User experience design
-- Error handling
-- State management
+This is an assessment project. For questions or issues, please refer to the comprehensive documentation in the `/docs` folder.
 
-## Getting Started
+## 📄 License
 
-### Prerequisites
+MIT License - See LICENSE file for details
 
-- Node.js (v18 or higher)
-- npm or yarn
-- MetaMask browser extension (for Web3 connection)
-- Hardhat (for smart contract development)
+## 🆘 Support
 
-### Installation
+For detailed documentation, see:
+- **[Architecture Documentation](docs/architecture/overview.md)** - Understanding the system
+- **[User Guides](docs/guides/)** - How to use the application
+- **[API Documentation](docs/api/)** - Backend API reference
+- **[Testing Guide](docs/TESTING.md)** - Testing documentation
 
-1. **Install dependencies:**
+---
 
-```bash
-# Install root dependencies
-npm install
-
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
-npm install
-```
-
-2. **Set up environment variables:**
-
-```bash
-# Backend
-cd backend
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-### Running the Project
-
-1. **Start a local blockchain (in a separate terminal):**
-
-```bash
-cd backend
-npx hardhat node
-```
-
-This will start a local Hardhat network on `http://127.0.0.1:8545`
-
-2. **Deploy the smart contract (in a new terminal):**
-
-```bash
-cd backend
-npm run deploy:local
-```
-
-This will deploy the contract and save the address to `deployment.json`
-
-3. **Start the backend server (in a new terminal):**
-
-```bash
-cd backend
-npm run dev
-```
-
-The backend will start on `http://localhost:3001` and automatically load all mockup data.
-
-4. **Copy contract ABI to frontend (required for direct contract calls):**
-
-```bash
-cp backend/artifacts/contracts/PatientConsentManager.sol/PatientConsentManager.json \
-   frontend/public/contract-abi.json
-```
-
-5. **Start the frontend (in a new terminal):**
-
-```bash
-cd frontend
-npm run dev
-```
-
-The frontend will start on `http://localhost:3000`
-
-**Important**: Make sure to copy the contract ABI to `frontend/public/contract-abi.json` (see step 4 above) before starting the frontend. The ABI is required for direct contract calls via MetaMask.
-
-### Connecting MetaMask
-
-1. Open MetaMask
-2. Add a new network:
-   - Network Name: `Hardhat Local`
-   - RPC URL: `http://127.0.0.1:8545`
-   - Chain ID: `1337`
-   - Currency Symbol: `ETH`
-3. Import one of the Hardhat test accounts (private keys are displayed when you run `npx hardhat node`)
-
-## Assessment Tasks
-
-### Task 1: Smart Contract Review & Enhancement (Required)
-
-Review the provided `PatientConsentManager.sol` contract and:
-
-1. **Identify potential security issues** and suggest improvements
-2. **Optimize gas usage** where possible
-3. **Add missing functionality** that would be needed for production:
-   - Batch operations (grant multiple consents at once)
-   - Consent expiration handling
-   - Access request approval workflow
-   - Additional validation or checks
-
-### Task 2: Backend Web3 Integration (Required)
-
-Enhance the backend to:
-
-1. **Load contract ABI** from compiled artifacts
-2. **Create Web3 service** to interact with the contract
-3. **Add endpoints** to:
-   - Check consent status
-   - Get consent history for a patient
-   - Get access requests for a patient
-   - Query contract events
-
-### Task 3: Frontend Enhancement (Optional)
-
-Improve the frontend:
-
-1. **Load contract ABI** from artifacts (copied to `public/contract-abi.json`)
-2. **Display consent history** from the blockchain (via backend API)
-3. **Show access requests** and allow approval/denial (via direct MetaMask signing)
-4. **Add transaction status** indicators (pending, confirmed, failed)
-5. **Improve error handling** and user feedback
-6. **Integrate MetaMask** for signing transactions directly (users sign their own transactions)
-
-### Task 4: Additional Features (Bonus)
-
-If time permits, consider:
-
-1. **Event listening** - Listen to contract events in real-time
-2. **Consent expiration** - Visual indicators for expiring consents
-3. **Data encryption** - Add encryption layer for sensitive data
-4. **Multi-signature** - Require multiple approvals for sensitive data access
-5. **Analytics dashboard** - Show consent statistics and trends
-
-## Evaluation Criteria
-
-### Smart Contract (45%)
-- Code quality and organization
-- Security best practices
-- Gas optimization
-- Comprehensive testing (if provided)
-- Documentation
-
-### Backend Integration (35%)
-- Web3 integration quality
-- API design
-- Error handling
-- Code organization
-
-### Frontend Development (Nice to have)
-- Web3 wallet integration
-- User interface quality
-- State management
-- Error handling
-
-### Overall (20%)
-- Code organization
-- Documentation
-- Best practices
-- Problem-solving approach
-
-## Submission Guidelines
-
-1. **Fork or clone** this repository
-2. **Complete the assessment tasks** listed above
-3. **Document your changes** in code comments and/or a separate document
-4. **Test your implementation** thoroughly
-5. **Submit** your solution via:
-   - GitHub repository link, or
-   - Zip file with your code
-
-## Testing
-
-This project includes comprehensive testing infrastructure:
-
-- **Smart Contract Tests**: Hardhat/Mocha tests with 95%+ coverage
-- **Backend Tests**: Unit and integration tests using Mocha/Chai/Supertest
-- **Frontend Tests**: Unit tests with Jest/React Testing Library and E2E tests with Playwright
-
-### Quick Start
-
-```bash
-# Run all tests
-npm run test:all
-
-# Run specific test suites
-npm run test:contract    # Smart contract tests
-npm run test:backend     # Backend tests
-npm run test:frontend    # Frontend unit tests
-npm run test:e2e         # Frontend E2E tests
-```
-
-For detailed testing documentation, see [docs/TESTING.md](docs/TESTING.md).
-
-## Notes
-
-- The mockup data files (`mockup-patients.js` and `mockup-providers.js`) are intentionally complex to test your ability to work with realistic healthcare data structures
-- Focus on the smart contract as the primary deliverable
-- The backend and frontend are provided as scaffolding - enhance them as needed
-- Security is paramount in healthcare applications - demonstrate your understanding of this
-
-## Questions?
-
-If you have any questions about the assessment, please reach out to the hiring team.
-
-## Good Luck! 🚀
-
-We're excited to see what you build!
-
+**Built with ❤️ for secure, transparent healthcare data management**
