@@ -340,7 +340,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (state.isAuthenticated && state.token) {
       // Authentication just completed, invalidate and refetch all queries
       // This triggers automatic data loading after account change + authentication
-      queryClient.invalidateQueries();
+      // Use a small delay to ensure state is fully propagated
+      setTimeout(() => {
+        queryClient.invalidateQueries();
+        queryClient.refetchQueries();
+      }, 150);
     }
   }, [state.isAuthenticated, state.token, queryClient]);
 
