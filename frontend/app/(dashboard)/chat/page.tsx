@@ -256,7 +256,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input Area - Fixed at bottom */}
-      <div className="border-t pt-4 flex-shrink-0">
+      <div className="border-t pt-4 pb-4 flex-shrink-0">
         <div className="flex gap-2">
           <Input
             ref={inputRef}
