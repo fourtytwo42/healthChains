@@ -154,20 +154,21 @@ healthChains/
 - **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS, shadcn/ui
 - **Testing**: Hardhat, Mocha, Chai, Jest, Playwright
 - **Process Management**: PM2
-- **Caching**: Redis (optional, graceful degradation)
+- **Caching**: Redis (recommended, graceful degradation if unavailable)
+- **Authentication**: JWT tokens with MetaMask signature verification
 
 ## 🔐 Security Highlights
 
-- ✅ JWT authentication with MetaMask signature verification
-- ✅ ReentrancyGuard on all state-changing functions
-- ✅ Comprehensive input validation
-- ✅ Access control checks on all sensitive operations
-- ✅ Ownership verification middleware
-- ✅ Custom errors for gas-efficient reverts
-- ✅ Event-based off-chain queries (no unbounded loops)
-- ✅ No dangerous external calls
-- ✅ Defense-in-depth validation
-- ✅ Redis caching for performance (graceful degradation)
+- ✅ **JWT Authentication**: MetaMask signature-based authentication for all API endpoints
+- ✅ **Role-Based Access Control**: Patients and providers have different access levels
+- ✅ **Least Privilege**: Users can only access their own data or data they have consent for
+- ✅ **ReentrancyGuard**: Protection on all state-changing functions
+- ✅ **Comprehensive Input Validation**: All inputs validated at multiple layers
+- ✅ **Access Control**: Ownership verification and participant verification middleware
+- ✅ **Custom Errors**: Gas-efficient reverts with no sensitive data leakage
+- ✅ **Event-Based Queries**: No unbounded loops, scalable off-chain indexing
+- ✅ **Redis Caching**: Performance optimization with graceful degradation
+- ✅ **No Private Key Storage**: Keys never leave MetaMask wallet
 
 See [Security Documentation](docs/security/security-overview.md) for complete details.
 

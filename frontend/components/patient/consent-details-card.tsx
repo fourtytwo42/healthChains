@@ -61,14 +61,18 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
     const fetchProviderInfo = async () => {
       try {
         setLoadingProvider(true);
-        // Get all providers and find the one matching the address
-        const response = await apiClient.getProviders();
-        if (response.success && response.data) {
-          const provider = response.data.find(
-            (p: any) => p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
-          );
-          setProviderInfo(provider || null);
+        // Provider info should be included in consent object from backend
+        // Check if it's already there (consent may have provider property from backend enrichment)
+        const consentWithProvider = consent as any;
+        if (consentWithProvider.provider) {
+          setProviderInfo(consentWithProvider.provider);
+          setLoadingProvider(false);
+          return;
         }
+        
+        // Fallback: Provider info should come from backend in consent response
+        // If not available, we can't fetch it (patients can't access /api/providers)
+        setProviderInfo(null);
       } catch (error) {
         console.error('Failed to fetch provider info:', error);
       } finally {

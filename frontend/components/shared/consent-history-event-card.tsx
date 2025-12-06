@@ -61,24 +61,21 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
   const [fullProviderInfo, setFullProviderInfo] = useState<any>(null);
   const [loadingProvider, setLoadingProvider] = useState(false);
 
-  // Fetch full provider info if we only have basic info
+  // Provider info should already be included in event from backend
+  // Only fetch if completely missing
   useEffect(() => {
     const fetchProviderInfo = async () => {
-      if (userRole === 'patient' && event.provider && (!event.providerInfo?.contact || !event.providerInfo?.specialties)) {
-        try {
-          setLoadingProvider(true);
-          const response = await apiClient.getProviders();
-          if (response.success && response.data) {
-            const provider = response.data.find(
-              (p: any) => p.blockchainIntegration?.walletAddress?.toLowerCase() === event.provider?.toLowerCase()
-            );
-            setFullProviderInfo(provider || null);
-          }
-        } catch (error) {
-          console.error('Failed to fetch provider info:', error);
-        } finally {
-          setLoadingProvider(false);
-        }
+      // If providerInfo is already included from backend, use it
+      if (event.providerInfo && event.providerInfo.organizationName) {
+        setFullProviderInfo(event.providerInfo);
+        return;
+      }
+      
+      // If we have provider address but no info, we can't fetch it (patients can't access /api/providers)
+      // The backend should include providerInfo in events, so this shouldn't happen
+      if (userRole === 'patient' && event.provider && !event.providerInfo) {
+        console.warn('Provider info missing from event, backend should include it:', event);
+        setFullProviderInfo(null);
       }
     };
 

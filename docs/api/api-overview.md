@@ -41,23 +41,40 @@ The API uses **JWT (JSON Web Token) authentication** for all protected endpoints
 
 All endpoints except `/health` and `/api/contract/info` require authentication. The following endpoints are protected:
 
-- All `/api/patients/*` endpoints
-- All `/api/providers/*` endpoints
-- All `/api/consent/*` endpoints
-- All `/api/requests/*` endpoints
-- All `/api/events/*` endpoints
-- `/api/user/role`
-- `/api/data-types`
-- `/api/purposes`
+**Patient Endpoints** (require patient role):
+- `/api/patient/:patientAddress/consents` - Patient can only access their own consents
+- `/api/patient/:patientAddress/pending-requests` - Patient can only access their own requests
+
+**Provider Endpoints** (require provider role):
+- `/api/patients` - Providers can see all patients (basic info only)
+- `/api/patients/:patientId` - Providers can see basic patient info
+- `/api/patients/:patientId/data/:dataType` - Providers need active consent for gated data
+- `/api/providers` - Providers can see all providers
+- `/api/provider/:providerAddress/consents` - Provider can only access their own consents
+- `/api/provider/:providerAddress/patients` - Provider can see patients with active consents
+- `/api/provider/:providerAddress/pending-requests` - Provider can only access their own requests
+- `/api/provider/:providerAddress/patient/:patientId/data` - Provider needs consent for patient data
+
+**Shared Endpoints** (require patient or provider role):
+- `/api/consent/*` - Consent-related endpoints
+- `/api/requests/*` - Access request endpoints
+- `/api/events/*` - Event query endpoints
+- `/api/data-types` - Available data types
+- `/api/purposes` - Available purposes
+
+**Public Endpoints** (no authentication required):
+- `/health` - Health check
+- `/api/contract/info` - Contract information
+- `/api/user/role` - Get user role by address (needed for frontend)
 
 ### Development Mode
 
 For development/testing, authentication can be disabled by setting:
-```
+```env
 AUTH_REQUIRED=false
 ```
 
-**Warning**: Never disable authentication in production!
+**Warning**: Never disable authentication in production! This setting bypasses all security checks and should only be used for local development.
 
 ### Write Operations
 
@@ -133,7 +150,9 @@ Get contract information.
 
 #### GET /api/patients
 
-Get all patients.
+Get all patients (providers only). Returns basic patient information only (demographics, contact, insurance) - no medical data.
+
+**Authentication**: Required (provider role)
 
 **Response**:
 ```json
@@ -194,7 +213,9 @@ Get patient data by type (with optional consent checking).
 
 #### GET /api/providers
 
-Get all providers.
+Get all providers (providers only).
+
+**Authentication**: Required (provider role)
 
 **Response**:
 ```json
@@ -364,6 +385,8 @@ Get user role (patient or provider) by wallet address.
 
 Get all available data types.
 
+**Authentication**: Required (patient or provider role)
+
 **Response**:
 ```json
 {
@@ -380,6 +403,8 @@ Get all available data types.
 #### GET /api/purposes
 
 Get all available purposes.
+
+**Authentication**: Required (patient or provider role)
 
 **Response**:
 ```json

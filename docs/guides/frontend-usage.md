@@ -48,6 +48,45 @@ The application automatically verifies you're on the correct network:
 **To switch networks**:
 1. Click the network warning banner
 2. MetaMask will prompt to switch
+
+## Authentication
+
+### Automatic Authentication
+
+After connecting your wallet, the application **automatically authenticates** you:
+
+1. **Message to Sign**: The app requests a message from the backend
+2. **MetaMask Prompt**: You'll be prompted to sign a message with your private key
+3. **Authentication**: The app verifies your signature and receives a JWT token
+4. **Token Storage**: The token is stored in your browser (localStorage)
+5. **Automatic Use**: All API requests automatically include your token
+
+### Authentication Status
+
+You can see your authentication status in the wallet connector:
+- **Green checkmark**: Authenticated and ready
+- **Loading spinner**: Authentication in progress
+- **Error icon**: Authentication failed (try refreshing)
+
+### Re-Authentication
+
+Authentication is required when:
+- You first connect your wallet
+- Your token expires (default: 1 hour)
+- You switch accounts in MetaMask
+- You refresh the page (token persists across refreshes)
+
+**Note**: If you switch accounts in MetaMask, the app will automatically:
+1. Clear the old token
+2. Re-authenticate with the new account
+3. Update all data to reflect the new account
+
+### Token Management
+
+- **Storage**: Tokens are stored in browser localStorage
+- **Expiration**: Tokens expire after 1 hour (configurable)
+- **Security**: Tokens are automatically included in API requests
+- **Logout**: Disconnecting your wallet clears the token
 3. Approve the network switch
 
 ### Connection Status

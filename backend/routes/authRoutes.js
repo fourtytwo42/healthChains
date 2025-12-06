@@ -11,6 +11,73 @@ const { ValidationError } = require('../utils/errors');
  */
 
 /**
+ * GET /api/auth/message
+ * Get a message to sign for authentication
+ * 
+ * Query:
+ * - address (required): Ethereum address
+ * 
+ * Returns:
+ * - message: Message to sign with MetaMask
+ * - timestamp: Timestamp when message was created
+ */
+authRouter.get('/message', async (req, res, next) => {
+  try {
+    const { address } = req.query;
+
+    // Validate required fields
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_PARAMETER',
+          message: 'address is required',
+          details: { field: 'address' }
+        }
+      });
+    }
+
+    // Validate address format
+    try {
+      validateAddress(address, 'address');
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ADDRESS',
+          message: 'Invalid Ethereum address format',
+          details: { address }
+        }
+      });
+    }
+
+    // Generate message to sign
+    const signMessage = authService.generateSignMessage(address);
+
+    res.json({
+      success: true,
+      data: {
+        message: signMessage.message,
+        timestamp: signMessage.timestamp
+      }
+    });
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MESSAGE_GENERATION_FAILED',
+          message: error.message,
+          details: error.details || {}
+        }
+      });
+    }
+
+    next(error);
+  }
+});
+
+/**
  * POST /api/auth/login
  * Authenticate user with MetaMask signature and receive JWT token
  * 

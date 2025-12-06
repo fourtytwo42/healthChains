@@ -197,15 +197,36 @@ modifier validString(string memory str) {
 
 ### API Security
 
-**JWT Authentication**: All protected endpoints require JWT tokens obtained via MetaMask signature verification.
+**JWT Authentication**: 
+- All protected endpoints require JWT tokens obtained via MetaMask signature verification
+- Tokens are stateless and don't require database lookups
+- Token expiration is configurable (default: 1 hour)
+- Signature validity window prevents replay attacks (default: 5 minutes)
+- Tokens stored in browser localStorage (consider httpOnly cookies for production)
 
-**Input Validation**: All API endpoints validate inputs.
+**Authentication Flow**:
+1. User connects MetaMask wallet
+2. Frontend requests message to sign from `/api/auth/message`
+3. User signs message with MetaMask
+4. Frontend sends signature to `/api/auth/login`
+5. Backend verifies signature and returns JWT token
+6. Frontend includes token in `Authorization: Bearer <token>` header for all API requests
+7. Backend validates token on each request
 
-**CORS Protection**: Cross-origin requests restricted.
+**Role-Based Access Control**:
+- **Patients**: Can only access their own data (pending requests, consents, history)
+- **Providers**: Can access all patients (basic info), but gated data requires active consent
+- **Authorization Middleware**: Verifies user role and ownership before allowing access
 
-**Error Handling**: Secure error messages (no stack traces in production).
+**Input Validation**: All API endpoints validate inputs at multiple layers.
+
+**CORS Protection**: Cross-origin requests restricted to configured domains.
+
+**Error Handling**: Secure error messages (no stack traces in production, no sensitive data).
 
 **Ownership Verification**: Middleware ensures users can only access their own data.
+
+**Participant Verification**: Middleware ensures users are either the patient or provider in consent/request operations.
 
 **Rate Limiting**: Can be added for production (not implemented in current version).
 
@@ -220,6 +241,17 @@ modifier validString(string memory str) {
 - Cryptographically random
 - Stored securely
 - Rotated periodically
+- Generated using: `openssl rand -hex 32`
+
+**JWT Configuration**:
+- `JWT_SECRET`: Secret key for signing tokens (required)
+- `JWT_EXPIRES_IN`: Token expiration time (default: `1h`)
+- `SIGNATURE_VALIDITY_DURATION`: Time window for signature validity in seconds (default: `300` = 5 minutes)
+- `AUTH_REQUIRED`: Enable/disable authentication (default: `true`, set to `false` for development)
+
+**Redis Configuration**:
+- `REDIS_URL`: Redis connection URL (optional, defaults to `redis://localhost:6379`)
+- System gracefully degrades if Redis is unavailable
 
 **Production Best Practices**:
 - Use secrets management (AWS Secrets Manager, HashiCorp Vault)

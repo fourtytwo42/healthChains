@@ -25,6 +25,30 @@ class AuthService {
   }
 
   /**
+   * Generate a message for the user to sign with MetaMask
+   * 
+   * @param {string} address - Ethereum address
+   * @returns {Object} Message and timestamp
+   */
+  generateSignMessage(address) {
+    if (!address) {
+      throw new ValidationError('address is required', 'address');
+    }
+
+    const normalizedAddress = normalizeAddress(address);
+    const timestamp = Math.floor(Date.now() / 1000);
+    
+    // Create a simple message for signing
+    // Include timestamp to prevent replay attacks
+    const message = `Please sign this message to authenticate with HealthChains.\n\nAddress: ${normalizedAddress}\nTimestamp: ${timestamp}`;
+
+    return {
+      message,
+      timestamp
+    };
+  }
+
+  /**
    * Verify MetaMask signature
    * 
    * @param {string} address - Ethereum address that signed the message

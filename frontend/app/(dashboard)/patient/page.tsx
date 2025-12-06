@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useWallet } from '@/contexts/wallet-context';
 import { useRole } from '@/hooks/use-role';
-import { usePatientPendingRequests, usePatientConsentsPaginated, useRevokeConsent, usePatientConsentHistory, usePatients } from '@/hooks/use-api';
+import { usePatientPendingRequests, usePatientConsentsPaginated, useRevokeConsent, usePatientConsentHistory, usePatientInfo } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -80,13 +80,10 @@ export default function PatientDashboardPage() {
     activeTab === 'history' && !!account
   );
 
-  // Fetch all patients to get current patient's name
-  const { data: allPatientsData } = usePatients({
+  // Fetch current patient's own information
+  const { data: currentPatient } = usePatientInfo(account || '', {
     enabled: !!account,
   });
-  const currentPatient = allPatientsData?.find((p: any) => 
-    p.blockchainIntegration?.walletAddress?.toLowerCase() === account?.toLowerCase()
-  );
   const patientName = currentPatient?.demographics
     ? `${currentPatient.demographics.firstName} ${currentPatient.demographics.lastName}`.trim()
     : 'Patient Dashboard';
@@ -439,7 +436,8 @@ export default function PatientDashboardPage() {
                       eventColor = 'text-green-700 dark:text-green-400';
                       eventBgColor = 'bg-green-50 dark:bg-green-950/20';
                       eventBorderColor = 'border-green-200 dark:border-green-800';
-                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Active</Badge>;
+                      // Show "Granted" for the event, not "Active" - history shows event status, not current consent status
+                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Granted</Badge>;
                     } else if (event.type === 'ConsentRevoked') {
                       eventType = 'Consent Revoked';
                       eventIcon = <X className="h-5 w-5" />;

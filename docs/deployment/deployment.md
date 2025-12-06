@@ -20,7 +20,7 @@ Before deploying, ensure you have:
 - **Hardhat** (for smart contract deployment)
 - **MetaMask** (for frontend interactions)
 - **PM2** (for production process management) - `npm install -g pm2`
-- **Redis** (for caching) - See [Redis Setup](#redis-setup) below
+- **Redis** (recommended for caching, optional) - See [Redis Setup](#step-6-set-up-redis-recommended-for-caching) below
 
 ## Local Development Deployment
 
@@ -150,9 +150,18 @@ Or manually copy the ABI from `backend/artifacts/contracts/PatientConsentManager
 }
 ```
 
-### Step 6: Set Up Redis (for Caching)
+### Step 6: Set Up Redis (Recommended for Caching)
 
-Redis is used for caching to improve performance. Install and start Redis:
+**Redis is optional but highly recommended** for production deployments. It significantly improves performance by caching frequently accessed data.
+
+#### Why Redis?
+
+- **Performance**: Reduces API response times from 200-500ms to 10-50ms
+- **Cost Savings**: Reduces blockchain RPC calls (important on mainnet)
+- **Scalability**: Handles high request volumes efficiently
+- **User Experience**: Faster page loads and interactions
+
+#### Installation
 
 **On Ubuntu/Debian**:
 ```bash
@@ -177,7 +186,32 @@ redis-cli ping
 # Should return: PONG
 ```
 
-**Note**: If Redis is not available, the backend will gracefully degrade and continue operating without caching.
+#### Configuration
+
+Redis will automatically connect using the default URL (`redis://localhost:6379`). To use a custom Redis instance, set the `REDIS_URL` environment variable:
+
+```env
+REDIS_URL=redis://localhost:6379
+# Or for remote Redis:
+REDIS_URL=redis://username:password@host:port
+```
+
+#### What Gets Cached?
+
+- Consent status queries (5-10 minute TTL)
+- Consent records (1-2 minute TTL)
+- Event queries (30 seconds - 1 minute TTL)
+- Patient/provider lookups (longer TTL, invalidated on updates)
+
+#### Graceful Degradation
+
+**Important**: If Redis is not available or fails to connect, the backend will:
+- ✅ Continue operating normally
+- ✅ Log a warning about Redis unavailability
+- ✅ Fall back to direct blockchain queries
+- ✅ Return data without caching
+
+This ensures the system remains functional even if Redis is unavailable, making it safe to deploy without Redis for development or testing.
 
 ### Step 7: Start Backend Server
 
@@ -192,7 +226,8 @@ The backend will:
 - Start on `http://localhost:3001`
 - Load mockup data automatically
 - Connect to the Hardhat network
-- Connect to Redis (if available)
+- Connect to Redis (if available, with graceful degradation if not)
+- Initialize JWT authentication (if `AUTH_REQUIRED=true`)
 - Display all available routes
 
 ### Step 8: Start Frontend
@@ -484,7 +519,7 @@ See [PM2_SETUP.md](../../PM2_SETUP.md) for detailed PM2 setup.
 | `JWT_EXPIRES_IN` | No | `1h` | JWT token expiration time |
 | `SIGNATURE_VALIDITY_DURATION` | No | `300` | MetaMask signature validity in seconds (5 minutes) |
 | `AUTH_REQUIRED` | No | `true` | Require JWT authentication (`false` for development) |
-| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL for caching |
+| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL for caching (optional, graceful degradation if unavailable) |
 | `PRIVATE_KEY` | No | - | Private key for automated operations (not recommended) |
 | `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
 
@@ -511,11 +546,12 @@ curl http://localhost:3001/health
   "timestamp": "2024-...",
   "data": {
     "patients": 10,
-    "providers": 10,
-    "redis": {
-      "connected": true,
-      "message": "Redis is up and running"
-    }
+    "providers": 10
+  },
+  "cache": {
+    "enabled": true,
+    "connected": true,
+    "status": "healthy"
   }
 }
 

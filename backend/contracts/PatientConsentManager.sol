@@ -272,11 +272,13 @@ contract PatientConsentManager is ReentrancyGuard {
      * @notice Emitted when an access request is approved by the patient
      * @param requestId Unique identifier for the approved request
      * @param patient Address of the patient who approved
+     * @param consentIds Array of consent IDs created (typically one BatchConsentRecord)
      * @param timestamp Block timestamp when request was approved
      */
     event AccessApproved(
         uint256 indexed requestId,
         address indexed patient,
+        uint256[] consentIds,
         uint128 timestamp
     );
 
@@ -738,7 +740,6 @@ contract PatientConsentManager is ReentrancyGuard {
         
         if (approved) {
             request.status = RequestStatus.Approved;
-            emit AccessApproved(requestId, msg.sender, uint128(block.timestamp));
             
             // Get hash arrays from mappings
             bytes32[] memory dataTypeHashes = requestDataTypeHashes[requestId];
@@ -778,8 +779,9 @@ contract PatientConsentManager is ReentrancyGuard {
             
             // Create a SINGLE batch consent record instead of 56 individual records
             // This saves massive gas - one struct write instead of 56!
+            uint256 batchConsentId;
             unchecked {
-                uint256 batchConsentId = consentCounter++;
+                batchConsentId = consentCounter++;
                 isBatchConsent[batchConsentId] = true;
                 
                 BatchConsentRecord storage batchConsent = batchConsentRecords[batchConsentId];
@@ -797,16 +799,18 @@ contract PatientConsentManager is ReentrancyGuard {
                 // Add to patient and provider arrays (just one ID instead of 56)
                 patientConsents[msg.sender].push(batchConsentId);
                 providerConsents[request.requester].push(batchConsentId);
-                
-                // Emit event with single consent ID
-                uint256[] memory consentIds = new uint256[](1);
-                consentIds[0] = batchConsentId;
-                emit ConsentGranted(
-                    msg.sender,
-                    consentIds,
-                    uint128(block.timestamp)
-                );
             }
+            
+            // Emit AccessApproved with consentIds - this replaces ConsentGranted for request approvals
+            // This consolidates events: one event instead of two for request approvals
+            uint256[] memory consentIds = new uint256[](1);
+            consentIds[0] = batchConsentId;
+            emit AccessApproved(
+                requestId,
+                msg.sender,
+                consentIds,
+                uint128(block.timestamp)
+            );
         } else {
             request.status = RequestStatus.Denied;
             emit AccessDenied(requestId, msg.sender, uint128(block.timestamp));

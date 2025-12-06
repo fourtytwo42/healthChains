@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/lib/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { WalletProvider } from '@/contexts/wallet-context';
+import { AuthProvider } from '@/contexts/auth-context';
 import { useState } from 'react';
 
 /**
- * Root Providers - Wraps app with React Query, Theme, Wallet, and Toast providers
+ * Root Providers - Wraps app with React Query, Theme, Wallet, Auth, and Toast providers
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -35,8 +36,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         <WalletProvider>
-          {children}
-          <Toaster />
+          <AuthProvider>
+            {children}
+            <Toaster />
+          </AuthProvider>
         </WalletProvider>
       </ThemeProvider>
     </QueryClientProvider>

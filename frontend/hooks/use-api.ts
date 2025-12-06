@@ -100,11 +100,32 @@ export function usePatients(options: PatientsQueryOptions = {}) {
       }
       return response.data;
     },
+    // Note: This endpoint requires provider role
+    // Patients should use usePatientInfo() instead
     // Keep a stable empty array while loading/erroring and avoid unnecessary refetch on remount
     placeholderData: (previousData) => previousData ?? [],
     select: (data) => (Array.isArray(data) ? data : []),
     refetchOnMount: false,
+    // Note: This endpoint requires provider role
+    // Patients should use usePatientInfo() instead
     ...options,
+  });
+}
+
+// Get patient's own information (for patients)
+export function usePatientInfo(patientAddress: string, options: { enabled?: boolean } = {}) {
+  return useQuery<Patient, Error>({
+    queryKey: ['patientInfo', patientAddress?.toLowerCase()],
+    queryFn: async () => {
+      const response = await apiClient.getPatientInfo(patientAddress);
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message || 'Failed to fetch patient info');
+      }
+      return response.data;
+    },
+    enabled: options.enabled !== false && !!patientAddress,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
 }
 
@@ -1030,12 +1051,16 @@ export function useProviderConsentHistory(
         return false;
       });
 
+      // No deduplication needed - smart contract now only emits AccessApproved for request approvals
+      // and ConsentGranted only for direct grants, so no duplicates exist
+      const filteredProviderEvents = providerEvents;
+
       // Fetch patient info for enrichment
       const patientsResponse = await apiClient.getPatients();
       const patients = patientsResponse.success && patientsResponse.data ? patientsResponse.data : [];
 
       // Enrich events with patient info and check for expired consents
-      const enrichedEvents = providerEvents.map((event: any) => {
+      const enrichedEvents = filteredProviderEvents.map((event: any) => {
         // Find patient by address
         const patient = event.patient
           ? patients.find((p: any) => 
@@ -1155,19 +1180,14 @@ export function usePatientConsentHistory(
         ...(requestEventsResponse.success && requestEventsResponse.data ? requestEventsResponse.data : []),
       ];
 
-      // Fetch provider info for enrichment
-      const providersResponse = await apiClient.getProviders();
-      const providers = providersResponse.success && providersResponse.data ? providersResponse.data : [];
+      // No deduplication needed - smart contract now only emits AccessApproved for request approvals
+      // and ConsentGranted only for direct grants, so no duplicates exist
+      const filteredEvents = allEvents;
 
-      // Enrich events with provider info and check for expired consents
-      const enrichedEvents = allEvents.map((event: any) => {
-        // Find provider by address
-        const provider = event.provider || event.requester 
-          ? providers.find((p: any) => 
-              p.blockchainIntegration?.walletAddress?.toLowerCase() === (event.provider || event.requester)?.toLowerCase()
-            )
-          : null;
-
+      // Provider info should already be included in events from backend
+      // But we'll use it if available, otherwise fall back to null
+      // Enrich events and check for expired consents
+      const enrichedEvents = filteredEvents.map((event: any) => {
         // Check if consent expired (for ConsentGranted events)
         const isExpired = event.type === 'ConsentGranted' && 
           event.expirationTime && 
@@ -1175,13 +1195,8 @@ export function usePatientConsentHistory(
 
         return {
           ...event,
-          providerInfo: provider ? {
-            organizationName: provider.organizationName,
-            providerType: provider.providerType,
-            specialties: provider.specialties || [],
-            contact: provider.contact || {},
-            address: provider.address || {},
-          } : null,
+          // providerInfo should already be included from backend
+          // If not, it will be null and the component will handle it
           isExpired,
         };
       });
@@ -1208,9 +1223,9 @@ export function usePatientConsentHistory(
 
             // If no revocation event exists, add an "expired" event
             if (!hasRevocationEvent) {
-              const provider = providers.find((p: any) => 
-                p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
-              );
+              // Provider info should be in consent object from backend
+              const consentWithProvider = consent as any;
+              const providerInfo = consentWithProvider.provider || null;
 
               enrichedEvents.push({
                 type: 'ConsentExpired',
@@ -1225,13 +1240,7 @@ export function usePatientConsentHistory(
                 purposes: consent.purposes || (consent.purpose ? [consent.purpose] : []),
                 expirationTime: consent.expirationTime,
                 timestamp: consent.expirationTime || consent.timestamp,
-                providerInfo: provider ? {
-                  organizationName: provider.organizationName,
-                  providerType: provider.providerType,
-                  specialties: provider.specialties || [],
-                  contact: provider.contact || {},
-                  address: provider.address || {},
-                } : null,
+                providerInfo: providerInfo,
                 isExpired: true,
               });
             }

@@ -1,4 +1,3 @@
-{"abi":
 [
   {
     "inputs": [],
@@ -147,6 +146,12 @@
         "internalType": "address",
         "name": "patient",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "consentIds",
+        "type": "uint256[]"
       },
       {
         "indexed": false,
@@ -964,4 +969,3 @@
     "type": "function"
   }
 ]
-}

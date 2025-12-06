@@ -1026,9 +1026,12 @@ class ConsentService {
       }
 
       // Transform and combine events
-      // ConsentGranted event now has: (address indexed patient, uint256[] consentIds, uint128 timestamp)
-      // We need to fetch each consent record to get full details
+      // ConsentGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
+      // AccessApproved event: (uint256 indexed requestId, address indexed patient, uint256[] consentIds, uint128 timestamp)
+      // Both create consents, so we transform both into ConsentGranted-like events for consistency
       const grantedEventList = [];
+      
+      // Process ConsentGranted events (direct grants)
       for (const event of grantedEvents) {
         const consentIds = event.args.consentIds || [];
         const patient = ethers.getAddress(event.args.patient);
@@ -1066,7 +1069,53 @@ class ConsentService {
             }
           } catch (error) {
             // If consent record doesn't exist (e.g., was revoked), skip it
-            console.warn(`Failed to fetch consent record ${consentId} for event:`, error.message);
+            console.warn(`Failed to fetch consent record ${consentId} for ConsentGranted event:`, error.message);
+          }
+        }
+      }
+      
+      // Process AccessApproved events (request approvals that created consents)
+      // Transform them into ConsentGranted-like events for consistency
+      for (const event of accessApprovedEvents) {
+        const consentIds = event.args.consentIds || [];
+        const patient = ethers.getAddress(event.args.patient);
+        const timestamp = new Date(Number(event.args.timestamp) * 1000).toISOString();
+        
+        // For each consentId in the array, fetch the consent record and create an event
+        for (const consentIdBigInt of consentIds) {
+          const consentId = Number(consentIdBigInt);
+          try {
+            const consentRecord = await this.getConsentRecord(consentId);
+            
+            // Create an event for each dataType/purpose combination
+            const dataTypes = consentRecord.dataTypes || [];
+            const purposes = consentRecord.purposes || [];
+            
+            // Create one event per dataType/purpose combination
+            // Mark as AccessApproved type but include all consent data
+            for (const dataType of dataTypes) {
+              for (const purpose of purposes) {
+                grantedEventList.push({
+                  type: 'ConsentGranted', // Treat as ConsentGranted for consent tracking
+                  blockNumber: event.blockNumber,
+                  transactionHash: event.transactionHash,
+                  consentId: consentId,
+                  patient: patient,
+                  provider: consentRecord.providerAddress,
+                  dataType: dataType,
+                  dataTypes: dataTypes,
+                  expirationTime: consentRecord.expirationTime,
+                  purpose: purpose,
+                  purposes: purposes,
+                  timestamp: timestamp,
+                  // Include requestId for reference if needed
+                  requestId: Number(event.args.requestId)
+                });
+              }
+            }
+          } catch (error) {
+            // If consent record doesn't exist (e.g., was revoked), skip it
+            console.warn(`Failed to fetch consent record ${consentId} for AccessApproved event:`, error.message);
           }
         }
       }
@@ -1285,34 +1334,47 @@ class ConsentService {
       });
 
       // Transform and combine events
-      const events = [
-        ...requestedEvents.map(event => ({
-          type: 'AccessRequested',
-          blockNumber: event.blockNumber,
-          transactionHash: event.transactionHash,
-          requestId: Number(event.args.requestId),
-          requester: ethers.getAddress(event.args.requester),
-          patient: ethers.getAddress(event.args.patient),
-          dataTypes: Array.isArray(event.args.dataTypes) ? event.args.dataTypes : [],
-          purposes: Array.isArray(event.args.purposes) ? event.args.purposes : [],
-          expirationTime: event.args.expirationTime === 0n 
-            ? null 
-            : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
-          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-        })),
-        ...approvedEvents.map(event => {
+      // Note: approvedEvents.map returns promises, need to await them first
+      const approvedEventsTransformed = await Promise.all(
+        approvedEvents.map(async (event) => {
           const requestId = Number(event.args.requestId);
           const requestInfo = requestMap.get(requestId);
+          
+          // New event structure includes consentIds
+          const consentIds = event.args.consentIds || [];
+          const consentId = consentIds.length > 0 ? Number(consentIds[0]) : null;
+          
+          // Fetch consent record to get provider and full details
+          let provider = requestInfo?.requester || null;
+          let expirationTime = requestInfo?.expirationTime || null;
+          
+          // If we have a consentId, fetch the consent record for accurate data
+          if (consentId !== null) {
+            try {
+              const consentRecord = await this.getConsentRecord(consentId);
+              provider = consentRecord.providerAddress;
+              expirationTime = consentRecord.expirationTime === 0 || !consentRecord.expirationTime
+                ? null
+                : new Date(Number(consentRecord.expirationTime) * 1000).toISOString();
+            } catch (error) {
+              // If consent record lookup fails, use request info
+              console.warn(`Failed to fetch consent record ${consentId} for AccessApproved event:`, error.message);
+            }
+          }
+          
           return {
             type: 'AccessApproved',
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash,
             requestId: requestId,
-            requester: requestInfo?.requester || null,
+            consentId: consentId,
+            consentIds: consentIds.map(id => Number(id)),
+            requester: provider, // Use provider from consent record if available
+            provider: provider,
             patient: ethers.getAddress(event.args.patient),
             dataTypes: requestInfo?.dataTypes || [],
             purposes: requestInfo?.purposes || [],
-            expirationTime: requestInfo?.expirationTime || null,
+            expirationTime: expirationTime,
             timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
           };
         }),

@@ -147,18 +147,42 @@ eventRouter.get('/consent', validateBlockRange(), async (req, res, next) => {
       toBlock ? parseInt(toBlock, 10) : null
     );
 
+    // Enrich events with provider info
+    const mockProviders = require('../data/mockup-providers');
+    const enrichedEvents = events.map(event => {
+      if (event.provider) {
+        const provider = mockProviders.mockProviders.providers.find(
+          p => p.blockchainIntegration?.walletAddress?.toLowerCase() === event.provider.toLowerCase()
+        );
+        
+        if (provider) {
+          return {
+            ...event,
+            providerInfo: {
+              organizationName: provider.organizationName,
+              providerType: provider.providerType,
+              specialties: provider.specialties || [],
+              contact: provider.contact || {},
+              address: provider.address || {}
+            }
+          };
+        }
+      }
+      return event;
+    });
+
     const blockNumber = await web3Service.getBlockNumber();
     const networkInfo = await web3Service.getNetworkInfo();
 
     res.json({
       success: true,
-      data: events,
+      data: enrichedEvents,
       metadata: {
         timestamp: new Date().toISOString(),
         blockNumber: blockNumber,
         network: networkInfo.name,
         chainId: networkInfo.chainId,
-        count: events.length,
+        count: enrichedEvents.length,
         filters: {
           patientAddress: patientAddress || null,
           fromBlock: fromBlock || null,
@@ -211,18 +235,43 @@ eventRouter.get('/requests', validateBlockRange(), async (req, res, next) => {
       toBlock ? parseInt(toBlock, 10) : null
     );
 
+    // Enrich events with provider info (requester is the provider)
+    const mockProviders = require('../data/mockup-providers');
+    const enrichedEvents = events.map(event => {
+      const providerAddress = event.provider || event.requester;
+      if (providerAddress) {
+        const provider = mockProviders.mockProviders.providers.find(
+          p => p.blockchainIntegration?.walletAddress?.toLowerCase() === providerAddress.toLowerCase()
+        );
+        
+        if (provider) {
+          return {
+            ...event,
+            providerInfo: {
+              organizationName: provider.organizationName,
+              providerType: provider.providerType,
+              specialties: provider.specialties || [],
+              contact: provider.contact || {},
+              address: provider.address || {}
+            }
+          };
+        }
+      }
+      return event;
+    });
+
     const blockNumber = await web3Service.getBlockNumber();
     const networkInfo = await web3Service.getNetworkInfo();
 
     res.json({
       success: true,
-      data: events,
+      data: enrichedEvents,
       metadata: {
         timestamp: new Date().toISOString(),
         blockNumber: blockNumber,
         network: networkInfo.name,
         chainId: networkInfo.chainId,
-        count: events.length,
+        count: enrichedEvents.length,
         filters: {
           patientAddress: patientAddress || null,
           fromBlock: fromBlock || null,
@@ -295,18 +344,38 @@ consentRouter.get(
         includeExpired
       );
 
+      // Enrich with provider info
+      const mockProviders = require('../data/mockup-providers');
+      const enrichedConsents = consents.map(consent => {
+        const provider = mockProviders.mockProviders.providers.find(
+          p => p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+        );
+        
+        return {
+          ...consent,
+          provider: provider ? {
+            providerId: provider.providerId,
+            organizationName: provider.organizationName,
+            providerType: provider.providerType,
+            address: provider.address,
+            contact: provider.contact,
+            specialties: provider.specialties
+          } : null
+        };
+      });
+
       const blockNumber = await web3Service.getBlockNumber();
       const networkInfo = await web3Service.getNetworkInfo();
 
       res.json({
         success: true,
-        data: consents,
+        data: enrichedConsents,
         metadata: {
           timestamp: new Date().toISOString(),
           blockNumber: blockNumber,
           network: networkInfo.name,
           chainId: networkInfo.chainId,
-          count: consents.length
+          count: enrichedConsents.length
         }
       });
     } catch (error) {

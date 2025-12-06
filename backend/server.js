@@ -82,6 +82,8 @@ const cacheService = require('./services/cacheService');
 const { consentRouter, requestRouter, eventRouter } = require('./routes/consentRoutes');
 const authRouter = require('./routes/authRoutes');
 const { authenticate, verifyOwnership, verifyParticipant } = require('./middleware/auth');
+const { requireProvider, requirePatient, requirePatientOrProvider, verifyPatientOwnership, verifyProviderAccessWithConsent, getUserRole } = require('./middleware/authorization');
+const { normalizeAddress } = require('./utils/addressUtils');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -115,37 +117,94 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// Get all patients
-app.get('/api/patients', (req, res) => {
+// Get all patients - Providers only, returns basic info only
+app.get('/api/patients', authenticate, requireProvider, (req, res) => {
+  // Return only basic patient info (demographics, contact) - no medical data
+  const basicPatientInfo = mockPatients.mockPatients.patients.map(patient => ({
+    patientId: patient.patientId,
+    demographics: patient.demographics,
+    insurance: patient.insurance,
+    metadata: patient.metadata,
+    blockchainIntegration: patient.blockchainIntegration
+  }));
+  
   res.json({
     success: true,
-    data: mockPatients.mockPatients.patients,
+    data: basicPatientInfo,
     metadata: mockPatients.mockPatients.metadata
   });
 });
 
-// Get patient by ID
-app.get('/api/patients/:patientId', (req, res) => {
-  const { patientId } = req.params;
-  const patient = mockPatients.mockPatients.patients.find(
-    p => p.patientId === patientId
-  );
+// Get patient by ID - Providers can see basic info, patients can see their own
+app.get('/api/patients/:patientId', authenticate, requirePatientOrProvider, async (req, res, next) => {
+  try {
+    const { patientId } = req.params;
+    const patient = mockPatients.mockPatients.patients.find(
+      p => p.patientId === patientId
+    );
 
-  if (!patient) {
-    return res.status(404).json({
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Patient not found'
+        }
+      });
+    }
+
+    const patientAddress = patient.blockchainIntegration?.walletAddress;
+    const userRole = getUserRole(req.user.address);
+    const isPatient = userRole.role === 'patient' || userRole.role === 'both';
+    const isProvider = userRole.role === 'provider' || userRole.role === 'both';
+
+    // If user is a patient, they can only see their own data
+    if (isPatient && !isProvider) {
+      if (!patientAddress || normalizeAddress(patientAddress) !== normalizeAddress(req.user.address)) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'ACCESS_DENIED',
+            message: 'You can only access your own data'
+          }
+        });
+      }
+      // Patient can see all their own data
+      return res.json({
+        success: true,
+        data: patient
+      });
+    }
+
+    // Provider can see basic info only (no medical data without consent)
+    if (isProvider) {
+      const basicInfo = {
+        patientId: patient.patientId,
+        demographics: patient.demographics,
+        insurance: patient.insurance,
+        metadata: patient.metadata,
+        blockchainIntegration: patient.blockchainIntegration
+      };
+      return res.json({
+        success: true,
+        data: basicInfo
+      });
+    }
+
+    res.status(403).json({
       success: false,
-      message: 'Patient not found'
+      error: {
+        code: 'ACCESS_DENIED',
+        message: 'Access denied'
+      }
     });
+  } catch (error) {
+    next(error);
   }
-
-  res.json({
-    success: true,
-    data: patient
-  });
 });
 
-// Get patient data by type (with optional consent checking)
-app.get('/api/patients/:patientId/data/:dataType', async (req, res) => {
+// Get patient data by type - Requires auth, checks role and consent
+app.get('/api/patients/:patientId/data/:dataType', authenticate, requirePatientOrProvider, async (req, res, next) => {
   const { patientId, dataType } = req.params;
   const { providerAddress } = req.query;
   
@@ -172,6 +231,59 @@ app.get('/api/patients/:patientId/data/:dataType', async (req, res) => {
         message: 'Patient does not have a wallet address'
       }
     });
+  }
+
+  const userRole = getUserRole(req.user.address);
+  const isPatient = userRole.role === 'patient' || userRole.role === 'both';
+  const isProvider = userRole.role === 'provider' || userRole.role === 'both';
+
+  // If user is a patient, they can only access their own data
+  if (isPatient && !isProvider) {
+    if (normalizeAddress(patientAddress) !== normalizeAddress(req.user.address)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCESS_DENIED',
+          message: 'You can only access your own data'
+        }
+      });
+    }
+  }
+
+  // If user is a provider, check consent
+  if (isProvider) {
+    const providerAddress = req.user.address;
+    try {
+      const consentStatus = await consentService.getConsentStatus(
+        normalizeAddress(patientAddress),
+        normalizeAddress(providerAddress),
+        dataType
+      );
+
+      if (!consentStatus.hasConsent || consentStatus.isExpired) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'ACCESS_DENIED',
+            message: `Provider does not have active consent for data type: ${dataType}`,
+            details: {
+              hasConsent: consentStatus.hasConsent,
+              isExpired: consentStatus.isExpired,
+              dataType
+            }
+          }
+        });
+      }
+    } catch (error) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCESS_DENIED',
+          message: 'Failed to verify consent',
+          details: { error: error.message }
+        }
+      });
+    }
   }
 
   // Map data types to patient data structure
@@ -202,36 +314,6 @@ app.get('/api/patients/:patientId/data/:dataType', async (req, res) => {
         message: `Invalid data type. Available types: ${Object.keys(dataTypeMap).join(', ')}`
       }
     });
-  }
-
-  // If providerAddress is provided, check consent
-  if (providerAddress) {
-    try {
-      const consentStatus = await consentService.getConsentStatus(
-        patientAddress,
-        providerAddress,
-        dataType
-      );
-
-      if (!consentStatus.hasConsent || consentStatus.isExpired) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'ACCESS_DENIED',
-            message: `Provider does not have active consent for data type: ${dataType}`,
-            details: {
-              hasConsent: consentStatus.hasConsent,
-              isExpired: consentStatus.isExpired,
-              dataType
-            }
-          }
-        });
-      }
-    } catch (error) {
-      // If consent check fails (e.g., contract not initialized), allow access for development
-      // In production, this should be more strict
-      console.warn('Consent check failed, allowing access:', error.message);
-    }
   }
 
   res.json({
@@ -293,8 +375,8 @@ app.get('/api/user/role', (req, res) => {
   });
 });
 
-// Get all providers
-app.get('/api/providers', (req, res) => {
+// Get all providers - Providers only
+app.get('/api/providers', authenticate, requireProvider, (req, res) => {
   res.json({
     success: true,
     data: mockProviders.mockProviders.providers,
@@ -322,16 +404,16 @@ app.get('/api/providers/:providerId', (req, res) => {
   });
 });
 
-// Get available data types
-app.get('/api/data-types', (req, res) => {
+// Get available data types - Requires authentication
+app.get('/api/data-types', authenticate, (req, res) => {
   res.json({
     success: true,
     data: mockPatients.dataTypes
   });
 });
 
-// Get available purposes
-app.get('/api/purposes', (req, res) => {
+// Get available purposes - Requires authentication
+app.get('/api/purposes', authenticate, (req, res) => {
   res.json({
     success: true,
     data: mockPatients.purposes
@@ -483,9 +565,21 @@ app.get('/api/provider/:providerAddress/pending-requests', authenticate, verifyO
 });
 
 // GET /api/provider/:providerAddress/patient/:patientId/data
-app.get('/api/provider/:providerAddress/patient/:patientId/data', authenticate, verifyOwnership('providerAddress'), async (req, res, next) => {
+// Provider can access patient data if they have consent (removed verifyOwnership to allow access)
+app.get('/api/provider/:providerAddress/patient/:patientId/data', authenticate, requireProvider, async (req, res, next) => {
   try {
     const { providerAddress, patientId } = req.params;
+    
+    // Verify the authenticated user is the provider
+    if (normalizeAddress(providerAddress) !== normalizeAddress(req.user.address)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCESS_DENIED',
+          message: 'You can only access data as the authenticated provider'
+        }
+      });
+    }
     
     const patient = mockPatients.mockPatients.patients.find(
       p => p.patientId === patientId
@@ -641,6 +735,36 @@ app.get('/api/patient/:patientAddress/consents', authenticate, verifyOwnership('
         timestamp: new Date().toISOString(),
         patientAddress
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/patient/:patientAddress/info
+// Get patient's own information (patients can access their own info)
+app.get('/api/patient/:patientAddress/info', authenticate, verifyOwnership('patientAddress'), async (req, res, next) => {
+  try {
+    const { patientAddress } = req.params;
+    
+    // Find patient by wallet address
+    const patient = mockPatients.mockPatients.patients.find(
+      p => p.blockchainIntegration?.walletAddress?.toLowerCase() === normalizeAddress(patientAddress).toLowerCase()
+    );
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Patient not found'
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: patient
     });
   } catch (error) {
     next(error);

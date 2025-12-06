@@ -14,13 +14,31 @@ jest.mock('@/contexts/wallet-context', () => ({
   WalletProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Mock the auth context
+jest.mock('@/contexts/auth-context', () => ({
+  useAuth: jest.fn(),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 import { useWallet } from '@/contexts/wallet-context';
+import { useAuth } from '@/contexts/auth-context';
 
 describe('WalletConnector', () => {
   const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
+  const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
   beforeEach(() => {
     mockWindowEthereum();
+    // Default auth mock - not authenticated
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: false,
+      isAuthenticating: false,
+      token: null,
+      error: null,
+      authenticate: jest.fn(),
+      logout: jest.fn(),
+      refreshAuth: jest.fn(),
+    });
   });
 
   afterEach(() => {
@@ -80,6 +98,15 @@ describe('WalletConnector', () => {
       switchNetwork: jest.fn(),
       getSigner: jest.fn(),
     });
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      isAuthenticating: false,
+      token: 'mock-token',
+      error: null,
+      authenticate: jest.fn(),
+      logout: jest.fn(),
+      refreshAuth: jest.fn(),
+    });
 
     render(<WalletConnector />);
 
@@ -99,6 +126,15 @@ describe('WalletConnector', () => {
       checkNetwork: jest.fn(),
       switchNetwork: jest.fn(),
       getSigner: jest.fn(),
+    });
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: false,
+      isAuthenticating: false,
+      token: null,
+      error: null,
+      authenticate: jest.fn(),
+      logout: jest.fn(),
+      refreshAuth: jest.fn(),
     });
 
     render(<WalletConnector />);
@@ -122,6 +158,15 @@ describe('WalletConnector', () => {
       checkNetwork: jest.fn(),
       switchNetwork: jest.fn(),
       getSigner: jest.fn(),
+    });
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      isAuthenticating: false,
+      token: 'mock-token',
+      error: null,
+      authenticate: jest.fn(),
+      logout: jest.fn(),
+      refreshAuth: jest.fn(),
     });
 
     render(<WalletConnector />);

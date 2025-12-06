@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/contexts/wallet-context';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Wallet, LogOut, AlertCircle } from 'lucide-react';
+import { Wallet, LogOut, AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
  */
 export function WalletConnector() {
   const { isConnected, account, chainId, isConnecting, error, connect, disconnect, switchNetwork, checkNetwork } = useWallet();
+  const { isAuthenticated, isAuthenticating, authenticate } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const EXPECTED_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10);
@@ -137,6 +139,26 @@ export function WalletConnector() {
           <AlertCircle className="h-3 w-3" />
           Wrong Network
         </Badge>
+      )}
+      {isAuthenticated ? (
+        <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-600 dark:text-green-400">
+          <CheckCircle2 className="h-3 w-3" />
+          Authenticated
+        </Badge>
+      ) : isAuthenticating ? (
+        <Badge variant="outline" className="gap-1">
+          Authenticating...
+        </Badge>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={authenticate}
+          disabled={isAuthenticating}
+          className="gap-1"
+        >
+          Authenticate
+        </Button>
       )}
       <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-600 dark:text-green-400">
         <Wallet className="h-3 w-3" />

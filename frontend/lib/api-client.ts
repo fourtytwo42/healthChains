@@ -5,6 +5,8 @@
  * All blockchain data comes through backend REST APIs only.
  */
 
+import { getToken } from './auth';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 export interface ApiResponse<T> {
@@ -126,19 +128,31 @@ class ApiClient {
 
   private async fetchWithTimeout(
     url: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    requireAuth: boolean = true
   ): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    // Get JWT token if authentication is required
+    const token = requireAuth ? getToken() : null;
+    
+    // Build headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+    
+    // Add Authorization header if token is available
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     try {
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
       });
       clearTimeout(timeoutId);
       return response;
@@ -153,14 +167,29 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    requireAuth: boolean = true
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
-      const response = await this.fetchWithTimeout(url, options);
+      const response = await this.fetchWithTimeout(url, options, requireAuth);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Handle 401 Unauthorized - token expired or invalid
+        if (response.status === 401) {
+          // Clear invalid token
+          const { clearToken } = await import('./auth');
+          clearToken();
+          
+          // Throw error with specific code for handling
+          const error = new Error(errorData.error?.message || 'Authentication required');
+          (error as any).code = 'AUTHENTICATION_REQUIRED';
+          (error as any).status = 401;
+          throw error;
+        }
+        
         throw new Error(errorData.error?.message || `HTTP ${response.status}`);
       }
 
@@ -199,12 +228,12 @@ class ApiClient {
     }
   }
 
-  // Health check
+  // Health check (no auth required)
   // Note: /health endpoint returns { status, timestamp, data } directly, not wrapped in ApiResponse
   async healthCheck() {
     try {
       const url = `${this.baseUrl}/health`;
-      const response = await this.fetchWithTimeout(url);
+      const response = await this.fetchWithTimeout(url, {}, false);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -217,7 +246,7 @@ class ApiClient {
     }
   }
 
-  // Contract info
+  // Contract info (no auth required)
   async getContractInfo() {
     return this.request<{
       contract: {
@@ -232,7 +261,7 @@ class ApiClient {
         connected: boolean;
         initialized: boolean;
       };
-    }>('/api/contract/info');
+    }>('/api/contract/info', {}, false);
   }
 
   // Patients
@@ -242,6 +271,11 @@ class ApiClient {
 
   async getPatient(patientId: string) {
     return this.request<Patient>(`/api/patients/${patientId}`);
+  }
+
+  // Get patient's own information (for patients)
+  async getPatientInfo(patientAddress: string) {
+    return this.request<Patient>(`/api/patient/${patientAddress}/info`, {}, true);
   }
 
   async getPatientData(patientId: string, dataType: string) {

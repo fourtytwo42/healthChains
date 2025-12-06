@@ -1735,7 +1735,8 @@ export default function ProviderDashboardPage() {
                       eventColor = 'text-green-700 dark:text-green-400';
                       eventBgColor = 'bg-green-50 dark:bg-green-950/20';
                       eventBorderColor = 'border-green-200 dark:border-green-800';
-                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Active</Badge>;
+                      // Show "Granted" for the event, not "Active" - history shows event status, not current consent status
+                      statusBadge = <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">Granted</Badge>;
                     } else if (event.type === 'ConsentRevoked') {
                       eventType = 'Consent Revoked';
                       eventIcon = <X className="h-5 w-5" />;
