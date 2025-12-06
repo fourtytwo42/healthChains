@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { Button } from '@/components/ui/button';
-import { Building2, Clock, FileCheck, X, Loader2, Calendar, CheckCircle, XCircle, History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Building2, Clock, FileCheck, X, Loader2, Calendar, CheckCircle, XCircle, History, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { useRevokeConsent, usePatientConsentHistory } from '@/hooks/use-api';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -192,10 +193,35 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
     );
   };
 
+  // Format provider information for display (matching request response card format)
+  const providerName = providerInfo?.organizationName || 'Unknown Provider';
+  const providerType = providerInfo?.providerType 
+    ? providerInfo.providerType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+    : null;
+  const providerAddressFormatted = providerInfo?.address
+    ? `${providerInfo.address.street || ''}, ${providerInfo.address.city || ''}, ${providerInfo.address.state || ''} ${providerInfo.address.zipCode || ''}`
+    : 'N/A';
+  
+  // Google Maps URL for provider address
+  const googleMapsUrl = providerAddressFormatted !== 'N/A' 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerAddressFormatted)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(consent.providerAddress);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="pb-3 flex-shrink-0">
+        <DialogHeader className="pb-4 border-b flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileCheck className="h-4 w-4" />
             Consent Details
@@ -203,26 +229,103 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
           <DialogDescription className="text-xs">
             Provider information, active consents, and consent history
           </DialogDescription>
+          
+          {/* Provider Info - Consolidated format matching request response card */}
+          <div className="mt-4 text-sm">
+            {/* Provider Name - Full width row */}
+            <div className="mb-3">
+              <p className="font-semibold text-base">{providerName}</p>
+              {providerType && (
+                <p className="text-muted-foreground text-xs capitalize mt-0.5">
+                  {providerType}
+                </p>
+              )}
+            </div>
+            
+            {/* Two column layout below name */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                {providerInfo?.specialties && providerInfo.specialties.length > 0 && (
+                  <div className="mb-2">
+                    <ColoredBadgeList
+                      type="specialty"
+                      values={providerInfo.specialties}
+                      maxDisplay={3}
+                      size="sm"
+                    />
+                  </div>
+                )}
+                {consent.providerAddress && (
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-muted-foreground text-xs font-mono">
+                      <strong>Wallet:</strong>{' '}
+                      <button
+                        onClick={handleCopyWalletAddress}
+                        className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                        title="Click to copy full wallet address"
+                      >
+                        {consent.providerAddress.slice(0, 6)}...{consent.providerAddress.slice(-4)}
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {providerInfo?.contact?.phone && (
+                  <p>
+                    <strong>Phone:</strong>{' '}
+                    <a 
+                      href={`tel:${providerInfo.contact.phone}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.phone}
+                    </a>
+                  </p>
+                )}
+                {providerInfo?.contact?.email && (
+                  <p>
+                    <strong>Email:</strong>{' '}
+                    <a 
+                      href={`mailto:${providerInfo.contact.email}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.email}
+                    </a>
+                  </p>
+                )}
+                {providerInfo?.contact?.website && (
+                  <p>
+                    <strong>Website:</strong>{' '}
+                    <a 
+                      href={providerInfo.contact.website.startsWith('http') ? providerInfo.contact.website : `https://${providerInfo.contact.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.website}
+                    </a>
+                  </p>
+                )}
+                {providerAddressFormatted !== 'N/A' && googleMapsUrl && (
+                  <p>
+                    <strong>Address:</strong>{' '}
+                    <a 
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerAddressFormatted}
+                    </a>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-          {/* Provider Information */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Building2 className="h-4 w-4" />
-                Provider Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ProviderInfoSection
-                providerInfo={providerInfo}
-                providerAddress={consent.providerAddress}
-                loading={loadingProvider}
-                showAddress={true}
-              />
-            </CardContent>
-          </Card>
 
           {/* Active Consents - Show what consent exists */}
           {(() => {
@@ -272,11 +375,11 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">Data Types</p>
-                        {allDataTypes.size > 0 ? (
+                        <p className="text-xs text-muted-foreground mb-1">Purposes</p>
+                        {allPurposes.size > 0 ? (
                           <ColoredBadgeList
-                            type="dataType"
-                            values={Array.from(allDataTypes)}
+                            type="purpose"
+                            values={Array.from(allPurposes)}
                             size="sm"
                           />
                         ) : (
@@ -284,11 +387,11 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
                         )}
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">Purposes</p>
-                        {allPurposes.size > 0 ? (
+                        <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                        {allDataTypes.size > 0 ? (
                           <ColoredBadgeList
-                            type="purpose"
-                            values={Array.from(allPurposes)}
+                            type="dataType"
+                            values={Array.from(allDataTypes)}
                             size="sm"
                           />
                         ) : (
