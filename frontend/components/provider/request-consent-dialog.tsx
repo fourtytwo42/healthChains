@@ -44,6 +44,7 @@ function MultiSelect({
   emptyMessage,
   getLabel,
   getValue,
+  showSelectAll = false,
 }: {
   id?: string;
   labelId?: string;
@@ -56,6 +57,7 @@ function MultiSelect({
   emptyMessage?: string;
   getLabel: (option: any) => string;
   getValue: (option: any) => string;
+  showSelectAll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -66,6 +68,19 @@ function MultiSelect({
     onSelectionChange(newSelected);
   };
 
+  const handleSelectAll = () => {
+    const allValues = options.map((opt) => getValue(opt));
+    const allSelected = allValues.every((val) => selected.includes(val));
+    
+    if (allSelected) {
+      // Deselect all
+      onSelectionChange([]);
+    } else {
+      // Select all
+      onSelectionChange(allValues);
+    }
+  };
+
   const handleRemove = (value: string, e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.stopPropagation();
     e?.preventDefault();
@@ -73,6 +88,7 @@ function MultiSelect({
   };
 
   const selectedOptions = options.filter((opt) => selected.includes(getValue(opt)));
+  const allSelected = options.length > 0 && options.every((opt) => selected.includes(getValue(opt)));
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -122,6 +138,18 @@ function MultiSelect({
           <CommandList>
             <CommandEmpty>{emptyMessage || 'No results found.'}</CommandEmpty>
             <CommandGroup>
+              {showSelectAll && options.length > 0 && (
+                <CommandItem
+                  value="select-all"
+                  onSelect={handleSelectAll}
+                  className="font-semibold"
+                >
+                  <Check
+                    className={cn('mr-2 h-4 w-4', allSelected ? 'opacity-100' : 'opacity-0')}
+                  />
+                  <div className="flex-1">Select All</div>
+                </CommandItem>
+              )}
               {options.map((option) => {
                 const value = getValue(option);
                 const isSelected = selected.includes(value);
@@ -231,6 +259,7 @@ export function RequestConsentDialog({
               emptyMessage="No data types found."
               getValue={(type) => type}
               getLabel={(type) => type}
+              showSelectAll={true}
             />
             {selectedDataTypes.length === 0 && (
               <p className="text-sm text-destructive">At least one data type is required</p>
@@ -253,6 +282,7 @@ export function RequestConsentDialog({
               emptyMessage="No purposes found."
               getValue={(purpose) => purpose}
               getLabel={(purpose) => purpose}
+              showSelectAll={true}
             />
             {selectedPurposes.length === 0 && (
               <p className="text-sm text-destructive">At least one purpose is required</p>

@@ -4,7 +4,7 @@
  * Provides typed, cached, and resilient data fetching with React Query
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type Patient, type Provider, type ConsentRecord, type AccessRequest, type ConsentStatus, type ConsentEvent, type AccessRequestEvent } from '@/lib/api-client';
 import { toast } from 'sonner';
 
@@ -84,9 +84,14 @@ export function useContractInfo() {
   });
 }
 
+type PatientsQueryOptions = Pick<
+  UseQueryOptions<Patient[], Error>,
+  'enabled' | 'staleTime' | 'gcTime' | 'refetchOnReconnect' | 'refetchOnMount' | 'refetchOnWindowFocus'
+>;
+
 // Patients
-export function usePatients() {
-  return useQuery({
+export function usePatients(options: PatientsQueryOptions = {}) {
+  return useQuery<Patient[], Error>({
     queryKey: queryKeys.patients,
     queryFn: async () => {
       const response = await apiClient.getPatients();
@@ -95,6 +100,11 @@ export function usePatients() {
       }
       return response.data;
     },
+    // Keep a stable empty array while loading/erroring and avoid unnecessary refetch on remount
+    placeholderData: (previousData) => previousData ?? [],
+    select: (data) => (Array.isArray(data) ? data : []),
+    refetchOnMount: false,
+    ...options,
   });
 }
 
@@ -898,8 +908,11 @@ export function useProviderPatients(
       return result;
     },
     enabled: enabled && !!providerAddress,
-    staleTime: 0, // Always refetch to get latest consents
-    refetchInterval: 10000, // Refetch every 10 seconds to catch new consents
+    staleTime: 30000, // Cache for 30 seconds
+    refetchInterval: false, // Disable auto-refetch to prevent loops
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -1093,8 +1106,11 @@ export function useProviderPendingRequests(
       return result;
     },
     enabled: enabled && !!providerAddress,
-    staleTime: 0, // Always refetch to get latest requests
-    refetchInterval: 10000, // Refetch every 10 seconds to catch new requests
+    staleTime: 30000, // Cache for 30 seconds
+    refetchInterval: false, // Disable auto-refetch to prevent loops
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -1364,4 +1380,3 @@ export function usePatientConsentHistory(
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 }
-

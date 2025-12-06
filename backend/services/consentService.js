@@ -482,17 +482,25 @@ class ConsentService {
       
       // Query ConsentGranted events filtered by provider address
       // ConsentGranted event: (uint256 indexed consentId, address indexed patient, address indexed provider, ...)
-      const filter = contract.filters.ConsentGranted(null, null, normalizedAddress);
+      const grantedFilter = contract.filters.ConsentGranted(null, null, normalizedAddress);
+      
+      // Query ConsentBatchGranted events (no provider filter, we'll filter by checking consent records)
+      // ConsentBatchGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
+      const batchFilter = contract.filters.ConsentBatchGranted(null);
       
       // Query from deployment block to latest
       const fromBlock = 0; // Start from contract deployment
       const toBlock = 'latest';
       
-      const events = await contract.queryFilter(filter, fromBlock, toBlock);
+      // Query both event types
+      const [grantedEvents, batchEvents] = await Promise.all([
+        contract.queryFilter(grantedFilter, fromBlock, toBlock),
+        contract.queryFilter(batchFilter, fromBlock, toBlock)
+      ]);
       
-      // Transform events to consent records
-      const consents = await Promise.all(
-        events.map(async (event) => {
+      // Transform ConsentGranted events to consent records
+      const grantedConsents = await Promise.all(
+        grantedEvents.map(async (event) => {
           const consentId = Number(event.args.consentId);
           try {
             return await this.getConsentRecord(consentId);
@@ -503,11 +511,54 @@ class ConsentService {
         })
       );
 
+      // Transform ConsentBatchGranted events to consent records
+      // For each batch event, check all consent IDs to see if they belong to this provider
+      const batchConsentsArrays = await Promise.all(
+        batchEvents.map(async (event) => {
+          const consentIds = event.args.consentIds || [];
+          // For each consent ID in the batch, fetch the record and check if provider matches
+          return Promise.all(
+            consentIds.map(async (consentIdBigInt) => {
+              const consentId = Number(consentIdBigInt);
+              try {
+                const record = await this.getConsentRecord(consentId);
+                // Check if this consent belongs to the provider
+                if (normalizeAddress(record.providerAddress) === normalizedAddress) {
+                  return record;
+                }
+                return null;
+              } catch (error) {
+                // Consent might have been revoked or doesn't exist
+                return null;
+              }
+            })
+          );
+        })
+      );
+
+      // Flatten batch consents array (it's an array of arrays)
+      const flattenedBatchConsents = batchConsentsArrays.flat();
+
+      // Combine both types of consents
+      const allConsents = [...grantedConsents, ...flattenedBatchConsents];
+
       // Filter out nulls and by expiration if needed
-      let filtered = consents.filter(c => c !== null);
+      let filtered = allConsents.filter(c => c !== null);
+      
+      // Remove duplicates (same consentId might appear in both if there's overlap)
+      const uniqueConsents = [];
+      const seenIds = new Set();
+      for (const consent of filtered) {
+        if (!seenIds.has(consent.consentId)) {
+          seenIds.add(consent.consentId);
+          uniqueConsents.push(consent);
+        }
+      }
       
       if (!includeExpired) {
-        filtered = filtered.filter(c => c.isActive && !c.isExpired);
+        filtered = uniqueConsents.filter(c => c.isActive && !c.isExpired);
+      } else {
+        filtered = uniqueConsents;
       }
 
       return filtered;
@@ -1028,14 +1079,61 @@ class ConsentService {
             timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
           };
         }))),
-        ...revokedEvents.map(event => ({
-          type: 'ConsentRevoked',
-          blockNumber: event.blockNumber,
-          transactionHash: event.transactionHash,
-          consentId: Number(event.args.consentId),
-          patient: ethers.getAddress(event.args.patient),
-          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
-        }))
+        ...(await Promise.all(revokedEvents.map(async (event) => {
+          const consentId = Number(event.args.consentId);
+          let provider = null;
+          let dataType = null;
+          let dataTypes = [];
+          let purpose = null;
+          let purposes = [];
+          let expirationTime = null;
+          
+          // Look up consent record to get full details
+          try {
+            const consentRecord = await this.getConsentRecord(consentId);
+            provider = consentRecord.providerAddress;
+            
+            // Handle both single and batch consents
+            if (consentRecord.dataTypes && Array.isArray(consentRecord.dataTypes)) {
+              dataTypes = consentRecord.dataTypes;
+              dataType = dataTypes[0] || null;
+            } else if (consentRecord.dataType) {
+              dataType = consentRecord.dataType;
+              dataTypes = [consentRecord.dataType];
+            }
+            
+            if (consentRecord.purposes && Array.isArray(consentRecord.purposes)) {
+              purposes = consentRecord.purposes;
+              purpose = purposes[0] || null;
+            } else if (consentRecord.purpose) {
+              purpose = consentRecord.purpose;
+              purposes = [consentRecord.purpose];
+            }
+            
+            expirationTime = consentRecord.expirationTime === 0 || !consentRecord.expirationTime
+              ? null
+              : new Date(Number(consentRecord.expirationTime) * 1000).toISOString();
+          } catch (error) {
+            // If consent record lookup fails (e.g., consent already deleted), 
+            // we'll still return the event with minimal info
+            console.warn(`Failed to look up consent record ${consentId} for revoked event:`, error.message);
+          }
+          
+          return {
+            type: 'ConsentRevoked',
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            consentId: consentId,
+            patient: ethers.getAddress(event.args.patient),
+            provider: provider,
+            dataType: dataType,
+            dataTypes: dataTypes,
+            purpose: purpose,
+            purposes: purposes,
+            expirationTime: expirationTime,
+            timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
+          };
+        })))
       ];
 
       // Sort by block number

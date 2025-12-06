@@ -409,11 +409,16 @@ app.get('/api/provider/:providerAddress/patients', async (req, res, next) => {
         ...patient,
         consents: patientConsents.map(c => ({
           consentId: c.consentId,
-          dataType: c.dataType,
-          purpose: c.purpose,
+          // Support both single and batch consents
+          dataType: c.dataType || (c.dataTypes && c.dataTypes.length > 0 ? c.dataTypes[0] : null),
+          dataTypes: c.dataTypes || (c.dataType ? [c.dataType] : []),
+          purpose: c.purpose || (c.purposes && c.purposes.length > 0 ? c.purposes[0] : null),
+          purposes: c.purposes || (c.purpose ? [c.purpose] : []),
+          timestamp: c.timestamp,
           expirationTime: c.expirationTime,
           isExpired: c.isExpired,
-          isActive: c.isActive
+          isActive: c.isActive,
+          isBatch: c.isBatch || false
         }))
       };
     }).filter(p => p !== null);
@@ -511,7 +516,17 @@ app.get('/api/provider/:providerAddress/patient/:patientId/data', async (req, re
     );
 
     // Build data object with only consented data types
-    const consentedDataTypes = new Set(patientConsents.map(c => c.dataType));
+    // Handle both single consents (dataType) and batch consents (dataTypes array)
+    const consentedDataTypes = new Set();
+    patientConsents.forEach(c => {
+      if (c.dataTypes && Array.isArray(c.dataTypes)) {
+        // Batch consent - add all data types
+        c.dataTypes.forEach(dt => consentedDataTypes.add(dt));
+      } else if (c.dataType) {
+        // Single consent
+        consentedDataTypes.add(c.dataType);
+      }
+    });
     
     // Start with full patient object, then filter data types
     const result = {
@@ -521,10 +536,14 @@ app.get('/api/provider/:providerAddress/patient/:patientId/data', async (req, re
       metadata: patient.metadata, // Always include metadata
       consentedData: {},
       consentInfo: patientConsents.map(c => ({
-        dataType: c.dataType,
-        purpose: c.purpose,
+        // Support both single and batch consents
+        dataType: c.dataType || (c.dataTypes && c.dataTypes.length > 0 ? c.dataTypes[0] : null),
+        dataTypes: c.dataTypes || (c.dataType ? [c.dataType] : []),
+        purpose: c.purpose || (c.purposes && c.purposes.length > 0 ? c.purposes[0] : null),
+        purposes: c.purposes || (c.purpose ? [c.purpose] : []),
         expirationTime: c.expirationTime,
-        consentId: c.consentId
+        consentId: c.consentId,
+        isBatch: c.isBatch || false
       })),
       // Track which data types are available but not consented
       unavailableDataTypes: []

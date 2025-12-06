@@ -55,7 +55,7 @@ export function ColoredBadge({ type, value, size = 'md', className = '' }: Color
   }
 
   const sizeClasses = {
-    sm: 'text-[10px] h-4 px-1.5',
+    sm: 'text-[10px] py-1 px-1.5',
     md: 'text-xs py-1',
     lg: 'text-sm py-1',
   };

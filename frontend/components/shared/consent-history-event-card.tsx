@@ -132,8 +132,8 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
-        <DialogHeader className="pb-3">
-          <DialogTitle className="flex items-center gap-2 text-lg">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center gap-2 text-base">
             {eventIcon && React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
             {eventType}
           </DialogTitle>
@@ -142,20 +142,20 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {/* Status and Timestamp */}
-          <Card>
+          <Card className="py-6">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Event Information</CardTitle>
+              <CardTitle className="text-base">Event Information</CardTitle>
             </CardHeader>
-            <CardContent className="pt-0 space-y-1.5">
-              <div className="grid grid-cols-2 gap-2">
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                  <p className="text-xs text-muted-foreground">Status</p>
                   {statusBadge}
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Timestamp</p>
+                  <p className="text-xs text-muted-foreground">Timestamp</p>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-2.5 w-2.5 text-muted-foreground" />
                     <span className="text-xs">
@@ -163,28 +163,28 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
                     </span>
                   </div>
                 </div>
+                {isExpired && event.type === 'ConsentGranted' && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Expiration Status</p>
+                    <Badge variant="destructive" className="text-xs h-4">Expired</Badge>
+                  </div>
+                )}
+                {event.blockNumber !== undefined && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Block Number</p>
+                    <span className="text-xs font-mono">{event.blockNumber}</span>
+                  </div>
+                )}
               </div>
-              {isExpired && event.type === 'ConsentGranted' && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Expiration Status</p>
-                  <Badge variant="destructive" className="text-xs h-4">Expired</Badge>
-                </div>
-              )}
-              {event.blockNumber !== undefined && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Block Number</p>
-                  <span className="text-xs font-mono">{event.blockNumber}</span>
-                </div>
-              )}
             </CardContent>
           </Card>
 
           {/* Provider/Patient Information */}
           {userRole === 'patient' && event.provider ? (
-            <Card>
+            <Card className="py-6">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-1.5">
-                  <Building2 className="h-3 w-3" />
+                <CardTitle className="text-base flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4" />
                   Provider Information
                 </CardTitle>
               </CardHeader>
@@ -198,113 +198,113 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
               </CardContent>
             </Card>
           ) : userRole === 'provider' && event.patientInfo ? (
-            <Card>
+            <Card className="py-6">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-1.5">
-                  <Users className="h-3 w-3" />
+                <CardTitle className="text-base flex items-center gap-1.5">
+                  <Users className="h-4 w-4" />
                   Patient Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 space-y-1.5">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Patient Name</p>
-                  <p className="font-semibold text-xs">
-                    {event.patientInfo.firstName} {event.patientInfo.lastName}
-                  </p>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Patient Name</p>
+                    <p className="font-semibold text-sm">
+                      {event.patientInfo.firstName} {event.patientInfo.lastName}
+                    </p>
+                  </div>
+                  {event.patientInfo.patientId && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Patient ID</p>
+                      <p className="text-sm font-mono">{event.patientInfo.patientId}</p>
+                    </div>
+                  )}
+                  {event.patient && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Patient Address</p>
+                      <p className="text-sm font-mono break-all">{event.patient}</p>
+                    </div>
+                  )}
                 </div>
-                {event.patientInfo.patientId && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Patient ID</p>
-                    <p className="text-xs font-mono">{event.patientInfo.patientId}</p>
-                  </div>
-                )}
-                {event.patient && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Patient Address</p>
-                    <p className="text-xs font-mono break-all">{event.patient}</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ) : null}
 
           {/* Consent/Request Details */}
           {(event.consentId !== undefined || event.requestId !== undefined || event.dataType || event.purpose) && (
-            <Card>
+            <Card className="py-6">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Details</CardTitle>
+                <CardTitle className="text-base">Details</CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 gap-3">
                   {event.consentId !== undefined && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Consent ID</p>
-                      <span className="text-xs font-mono font-semibold">#{event.consentId}</span>
+                      <p className="text-xs text-muted-foreground">Consent ID</p>
+                      <span className="text-sm font-mono font-semibold">#{event.consentId}</span>
                     </div>
                   )}
                   {event.requestId !== undefined && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Request ID</p>
-                      <span className="text-xs font-mono font-semibold">#{event.requestId}</span>
+                      <p className="text-xs text-muted-foreground">Request ID</p>
+                      <span className="text-sm font-mono font-semibold">#{event.requestId}</span>
                     </div>
                   )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
                   {event.dataTypes && event.dataTypes.length > 0 ? (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Data Types</p>
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Data Types</p>
                       <ColoredBadgeList type="dataType" values={event.dataTypes} size="sm" />
                     </div>
                   ) : event.dataType && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Data Type</p>
+                      <p className="text-xs text-muted-foreground">Data Type</p>
                       <ColoredBadge type="dataType" value={event.dataType} size="sm" />
                     </div>
                   )}
                   {event.purposes && event.purposes.length > 0 ? (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Purposes</p>
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Purposes</p>
                       <ColoredBadgeList type="purpose" values={event.purposes} size="sm" />
                     </div>
                   ) : event.purpose && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Purpose</p>
+                      <p className="text-xs text-muted-foreground">Purpose</p>
                       <ColoredBadge type="purpose" value={event.purpose} size="sm" />
                     </div>
                   )}
-                </div>
-                {event.expirationTime && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Expiration Date</p>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-2.5 w-2.5 text-muted-foreground" />
-                      <span className="text-xs">
-                        {format(new Date(event.expirationTime), 'MMM d, yyyy HH:mm')}
-                      </span>
+                  {event.expirationTime && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Expiration Date</p>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5 text-muted-foreground" />
+                        <span className="text-sm">
+                          {format(new Date(event.expirationTime), 'MMM d, yyyy HH:mm')}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {!event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Expiration</p>
-                    <Badge variant="secondary" className="text-xs h-4">No expiration</Badge>
-                  </div>
-                )}
+                  )}
+                  {!event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Expiration</p>
+                      <Badge variant="secondary" className="text-xs h-4">No expiration</Badge>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}
 
           {/* Transaction Information */}
           {event.transactionHash && (
-            <Card>
+            <Card className="py-6">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Blockchain Transaction</CardTitle>
+                <CardTitle className="text-base">Blockchain Transaction</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Transaction Hash</p>
+                  <p className="text-xs text-muted-foreground">Transaction Hash</p>
                   <div className="flex items-center gap-1">
-                    <p className="text-xs font-mono break-all">{event.transactionHash}</p>
+                    <p className="text-sm font-mono break-all">{event.transactionHash}</p>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -324,7 +324,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           )}
         </div>
 
-        <div className="flex justify-end pt-2 border-t">
+        <div className="flex justify-end pt-1.5 border-t">
           <Button size="sm" onClick={onClose}>Close</Button>
         </div>
       </DialogContent>

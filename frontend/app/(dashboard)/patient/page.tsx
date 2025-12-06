@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useWallet } from '@/contexts/wallet-context';
 import { useRole } from '@/hooks/use-role';
-import { usePatientPendingRequests, usePatientConsentsPaginated, useRevokeConsent, usePatientConsentHistory } from '@/hooks/use-api';
+import { usePatientPendingRequests, usePatientConsentsPaginated, useRevokeConsent, usePatientConsentHistory, usePatients } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -80,6 +80,17 @@ export default function PatientDashboardPage() {
     activeTab === 'history' && !!account
   );
 
+  // Fetch all patients to get current patient's name
+  const { data: allPatientsData } = usePatients({
+    enabled: !!account,
+  });
+  const currentPatient = allPatientsData?.find((p: any) => 
+    p.blockchainIntegration?.walletAddress?.toLowerCase() === account?.toLowerCase()
+  );
+  const patientName = currentPatient?.demographics
+    ? `${currentPatient.demographics.firstName} ${currentPatient.demographics.lastName}`.trim()
+    : 'Patient Dashboard';
+
   const handleRequestClick = (requestId: number) => {
     setSelectedRequest(requestId);
   };
@@ -143,7 +154,7 @@ export default function PatientDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Patient Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{patientName}</h1>
         <p className="text-muted-foreground">View and manage your consent requests and granted access</p>
       </div>
 
@@ -187,7 +198,6 @@ export default function PatientDashboardPage() {
                         <TableHead>Data Types</TableHead>
                         <TableHead>Purpose</TableHead>
                         <TableHead>Request Date</TableHead>
-                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -226,18 +236,6 @@ export default function PatientDashboardPage() {
                               <Clock className="h-3 w-3" />
                               {format(new Date(request.timestamp), 'MMM d, yyyy HH:mm')}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRequestClick(request.requestId);
-                              }}
-                            >
-                              Review
-                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -292,7 +290,6 @@ export default function PatientDashboardPage() {
                         <TableHead>Purpose</TableHead>
                         <TableHead>Granted Date</TableHead>
                         <TableHead>Expiration</TableHead>
-                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -379,18 +376,6 @@ export default function PatientDashboardPage() {
                                 ) : (
                                   <Badge variant="secondary">No expiration</Badge>
                                 )}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleConsentClick(firstConsent);
-                                  }}
-                                >
-                                  Review
-                                </Button>
                               </TableCell>
                             </TableRow>
                           );
@@ -498,108 +483,136 @@ export default function PatientDashboardPage() {
                     return (
                       <Card
                         key={`${event.type}-${event.consentId || event.requestId}-${index}`}
-                        className={`cursor-pointer transition-all hover:shadow-sm hover:border-opacity-80 border-l-4 ${eventBorderColor} ${eventBgColor}`}
+                        className={`cursor-pointer transition-all hover:shadow-sm hover:border-opacity-80 border-l-4 py-0 ${eventBorderColor} ${eventBgColor}`}
                         onClick={() => setSelectedHistoryEvent(event)}
                       >
-                        <CardContent className="p-2">
+                        <CardContent className="py-1 px-2">
                           <div className="flex items-center gap-2">
                             {/* Icon */}
                             {eventIcon && (
-                              <div className={`flex-shrink-0 p-1 rounded-md ${eventBgColor} ${eventColor}`}>
-                                {React.cloneElement(eventIcon, { className: 'h-3 w-3' })}
+                              <div className={`flex-shrink-0 p-1.5 rounded ${eventBgColor} ${eventColor} flex items-center justify-center`}>
+                                {React.cloneElement(eventIcon, { className: 'h-5 w-5' })}
                               </div>
                             )}
                             
                             {/* Main Content */}
                             <div className="flex-1 min-w-0">
                               {/* Header */}
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <h3 className={`font-semibold text-xs ${eventColor}`}>
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <h3 className={`font-semibold text-[11px] leading-none ${eventColor}`}>
                                     {eventType}
                                   </h3>
                                   {statusBadge}
                                   {isExpired && event.type === 'ConsentGranted' && (
-                                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>
+                                    <Badge variant="destructive" className="text-[9px] h-3 px-1">Expired</Badge>
                                   )}
                                 </div>
-                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                <p className="text-[9px] text-muted-foreground whitespace-nowrap leading-none">
                                   {format(new Date(event.timestamp), 'MMM d, yyyy • h:mm a')}
                                 </p>
                               </div>
 
                               {/* Details Grid - Compact */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-0.5 text-xs">
-                                {/* Provider Info */}
-                                {event.providerInfo?.organizationName ? (
-                                  <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</p>
-                                    <p className="text-[11px] font-semibold truncate">{event.providerInfo.organizationName}</p>
-                                  </div>
-                                ) : event.provider ? (
-                                  <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</p>
-                                    <p className="text-[11px] font-mono truncate">{event.provider.slice(0, 8)}...{event.provider.slice(-6)}</p>
-                                  </div>
-                                ) : null}
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-1.5 gap-y-0 text-xs">
+                                {/* Column 1: Provider Info - Always render */}
+                                <div>
+                                  {event.providerInfo?.organizationName ? (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Provider</p>
+                                      <p className="text-[11px] font-semibold truncate leading-tight">{event.providerInfo.organizationName}</p>
+                                    </>
+                                  ) : event.provider ? (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Provider</p>
+                                      <p className="text-[11px] font-mono truncate leading-tight">{event.provider.slice(0, 8)}...{event.provider.slice(-6)}</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Provider</p>
+                                      <p className="text-[11px] text-muted-foreground leading-tight">—</p>
+                                    </>
+                                  )}
+                                </div>
 
-                                {/* Data Type & Purpose */}
-                                {((event.dataTypes && event.dataTypes.length > 0) || (event.dataType || event.purpose)) && (
-                                  <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Access</p>
-                                    <div className="flex flex-wrap gap-0.5">
-                                      {event.dataTypes && event.dataTypes.length > 0 ? (
-                                        <>
-                                          {event.dataTypes.slice(0, 2).map((dt: string, idx: number) => (
-                                            <ColoredBadge key={idx} type="dataType" value={dt} size="sm" />
-                                          ))}
-                                          {event.dataTypes.length > 2 && (
-                                            <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.dataTypes.length - 2}</Badge>
-                                          )}
-                                        </>
-                                      ) : event.dataType ? (
-                                        <ColoredBadge type="dataType" value={event.dataType} size="sm" />
-                                      ) : null}
-                                      {event.purposes && event.purposes.length > 0 ? (
-                                        <>
-                                          {event.purposes.slice(0, 2).map((p: string, idx: number) => (
-                                            <ColoredBadge key={idx} type="purpose" value={p} size="sm" />
-                                          ))}
-                                          {event.purposes.length > 2 && (
-                                            <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.purposes.length - 2}</Badge>
-                                          )}
-                                        </>
-                                      ) : event.purpose ? (
-                                        <ColoredBadge type="purpose" value={event.purpose} size="sm" />
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                )}
+                                {/* Column 2: Access - Always render */}
+                                <div>
+                                  {((event.dataTypes && event.dataTypes.length > 0) || (event.dataType || event.purpose)) ? (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Access</p>
+                                      <div className="flex flex-wrap gap-0.5 -mt-0.5">
+                                        {event.dataTypes && event.dataTypes.length > 0 ? (
+                                          <>
+                                            {event.dataTypes.slice(0, 2).map((dt: string, idx: number) => (
+                                              <ColoredBadge key={idx} type="dataType" value={dt} size="sm" />
+                                            ))}
+                                            {event.dataTypes.length > 2 && (
+                                              <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.dataTypes.length - 2}</Badge>
+                                            )}
+                                          </>
+                                        ) : event.dataType ? (
+                                          <ColoredBadge type="dataType" value={event.dataType} size="sm" />
+                                        ) : null}
+                                        {event.purposes && event.purposes.length > 0 ? (
+                                          <>
+                                            {event.purposes.slice(0, 2).map((p: string, idx: number) => (
+                                              <ColoredBadge key={idx} type="purpose" value={p} size="sm" />
+                                            ))}
+                                            {event.purposes.length > 2 && (
+                                              <Badge variant="outline" className="text-[9px] h-3 px-1">+{event.purposes.length - 2}</Badge>
+                                            )}
+                                          </>
+                                        ) : event.purpose ? (
+                                          <ColoredBadge type="purpose" value={event.purpose} size="sm" />
+                                        ) : null}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Access</p>
+                                      <p className="text-[11px] text-muted-foreground leading-tight">—</p>
+                                    </>
+                                  )}
+                                </div>
 
-                                {/* Expiration */}
-                                {event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
-                                  <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Expires</p>
-                                    <div className="flex items-center gap-0.5">
-                                      <Clock className="h-2 w-2 text-muted-foreground flex-shrink-0" />
-                                      <p className="text-[11px] truncate">
-                                        {format(new Date(event.expirationTime), 'MMM d, yyyy')}
+                                {/* Column 3: Expires - Always render */}
+                                <div>
+                                  {event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') ? (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Expires</p>
+                                      <div className="flex items-center gap-0.5">
+                                        <Clock className="h-2 w-2 text-muted-foreground flex-shrink-0" />
+                                        <p className="text-[11px] truncate leading-tight">
+                                          {format(new Date(event.expirationTime), 'MMM d, yyyy')}
+                                        </p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">Expires</p>
+                                      <p className="text-[11px] text-muted-foreground leading-tight">—</p>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Column 4: IDs - Always render */}
+                                <div>
+                                  {event.consentId !== undefined || event.requestId !== undefined ? (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">
+                                        {event.consentId !== undefined ? 'Consent ID' : 'Request ID'}
                                       </p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* IDs */}
-                                {(event.consentId !== undefined || event.requestId !== undefined) && (
-                                  <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                                      {event.consentId !== undefined ? 'Consent ID' : 'Request ID'}
-                                    </p>
-                                    <p className="text-[11px] font-mono font-semibold">
-                                      #{event.consentId ?? event.requestId}
-                                    </p>
-                                  </div>
-                                )}
+                                      <p className="text-[11px] font-mono font-semibold leading-tight">
+                                        #{event.consentId ?? event.requestId}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mb-0.5">ID</p>
+                                      <p className="text-[11px] text-muted-foreground leading-tight">—</p>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
