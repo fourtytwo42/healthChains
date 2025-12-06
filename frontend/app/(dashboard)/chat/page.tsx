@@ -30,6 +30,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [imageErrors, setImageErrors] = useState<{ fred: boolean; user: boolean }>({ fred: false, user: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -162,19 +163,23 @@ export default function ChatPage() {
               {message.role === 'assistant' && (
                 <div className="flex-shrink-0">
                   <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted">
-                    <Image
-                      src="/avatars/fred-avatar.png"
-                      alt="Fred AI"
-                      fill
-                      className="object-cover"
-                      onError={(e) => {
-                        // Fallback if image doesn't exist
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center text-primary font-semibold">
-                      F
-                    </div>
+                    {!imageErrors.fred ? (
+                      <Image
+                        src="/avatars/fred-avatar.png"
+                        alt="Fred AI"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                        onError={() => {
+                          setImageErrors(prev => ({ ...prev, fred: true }));
+                        }}
+                      />
+                    ) : null}
+                    {imageErrors.fred && (
+                      <div className="absolute inset-0 bg-primary/20 flex items-center justify-center text-primary font-semibold">
+                        F
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -201,19 +206,23 @@ export default function ChatPage() {
               {message.role === 'user' && (
                 <div className="flex-shrink-0">
                   <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted">
-                    <Image
-                      src="/avatars/user-avatar.png"
-                      alt={userDisplayName}
-                      fill
-                      className="object-cover"
-                      onError={(e) => {
-                        // Fallback if image doesn't exist
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-secondary/20 flex items-center justify-center text-secondary-foreground font-semibold">
-                      {userDisplayName.charAt(0).toUpperCase()}
-                    </div>
+                    {!imageErrors.user ? (
+                      <Image
+                        src="/avatars/user-avatar.png"
+                        alt={userDisplayName}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                        onError={() => {
+                          setImageErrors(prev => ({ ...prev, user: true }));
+                        }}
+                      />
+                    ) : null}
+                    {imageErrors.user && (
+                      <div className="absolute inset-0 bg-secondary/20 flex items-center justify-center text-secondary-foreground font-semibold">
+                        {userDisplayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -225,18 +234,23 @@ export default function ChatPage() {
           <div className="flex gap-3 justify-start">
             <div className="flex-shrink-0">
               <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted">
-                <Image
-                  src="/avatars/fred-avatar.png"
-                  alt="Fred AI"
-                  fill
-                  className="object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-                <div className="absolute inset-0 bg-primary/20 flex items-center justify-center text-primary font-semibold">
-                  F
-                </div>
+                {!imageErrors.fred ? (
+                  <Image
+                    src="/avatars/fred-avatar.png"
+                    alt="Fred AI"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    onError={() => {
+                      setImageErrors(prev => ({ ...prev, fred: true }));
+                    }}
+                  />
+                ) : null}
+                {imageErrors.fred && (
+                  <div className="absolute inset-0 bg-primary/20 flex items-center justify-center text-primary font-semibold">
+                    F
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-col items-start">
