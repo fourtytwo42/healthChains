@@ -19,6 +19,7 @@ import { ConsentDetailsCard } from '@/components/patient/consent-details-card';
 import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
 import { Pagination } from '@/components/ui/pagination';
 import { format } from 'date-fns';
+import type { ConsentHistoryEvent } from '@/types/consent';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,7 +52,7 @@ export default function PatientDashboardPage() {
     purpose: string;
     isExpired: boolean;
   } | null>(null);
-  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<any | null>(null);
+  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<ConsentHistoryEvent | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'granted' | 'history'>('pending');
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -209,6 +210,12 @@ export default function PatientDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Screen reader announcements */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {requestsLoading && 'Loading pending requests...'}
+        {consentsLoading && 'Loading consents...'}
+      </div>
+      
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{patientName}</h1>
         <p className="text-muted-foreground">View and manage your consent requests and granted access</p>
@@ -220,10 +227,10 @@ export default function PatientDashboardPage() {
         setSelectedRequest(null);
       }}>
         <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="pending">Pending Requests</TabsTrigger>
-            <TabsTrigger value="granted">Granted Consents</TabsTrigger>
-            <TabsTrigger value="history">Consent History</TabsTrigger>
+          <TabsList aria-label="Dashboard sections">
+            <TabsTrigger value="pending" aria-label="View pending requests">Pending Requests</TabsTrigger>
+            <TabsTrigger value="granted" aria-label="View granted consents">Granted Consents</TabsTrigger>
+            <TabsTrigger value="history" aria-label="View consent history">Consent History</TabsTrigger>
           </TabsList>
         </div>
 

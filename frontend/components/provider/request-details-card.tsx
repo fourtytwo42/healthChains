@@ -129,6 +129,7 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
                     className="h-4 w-4 p-0 flex-shrink-0"
                     onClick={() => handleCopyAddress(requestData.patientAddress)}
                     title="Copy address"
+                    aria-label="Copy patient address to clipboard"
                   >
                     <Copy className="h-2.5 w-2.5" />
                   </Button>
@@ -225,7 +226,7 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
         </div>
 
         <div className="flex justify-end pt-2 border-t flex-shrink-0 mt-2">
-          <Button size="sm" onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={onClose} aria-label="Close request details">Close</Button>
         </div>
       </DialogContent>
     </Dialog>

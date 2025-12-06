@@ -27,8 +27,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useDebounce } from '@/hooks/use-debounce';
 import { sanitizeInput } from '@/lib/validation';
-import type { Patient } from '@/lib/api-client';
+import type { Patient, ConsentRecord } from '@/lib/api-client';
 import { matchesDate } from '@/lib/date-utils';
+import type { ConsentHistoryEvent, AccessRequest, ProviderPatient, PaginatedResponse } from '@/types/consent';
 
 /**
  * Provider Dashboard Page
@@ -41,9 +42,9 @@ export default function ProviderDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [selectedGrantedPatient, setSelectedGrantedPatient] = useState<Patient | null>(null);
+  const [selectedGrantedPatient, setSelectedGrantedPatient] = useState<ProviderPatient | null>(null);
   const [selectedPendingPatient, setSelectedPendingPatient] = useState<{ patientId: string; patientWalletAddress?: string } | null>(null);
-  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<any | null>(null);
+  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<ConsentHistoryEvent | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'granted' | 'history'>('all');
   const [page, setPage] = useState(1);
@@ -62,7 +63,7 @@ export default function ProviderDashboardPage() {
 
   // Fetch providers to get current provider's name
   const { data: providersData } = useProviders();
-  const currentProvider = providersData?.find((p: any) => 
+  const currentProvider = providersData?.find((p) => 
     p.blockchainIntegration?.walletAddress?.toLowerCase() === account?.toLowerCase()
   );
   const providerName = currentProvider?.organizationName || 'Provider Dashboard';
@@ -148,7 +149,7 @@ export default function ProviderDashboardPage() {
     const normalizedPatientAddress = patientAddress.toLowerCase();
     
     // Filter consents for this patient that are active and not expired
-    const patientConsents = consentsArray.filter((consent: any) => {
+    const patientConsents = consentsArray.filter((consent) => {
       const consentPatientAddress = consent.patientAddress?.toLowerCase();
       const matchesPatient = consentPatientAddress === normalizedPatientAddress;
       const isActive = consent.isActive !== false; // Default to true if not specified
@@ -163,7 +164,7 @@ export default function ProviderDashboardPage() {
 
     // Collect all unique data types from consents
     const consentedDataTypes = new Set<string>();
-    patientConsents.forEach((consent: any) => {
+    patientConsents.forEach((consent) => {
       if (consent.dataTypes && Array.isArray(consent.dataTypes)) {
         consent.dataTypes.forEach((dt: string) => consentedDataTypes.add(dt));
       } else if (consent.dataType) {
@@ -229,8 +230,8 @@ export default function ProviderDashboardPage() {
     // Sort filtered results
     if (sortColumn) {
       filtered = [...filtered].sort((a, b) => {
-        let aValue: any = '';
-        let bValue: any = '';
+        let aValue: string | number = '';
+        let bValue: string | number = '';
         
         switch (sortColumn) {
           case 'name':
@@ -246,8 +247,8 @@ export default function ProviderDashboardPage() {
             bValue = b.blockchainIntegration?.walletAddress?.toLowerCase() || '';
             break;
           case 'dob':
-            aValue = a.demographics?.dateOfBirth || '';
-            bValue = b.demographics?.dateOfBirth || '';
+            aValue = (a.demographics?.dateOfBirth ? String(a.demographics.dateOfBirth) : '') || '';
+            bValue = (b.demographics?.dateOfBirth ? String(b.demographics.dateOfBirth) : '') || '';
             break;
           case 'age':
             aValue = a.demographics?.age || 0;
@@ -347,17 +348,17 @@ export default function ProviderDashboardPage() {
   };
 
   const handleGrantedPatientClick = (patientId: string) => {
-    const patientsData = stableGrantedPatients as { data: any[]; pagination: any } | undefined;
-    const patient = patientsData?.data?.find((p: any) => p.patientId === patientId);
+    const patientsData = stableGrantedPatients as PaginatedResponse<ProviderPatient> | undefined;
+    const patient = patientsData?.data?.find((p) => p.patientId === patientId);
     setSelectedGrantedPatient(patient || null);
   };
 
-  const handlePendingRequestClick = (request: any) => {
+  const handlePendingRequestClick = (request: AccessRequest) => {
     // Find patient by address from all patients list
     const patientAddress = request.patientAddress?.toLowerCase();
     if (!patientAddress) return;
     
-    const patient = stablePatients.find((p: any) => 
+    const patient = stablePatients.find((p) => 
       p.blockchainIntegration?.walletAddress?.toLowerCase() === patientAddress
     );
     
@@ -381,7 +382,7 @@ export default function ProviderDashboardPage() {
 
   // Export and Print Functions
   const exportPatientsToCSV = () => {
-    const rows: any[][] = [['Name', 'Patient ID', 'Wallet Address', 'DOB', 'Age', 'Sex', 'Phone', 'Email', 'Address', 'Consent Status']];
+    const rows: string[][] = [['Name', 'Patient ID', 'Wallet Address', 'DOB', 'Age', 'Sex', 'Phone', 'Email', 'Address', 'Consent Status']];
     filteredPatients.forEach((patient) => {
       const hasWallet = !!patient.blockchainIntegration?.walletAddress;
       const patientAddress = patient.blockchainIntegration?.walletAddress || '';
@@ -486,10 +487,10 @@ export default function ProviderDashboardPage() {
   };
 
   const exportPendingToCSV = () => {
-    const requestsData = stablePendingRequests as { data: any[]; pagination: any } | undefined;
+    const requestsData = stablePendingRequests as PaginatedResponse<AccessRequest> | undefined;
     if (!requestsData?.data) return;
-    const rows: any[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Request Date', 'Expiration', 'Status']];
-    requestsData.data.forEach((request: any) => {
+    const rows: string[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Request Date', 'Expiration', 'Status']];
+    requestsData.data.forEach((request) => {
       const patientName = request.patient ? `${request.patient.firstName} ${request.patient.lastName}` : 'Unknown';
       rows.push([
         patientName,
@@ -515,7 +516,7 @@ export default function ProviderDashboardPage() {
   };
 
   const printPending = () => {
-    const requestsData = stablePendingRequests as { data: any[]; pagination: any } | undefined;
+    const requestsData = stablePendingRequests as PaginatedResponse<AccessRequest> | undefined;
     if (!requestsData?.data) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -575,11 +576,11 @@ export default function ProviderDashboardPage() {
   const exportGrantedToCSV = () => {
     const patientsData = stableGrantedPatients as { data: any[]; pagination: any } | undefined;
     if (!patientsData?.data) return;
-    const rows: any[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Granted Date', 'Expiration', 'Status']];
-    patientsData.data.forEach((patient: any) => {
+    const rows: string[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Granted Date', 'Expiration', 'Status']];
+    patientsData?.data.forEach((patient) => {
       const allDataTypes = new Set<string>();
       const allPurposes = new Set<string>();
-      patient.consents?.forEach((c: any) => {
+      patient.consents?.forEach((c: ConsentRecord) => {
         if (c.dataTypes && Array.isArray(c.dataTypes)) {
           c.dataTypes.forEach((dt: string) => allDataTypes.add(dt));
         } else if (c.dataType) {
@@ -701,16 +702,19 @@ export default function ProviderDashboardPage() {
 
   const exportHistoryToCSV = () => {
     if (!historyData || historyData.length === 0) return;
-    const rows: any[][] = [['Event Type', 'Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Timestamp', 'Expiration', 'Status']];
-    historyData.forEach((event: any) => {
+    const rows: string[][] = [['Event Type', 'Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Timestamp', 'Expiration', 'Status']];
+    historyData.forEach((event) => {
       const patientName = event.patientInfo ? `${event.patientInfo.firstName} ${event.patientInfo.lastName}` : 'Unknown';
+      const evt = event as ConsentHistoryEvent;
+      const dataTypes = Array.isArray(evt.dataTypes) ? evt.dataTypes : [];
+      const purposes = Array.isArray(evt.purposes) ? evt.purposes : [];
       rows.push([
         event.type || 'Unknown',
         patientName,
         event.patientInfo?.patientId || '',
         event.patient || 'N/A',
-        (event.dataTypes || []).join('; '),
-        (event.purposes || []).join('; '),
+        dataTypes.join('; '),
+        purposes.join('; '),
         format(new Date(event.timestamp), 'yyyy-MM-dd HH:mm'),
         event.expirationTime ? format(new Date(event.expirationTime), 'yyyy-MM-dd HH:mm') : 'N/A',
         event.isExpired ? 'Expired' : 'Active'
@@ -764,16 +768,19 @@ export default function ProviderDashboardPage() {
           </thead>
           <tbody>
     `;
-    historyData.forEach((event: any) => {
+    historyData.forEach((event) => {
       const patientName = event.patientInfo ? `${event.patientInfo.firstName} ${event.patientInfo.lastName}` : 'Unknown';
+      const evt = event as ConsentHistoryEvent;
+      const dataTypes = Array.isArray(evt.dataTypes) ? evt.dataTypes : [];
+      const purposes = Array.isArray(evt.purposes) ? evt.purposes : [];
       htmlContent += `
         <tr>
           <td>${event.type || 'Unknown'}</td>
           <td>${patientName}</td>
           <td>${event.patientInfo?.patientId || ''}</td>
           <td>${event.patient || 'N/A'}</td>
-          <td>${(event.dataTypes || []).join(', ')}</td>
-          <td>${(event.purposes || []).join(', ')}</td>
+          <td>${dataTypes.join(', ')}</td>
+          <td>${purposes.join(', ')}</td>
           <td>${format(new Date(event.timestamp), 'MMM d, yyyy HH:mm')}</td>
           <td>${event.expirationTime ? format(new Date(event.expirationTime), 'MMM d, yyyy HH:mm') : 'N/A'}</td>
           <td>${event.isExpired ? 'Expired' : 'Active'}</td>
@@ -851,7 +858,7 @@ export default function ProviderDashboardPage() {
         setSelectedPatient(null);
       }}>
         <div className="flex items-center justify-between">
-          <TabsList>
+          <TabsList aria-label="Dashboard sections">
             <TabsTrigger value="all">Patients</TabsTrigger>
             <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="granted">Granted Consent</TabsTrigger>
@@ -932,6 +939,8 @@ export default function ProviderDashboardPage() {
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/70 select-none bg-muted/40 font-semibold border-r border-border/50"
                           onClick={() => handleSort('name')}
+                          aria-label="Sort by name"
+                          role="columnheader"
                         >
                           <div className="flex items-center">
                             Name
@@ -941,6 +950,8 @@ export default function ProviderDashboardPage() {
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/70 select-none bg-muted/40 font-semibold border-r border-border/50"
                           onClick={() => handleSort('patientId')}
+                          aria-label="Sort by patient ID"
+                          role="columnheader"
                         >
                           <div className="flex items-center">
                             Patient ID
@@ -950,6 +961,8 @@ export default function ProviderDashboardPage() {
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/70 select-none bg-muted/40 font-semibold border-r border-border/50"
                           onClick={() => handleSort('walletAddress')}
+                          aria-label="Sort by wallet address"
+                          role="columnheader"
                         >
                           <div className="flex items-center">
                             Wallet Address
@@ -959,6 +972,8 @@ export default function ProviderDashboardPage() {
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/70 select-none bg-muted/40 font-semibold border-r border-border/50"
                           onClick={() => handleSort('dob')}
+                          aria-label="Sort by date of birth"
+                          role="columnheader"
                         >
                           <div className="flex items-center">
                             DOB
@@ -968,6 +983,8 @@ export default function ProviderDashboardPage() {
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/70 select-none bg-muted/40 font-semibold border-r border-border/50"
                           onClick={() => handleSort('age')}
+                          aria-label="Sort by age"
+                          role="columnheader"
                         >
                           <div className="flex items-center">
                             Age
@@ -1948,7 +1965,7 @@ export default function ProviderDashboardPage() {
       {selectedGrantedPatient && account && (
         <GrantedConsentDetailsCard
           patientId={selectedGrantedPatient.patientId}
-          patientWalletAddress={selectedGrantedPatient.blockchainIntegration?.walletAddress}
+          patientWalletAddress={selectedGrantedPatient.patientWalletAddress}
           providerAddress={account}
           onClose={handleCloseGrantedDetails}
           onOpenMedicalChart={handleOpenMedicalChart}

@@ -311,6 +311,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
                         navigator.clipboard.writeText(event.transactionHash || '');
                       }}
                       title="Copy transaction hash"
+                      aria-label="Copy transaction hash to clipboard"
                     >
                       <ExternalLink className="h-2 w-2" />
                     </Button>
@@ -322,7 +323,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
         </div>
 
         <div className="flex justify-end pt-1.5 border-t flex-shrink-0 mt-2">
-          <Button size="sm" onClick={onClose}>Close</Button>
+          <Button size="sm" onClick={onClose} aria-label="Close consent history event details">Close</Button>
         </div>
       </DialogContent>
     </Dialog>

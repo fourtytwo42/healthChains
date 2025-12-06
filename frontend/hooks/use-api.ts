@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type Patient, type Provider, type ConsentRecord, type AccessRequest, type ConsentStatus, type ConsentEvent, type AccessRequestEvent } from '@/lib/api-client';
+import type { ConsentHistoryEvent } from '@/types/consent';
 import { toast } from 'sonner';
 import { handleError, handleTransactionError } from '@/lib/error-handler';
 import { logger } from '@/lib/logger';
@@ -1009,7 +1010,7 @@ export function useProviderConsentHistory(
       ];
 
       // Filter events by provider address
-      const providerEvents = allEvents.filter((event: any) => {
+      const providerEvents = allEvents.filter((event) => {
         // For consent events, check if provider matches
         if (event.type === 'ConsentGranted' || event.type === 'ConsentRevoked') {
           return event.provider?.toLowerCase() === addressToMatch;
@@ -1030,10 +1031,10 @@ export function useProviderConsentHistory(
       const patients = patientsResponse.success && patientsResponse.data ? patientsResponse.data : [];
 
       // Enrich events with patient info and check for expired consents
-      const enrichedEvents = filteredProviderEvents.map((event: any) => {
+      const enrichedEvents: ConsentHistoryEvent[] = filteredProviderEvents.map((event) => {
         // Find patient by address
         const patient = event.patient
-          ? patients.find((p: any) => 
+          ? patients.find((p) => 
               p.blockchainIntegration?.walletAddress?.toLowerCase() === event.patient?.toLowerCase()
             )
           : null;
@@ -1051,7 +1052,7 @@ export function useProviderConsentHistory(
             lastName: patient.demographics?.lastName,
           } : null,
           isExpired,
-        };
+        } as ConsentHistoryEvent;
       });
 
       // Add expired consent events for consents that expired but weren't revoked
@@ -1059,23 +1060,23 @@ export function useProviderConsentHistory(
       try {
         const consentsResponse = await apiClient.getProviderConsentsPaginated(addressToMatch, 1, 100, true);
         if (consentsResponse.success && consentsResponse.data) {
-          const consentsArray = Array.isArray(consentsResponse.data) 
+          const consentsArray: ConsentRecord[] = Array.isArray(consentsResponse.data) 
             ? consentsResponse.data 
-            : (consentsResponse.data as any)?.data || [];
+            : ((consentsResponse.data as { data?: ConsentRecord[] })?.data || []);
           
-          const expiredConsents = consentsArray.filter((c: any) => 
+          const expiredConsents = consentsArray.filter((c: ConsentRecord) => 
             c.isExpired && c.isActive
           );
 
           // For each expired consent, check if there's already a revocation event
-          expiredConsents.forEach((consent: any) => {
-            const hasRevocationEvent = enrichedEvents.some((e: any) => 
+          expiredConsents.forEach((consent) => {
+            const hasRevocationEvent = enrichedEvents.some((e) => 
               e.type === 'ConsentRevoked' && e.consentId === consent.consentId
             );
 
             // If no revocation event exists, add an "expired" event
             if (!hasRevocationEvent) {
-              const patient = patients.find((p: any) => 
+              const patient = patients.find((p) => 
                 p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.patientAddress.toLowerCase()
               );
 
@@ -1157,7 +1158,7 @@ export function usePatientConsentHistory(
       // Provider info should already be included in events from backend
       // But we'll use it if available, otherwise fall back to null
       // Enrich events and check for expired consents
-      const enrichedEvents = filteredEvents.map((event: any) => {
+      const enrichedEvents: ConsentHistoryEvent[] = filteredEvents.map((event) => {
         // Check if consent expired (for ConsentGranted events)
         const isExpired = event.type === 'ConsentGranted' && 
           event.expirationTime && 
@@ -1168,7 +1169,7 @@ export function usePatientConsentHistory(
           // providerInfo should already be included from backend
           // If not, it will be null and the component will handle it
           isExpired,
-        };
+        } as ConsentHistoryEvent;
       });
 
       // Add expired consent events for consents that expired but weren't revoked
@@ -1177,17 +1178,17 @@ export function usePatientConsentHistory(
         const consentsResponse = await apiClient.getPatientConsentsPaginated(normalizedAddress, 1, 100, true);
         if (consentsResponse.success && consentsResponse.data) {
           // The response.data is { data: ConsentRecord[], pagination: {...} }
-          const consentsArray = Array.isArray(consentsResponse.data) 
+          const consentsArray: ConsentRecord[] = Array.isArray(consentsResponse.data) 
             ? consentsResponse.data 
-            : (consentsResponse.data as any)?.data || [];
+            : ((consentsResponse.data as { data?: ConsentRecord[] })?.data || []);
           
-          const expiredConsents = consentsArray.filter((c: any) => 
+          const expiredConsents = consentsArray.filter((c: ConsentRecord) => 
             c.isExpired && c.isActive
           );
 
           // For each expired consent, check if there's already a revocation event
-          expiredConsents.forEach((consent: any) => {
-            const hasRevocationEvent = enrichedEvents.some((e: any) => 
+          expiredConsents.forEach((consent) => {
+            const hasRevocationEvent = enrichedEvents.some((e) => 
               e.type === 'ConsentRevoked' && e.consentId === consent.consentId
             );
 

@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
 import { 
   FileText, Pill, Heart, FlaskConical, Scan, Dna, 
-  ChevronRight, ChevronLeft, Lock, Calendar, Info, Download, Printer
+  ChevronRight, ChevronLeft, Lock, Calendar, Info, Download, Printer, Loader2
 } from 'lucide-react';
 import { dataTypeDescriptions } from '@/lib/badge-utils';
 import { useProviderPatientData } from '@/hooks/use-api';
@@ -315,9 +315,15 @@ export function PatientDetailsCard({
     );
   };
 
+  // Loading states for export/print
+  const [isExporting, setIsExporting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
   // CSV Export Function
-  const exportToCSV = () => {
+  const exportToCSV = async () => {
     if (!patientData) return;
+    setIsExporting(true);
+    try {
     
     const rows: string[][] = [];
     
@@ -456,11 +462,19 @@ export function PatientDetailsCard({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Small delay to ensure download starts
+    await new Promise(resolve => setTimeout(resolve, 100));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Print Function
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!patientData) return;
+    setIsPrinting(true);
+    try {
     
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -735,10 +749,12 @@ export function PatientDetailsCard({
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    printWindow.print();
+    printWindow.close();
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   // Early returns AFTER all hooks
@@ -1166,9 +1182,15 @@ export function PatientDetailsCard({
                     variant="ghost"
                     size="sm"
                     onClick={exportToCSV}
+                    disabled={isExporting || isPrinting}
                     className="h-8 w-8 p-0"
+                    aria-label="Export medical chart as CSV"
                   >
-                    <Download className="h-4 w-4" />
+                    {isExporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -1183,9 +1205,15 @@ export function PatientDetailsCard({
                     variant="ghost"
                     size="sm"
                     onClick={handlePrint}
+                    disabled={isExporting || isPrinting}
                     className="h-8 w-8 p-0"
+                    aria-label="Print medical chart"
                   >
-                    <Printer className="h-4 w-4" />
+                    {isPrinting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Printer className="h-4 w-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -1201,7 +1229,7 @@ export function PatientDetailsCard({
               patientName={`${(patientData.demographics as any)?.firstName || ''} ${(patientData.demographics as any)?.lastName || ''}`.trim() || patientId}
             />
           )}
-          <Button size="sm" variant="outline" onClick={onClose}>
+          <Button size="sm" variant="outline" onClick={onClose} aria-label="Close medical chart">
             Close
           </Button>
         </div>

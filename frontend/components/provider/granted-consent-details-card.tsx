@@ -457,7 +457,7 @@ export function GrantedConsentDetailsCard({
               patientName={patientName}
             />
           )}
-          <Button size="sm" variant="outline" onClick={onClose}>
+          <Button size="sm" variant="outline" onClick={onClose} aria-label="Close consent details">
             Close
           </Button>
         </div>

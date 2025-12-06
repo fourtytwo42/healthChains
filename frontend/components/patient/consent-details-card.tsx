@@ -315,7 +315,7 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
           if (hasActiveConsents) {
             return (
               <div className="flex justify-end gap-2 pt-3 border-t flex-shrink-0 mt-2">
-                <Button variant="outline" size="sm" onClick={onClose}>
+                <Button variant="outline" size="sm" onClick={onClose} aria-label="Close consent details">
                   Close
                 </Button>
                 <AlertDialog>
@@ -380,7 +380,7 @@ export function ConsentDetailsCard({ consent, onClose }: ConsentDetailsCardProps
 
           return (
             <div className="flex justify-end pt-3 border-t flex-shrink-0 mt-2">
-              <Button variant="outline" size="sm" onClick={onClose}>
+              <Button variant="outline" size="sm" onClick={onClose} aria-label="Close consent details">
                 Close
               </Button>
             </div>

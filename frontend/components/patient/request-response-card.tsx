@@ -225,7 +225,7 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
         </div>
 
         <div className="flex justify-end gap-2 pt-3 border-t flex-shrink-0 mt-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose} aria-label={isProcessed ? "Close request response" : "Cancel request response"}>
             {isProcessed ? 'Close' : 'Cancel'}
           </Button>
           {!isProcessed && (

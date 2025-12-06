@@ -16,7 +16,7 @@ import { z } from 'zod';
 describe('validation', () => {
   describe('validateEthereumAddress', () => {
     it('should validate correct Ethereum address', () => {
-      const address = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+      const address = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
       expect(validateEthereumAddress(address)).toBe(true);
     });
 
@@ -27,7 +27,7 @@ describe('validation', () => {
     });
 
     it('should handle case-insensitive addresses', () => {
-      const address = '0x742D35CC6634C0532925A3B844BC9E7595F0BEB';
+      const address = '0x742D35CC6634C0532925A3B844BC9E7595F0BEB0';
       expect(validateEthereumAddress(address)).toBe(true);
     });
   });
@@ -57,7 +57,7 @@ describe('validation', () => {
   describe('validateConsentRequest', () => {
     it('should validate correct consent request', () => {
       const request = {
-        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'],
+        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0'],
         dataTypes: ['medical_records'],
         purposes: ['treatment'],
       };
@@ -75,7 +75,7 @@ describe('validation', () => {
 
     it('should reject request without data types', () => {
       const request = {
-        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'],
+        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0'],
         dataTypes: [],
         purposes: ['treatment'],
       };
@@ -84,7 +84,7 @@ describe('validation', () => {
 
     it('should reject request without purposes', () => {
       const request = {
-        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'],
+        providers: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0'],
         dataTypes: ['medical_records'],
         purposes: [],
       };
@@ -95,7 +95,7 @@ describe('validation', () => {
   describe('validateAccessRequest', () => {
     it('should validate correct access request', () => {
       const request = {
-        patientAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+        patientAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
         dataTypes: ['medical_records'],
         purposes: ['treatment'],
       };
@@ -141,7 +141,7 @@ describe('validation', () => {
 
   describe('ethereumAddressSchema', () => {
     it('should parse and transform valid address', () => {
-      const address = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+      const address = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
       const result = ethereumAddressSchema.parse(address);
       expect(result).toBe(address.toLowerCase());
     });

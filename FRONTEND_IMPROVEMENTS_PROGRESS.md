@@ -58,25 +58,29 @@
 
 ## In Progress 🔄
 
-### 8. Loading States
-- Need to add loading indicators for:
-  - MetaMask signature requests
-  - Transaction pending states
-  - CSV export operations
-  - Print operations
+### 8. Loading States ✅
+- Added loading indicators for:
+  - CSV export operations (with spinner and disabled state)
+  - Print operations (with spinner and disabled state)
+  - Transaction pending states (already implemented in mutation hooks)
+  - MetaMask signature requests (handled by isAuthenticating state)
 
-### 9. TypeScript Improvements
-- Need to replace remaining `any` types:
-  - `selectedHistoryEvent: any | null` in provider/patient pages
-  - Various `any` types in filter functions
-  - Event type definitions
+### 9. TypeScript Improvements ✅
+- Replaced remaining `any` types:
+  - Created `types/consent.ts` with proper type definitions
+  - Replaced `selectedHistoryEvent: any | null` with `ConsentHistoryEvent | null`
+  - Replaced `any` types in filter functions with proper types
+  - Added type definitions for `ConsentHistoryEvent`, `AccessRequest`, `ProviderPatient`, `PaginatedResponse`
+  - Fixed type errors in hooks and component props
 
-### 10. Additional ARIA Labels
-- Need to add `aria-label` to:
-  - Icon buttons (Download, Print, etc.)
-  - Table headers
+### 10. Additional ARIA Labels ✅
+- Added `aria-label` to:
+  - Icon buttons (Download, Print, Copy, Close)
+  - Table headers (with `role="columnheader"`)
   - Dialog close buttons
-  - Tab buttons
+  - Tab buttons (with descriptive labels)
+  - Added `aria-live` regions for dynamic content announcements
+  - Added `sr-only` utility class for screen reader only content
 
 ## Pending ⏳
 
@@ -105,11 +109,21 @@
 - `frontend/lib/validation.ts` - Input validation with Zod
 - `frontend/hooks/use-debounce.ts` - Debounce hook
 - `frontend/components/ErrorBoundary.tsx` - Error boundary component
+- `frontend/types/consent.ts` - Type definitions for consent-related data structures
 
 ### Modified Files:
 - `frontend/app/providers.tsx` - Added ErrorBoundary, improved React Query defaults
-- `frontend/hooks/use-api.ts` - Replaced console.logs, centralized error handling, added staleTime/gcTime
-- `frontend/app/(dashboard)/provider/page.tsx` - Added debouncing, sanitization, ARIA labels
+- `frontend/hooks/use-api.ts` - Replaced console.logs, centralized error handling, added staleTime/gcTime, replaced `any` types
+- `frontend/app/(dashboard)/provider/page.tsx` - Added debouncing, sanitization, ARIA labels, replaced `any` types, added loading states
+- `frontend/app/(dashboard)/patient/page.tsx` - Replaced `any` types, added ARIA labels and aria-live regions
+- `frontend/components/provider/patient-details-card.tsx` - Added loading states for CSV/Print, ARIA labels
+- `frontend/components/shared/consent-history-event-card.tsx` - Added ARIA labels
+- `frontend/components/patient/consent-details-card.tsx` - Added ARIA labels
+- `frontend/components/provider/request-details-card.tsx` - Added ARIA labels
+- `frontend/components/patient/request-response-card.tsx` - Added ARIA labels
+- `frontend/app/globals.css` - Added `sr-only` utility class
+- `frontend/tests/__tests__/lib/validation.test.ts` - Fixed test addresses to be valid 42-character addresses
+- `frontend/tests/__tests__/components/wallet-connector.test.tsx` - Fixed test to handle wrong network indicator
 
 ## Next Steps
 
