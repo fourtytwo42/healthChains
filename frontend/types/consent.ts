@@ -43,6 +43,19 @@ export interface PatientInfo {
   patientId?: string;
   firstName?: string;
   lastName?: string;
+  age?: number | string;
+  gender?: string;
+  dateOfBirth?: string | null;
+  contact?: {
+    phone?: string;
+    email?: string;
+  };
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
 }
 
 export interface ConsentRecord {

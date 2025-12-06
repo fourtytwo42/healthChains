@@ -1030,7 +1030,7 @@ export function useProviderConsentHistory(
       const patientsResponse = await apiClient.getPatients();
       const patients = patientsResponse.success && patientsResponse.data ? patientsResponse.data : [];
 
-      // Enrich events with patient info and check for expired consents
+      // Enrich events with complete patient info and check for expired consents
       const enrichedEvents: ConsentHistoryEvent[] = filteredProviderEvents.map((event) => {
         // Find patient by address
         const patient = event.patient
@@ -1050,6 +1050,11 @@ export function useProviderConsentHistory(
             patientId: patient.patientId,
             firstName: patient.demographics?.firstName,
             lastName: patient.demographics?.lastName,
+            age: patient.demographics?.age,
+            gender: patient.demographics?.gender,
+            dateOfBirth: patient.demographics?.dateOfBirth as string | null | undefined,
+            contact: patient.demographics?.contact as { phone?: string; email?: string } | undefined,
+            address: patient.demographics?.address as { street?: string; city?: string; state?: string; zipCode?: string } | undefined,
           } : null,
           isExpired,
         } as ConsentHistoryEvent;
@@ -1097,6 +1102,11 @@ export function useProviderConsentHistory(
                   patientId: patient.patientId,
                   firstName: patient.demographics?.firstName,
                   lastName: patient.demographics?.lastName,
+                  age: patient.demographics?.age,
+                  gender: patient.demographics?.gender,
+                  dateOfBirth: patient.demographics?.dateOfBirth as string | null | undefined,
+                  contact: patient.demographics?.contact as { phone?: string; email?: string } | undefined,
+                  address: patient.demographics?.address as { street?: string; city?: string; state?: string; zipCode?: string } | undefined,
                 } : null,
                 isExpired: true,
               });
@@ -1155,10 +1165,22 @@ export function usePatientConsentHistory(
       // and ConsentGranted only for direct grants, so no duplicates exist
       const filteredEvents = allEvents;
 
-      // Provider info should already be included in events from backend
-      // But we'll use it if available, otherwise fall back to null
-      // Enrich events and check for expired consents
+      // Fetch provider info for enrichment
+      const providersResponse = await apiClient.getProviders();
+      const providers = providersResponse.success && providersResponse.data ? providersResponse.data : [];
+
+      // Enrich events with complete provider info and check for expired consents
       const enrichedEvents: ConsentHistoryEvent[] = filteredEvents.map((event) => {
+        // Find provider by address (check both provider and requester fields)
+        // ConsentEvent has 'provider', AccessRequestEvent has 'requester'
+        const providerAddress = ('provider' in event ? event.provider : undefined) || 
+                                ('requester' in event ? event.requester : undefined);
+        const provider = providerAddress
+          ? providers.find((p) => 
+              p.blockchainIntegration?.walletAddress?.toLowerCase() === providerAddress.toLowerCase()
+            )
+          : null;
+
         // Check if consent expired (for ConsentGranted events)
         const isExpired = event.type === 'ConsentGranted' && 
           event.expirationTime && 
@@ -1166,8 +1188,13 @@ export function usePatientConsentHistory(
 
         return {
           ...event,
-          // providerInfo should already be included from backend
-          // If not, it will be null and the component will handle it
+          providerInfo: provider ? {
+            organizationName: provider.organizationName,
+            providerType: (provider as any).providerType,
+            specialties: (provider as any).specialties,
+            contact: (provider as any).contact,
+            address: (provider as any).address,
+          } : ((event as any).providerInfo || null),
           isExpired,
         } as ConsentHistoryEvent;
       });
@@ -1194,9 +1221,10 @@ export function usePatientConsentHistory(
 
             // If no revocation event exists, add an "expired" event
             if (!hasRevocationEvent) {
-              // Provider info should be in consent object from backend
-              const consentWithProvider = consent as any;
-              const providerInfo = consentWithProvider.provider || null;
+              // Find provider by address for complete provider info
+              const provider = providers.find((p) => 
+                p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
+              );
 
               enrichedEvents.push({
                 type: 'ConsentExpired',
@@ -1211,7 +1239,13 @@ export function usePatientConsentHistory(
                 purposes: consent.purposes || (consent.purpose ? [consent.purpose] : []),
                 expirationTime: consent.expirationTime,
                 timestamp: consent.expirationTime || consent.timestamp,
-                providerInfo: providerInfo,
+                providerInfo: provider ? {
+                  organizationName: provider.organizationName,
+                  providerType: (provider as any).providerType,
+                  specialties: (provider as any).specialties,
+                  contact: (provider as any).contact,
+                  address: (provider as any).address,
+                } : null,
                 isExpired: true,
               });
             }
