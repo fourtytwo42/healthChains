@@ -355,12 +355,12 @@ The frontend will start on `http://localhost:3000`.
 
 1. **Install MetaMask** browser extension
 2. **Add Network**:
-   - Network Name: `Hardhat Local`
+   - Network Name: `Hardhat`
    - RPC URL: `http://127.0.0.1:8545`
    - Chain ID: `1337`
    - Currency Symbol: `ETH`
 3. **Import Test Account**: Use a private key from [Test Accounts](../TEST_ACCOUNTS.md)
-4. **Switch to Hardhat Local** network
+4. **Switch to Hardhat** network
 
 ## Production Deployment
 

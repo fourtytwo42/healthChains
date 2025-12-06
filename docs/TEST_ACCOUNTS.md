@@ -18,7 +18,7 @@ These accounts are **static and deterministic** - they will always be the same w
 
 To use these accounts, configure MetaMask with:
 
-- **Network Name**: Hardhat Local
+- **Network Name**: Hardhat
 - **RPC URL**: `http://127.0.0.1:8545`
 - **Chain ID**: `1337`
 - **Currency Symbol**: `ETH`

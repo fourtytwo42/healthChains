@@ -35,7 +35,7 @@ This document covers scalability considerations, limitations, and strategies for
 - **Impact**: High gas costs, slow confirmation times
 - **Solution**: Layer 2 solutions (Polygon, Arbitrum, Optimism)
 
-**Hardhat Local**: Unlimited (for development)
+**Hardhat**: Unlimited (for development)
 - **Impact**: Fast and free in development
 - **Solution**: Not applicable (development only)
 

@@ -6,15 +6,20 @@ This document explains how the application automatically detects the environment
 
 The application automatically detects whether it's running on localhost or the production domain (`app.qrmk.us`) and uses the appropriate endpoints:
 
-- **Localhost/127.0.0.1**: Uses local API, remote RPC
+- **Localhost/127.0.0.1**: Uses local API, configurable RPC
   - API: `http://localhost:3001`
-  - RPC: `https://rpc.qrmk.us` (always uses remote)
+  - RPC: Uses `NEXT_PUBLIC_RPC_URL` env var (defaults to `https://rpc.qrmk.us`)
 
 - **app.qrmk.us**: Uses Cloudflare tunnel endpoints
   - API: `https://api.qrmk.us`
-  - RPC: `https://rpc.qrmk.us` (always uses remote)
+  - RPC: Uses `NEXT_PUBLIC_RPC_URL` env var (defaults to `https://rpc.qrmk.us`)
 
-**Note**: All RPC connections now use the remote endpoint (`rpc.qrmk.us`) regardless of hostname. The network is always configured as "Hardhat Remote".
+**Note**: RPC URL is configurable via `NEXT_PUBLIC_RPC_URL` environment variable. Can be set to:
+- `https://rpc.qrmk.us` (remote, default)
+- `http://localhost:8545` (local)
+- `http://127.0.0.1:8545` (local)
+
+The network name is "Hardhat" by default (can be overridden with `NEXT_PUBLIC_NETWORK_NAME`).
 
 ## Frontend Configuration
 
@@ -28,8 +33,8 @@ The frontend automatically detects the hostname and uses the appropriate endpoin
 // Detects hostname and returns appropriate API URL
 getApiBaseUrl() → 'http://localhost:3001' or 'https://api.qrmk.us'
 
-// Always returns remote RPC URL (no hostname detection)
-getRpcUrl() → 'https://rpc.qrmk.us' (always)
+// Returns RPC URL from NEXT_PUBLIC_RPC_URL env var (defaults to rpc.qrmk.us)
+getRpcUrl() → Value from NEXT_PUBLIC_RPC_URL or 'https://rpc.qrmk.us'
 ```
 
 ### Usage
@@ -47,10 +52,15 @@ You can still override the automatic detection using environment variables:
 ```env
 # .env.local
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-NEXT_PUBLIC_RPC_URL=https://rpc.qrmk.us  # Always uses remote RPC
+NEXT_PUBLIC_RPC_URL=https://rpc.qrmk.us  # Can be rpc.qrmk.us, localhost:8545, or 127.0.0.1:8545
+NEXT_PUBLIC_NETWORK_NAME=Hardhat  # Optional, defaults to "Hardhat"
+NEXT_PUBLIC_CHAIN_ID=1337  # Optional, defaults to 1337
 ```
 
-**Note**: If environment variables are set, they take precedence over automatic detection.
+**Note**: 
+- If `NEXT_PUBLIC_RPC_URL` is set, it takes precedence over defaults
+- If `NEXT_PUBLIC_NETWORK_NAME` is set, it overrides the default "Hardhat" name
+- API URL still uses hostname detection unless `NEXT_PUBLIC_API_BASE_URL` is set
 
 ## Backend Configuration
 
@@ -152,7 +162,12 @@ ingress:
 
 The app will automatically use:
 - API: `http://localhost:3001`
-- RPC: `http://127.0.0.1:8545`
+- RPC: Value from `NEXT_PUBLIC_RPC_URL` env var (defaults to `https://rpc.qrmk.us`)
+
+To use local RPC, set in `frontend/.env.local`:
+```env
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
+```
 
 ### Production Testing
 
