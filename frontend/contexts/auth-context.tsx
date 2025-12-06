@@ -257,8 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken();
       
       // Set isAuthenticating immediately to prevent auto-authenticate effect from triggering
-      // Use both state and ref to prevent race conditions
-      isAuthenticatingRef.current = true;
+      // Use state to block auto-authenticate effect, but DON'T set the ref yet
+      // The ref will be set inside authenticate() when it actually starts
       setState({
         isAuthenticated: false,
         isAuthenticating: true, // Set to true immediately to block auto-authenticate effect
@@ -274,6 +274,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Keep the flag set until authentication completes (it will be cleared in authenticate())
       setTimeout(async () => {
         try {
+          // Clear the ref check temporarily so authenticate() can proceed
+          // authenticate() will set it itself when it starts
           await authenticate();
           // Flag is cleared in authenticate() after success
         } catch (error) {
