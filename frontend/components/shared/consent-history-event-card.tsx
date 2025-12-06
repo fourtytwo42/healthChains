@@ -88,10 +88,18 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
   const isExpired = event.isExpired || (event.type === 'ConsentGranted' && event.expirationTime && 
     new Date(event.expirationTime) < new Date());
 
+  // Format patient information for display (matching granted consent details card format)
+  const patientName = event.patientInfo
+    ? `${event.patientInfo.firstName || ''} ${event.patientInfo.lastName || ''}`.trim()
+    : 'N/A';
+  const patientAddress = event.patientInfo?.address
+    ? `${event.patientInfo.address.street || ''}, ${event.patientInfo.address.city || ''}, ${event.patientInfo.address.state || ''} ${event.patientInfo.address.zipCode || ''}`
+    : 'N/A';
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="pb-2 flex-shrink-0">
+        <DialogHeader className="pb-4 border-b flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             {eventIcon && React.cloneElement(eventIcon, { className: 'h-4 w-4' })}
             {eventType}
@@ -99,6 +107,41 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           <DialogDescription className="text-xs">
             Detailed information about this consent event
           </DialogDescription>
+          
+          {/* Patient Info - Consolidated format matching granted consent details card */}
+          {userRole === 'provider' && event.patientInfo && (
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-semibold text-base mb-1">{patientName}</p>
+                <p className="text-muted-foreground text-xs">
+                  {event.patientInfo.dateOfBirth ? `DOB: ${format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}` : ''}
+                  {event.patientInfo.age !== undefined ? ` • Age: ${event.patientInfo.age}` : ''}
+                  {event.patientInfo.gender ? ` • ${event.patientInfo.gender}` : ''}
+                </p>
+                {event.patientInfo.patientId && (
+                  <p className="text-muted-foreground text-xs font-mono mt-1">
+                    <strong>Patient ID:</strong> {event.patientInfo.patientId}
+                  </p>
+                )}
+                {event.patient && (
+                  <p className="text-muted-foreground text-xs font-mono mt-1">
+                    <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
+                  </p>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {event.patientInfo.contact?.phone && (
+                  <p><strong>Phone:</strong> {event.patientInfo.contact.phone}</p>
+                )}
+                {event.patientInfo.contact?.email && (
+                  <p><strong>Email:</strong> {event.patientInfo.contact.email}</p>
+                )}
+                {patientAddress !== 'N/A' && (
+                  <p><strong>Address:</strong> {patientAddress}</p>
+                )}
+              </div>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
@@ -138,7 +181,7 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
             </CardContent>
           </Card>
 
-          {/* Provider/Patient Information */}
+          {/* Provider Information (for patient role) */}
           {userRole === 'patient' && event.provider ? (
             <Card className="py-6">
               <CardHeader className="pb-2">
@@ -154,86 +197,6 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
                   loading={loadingProvider}
                   showAddress={false}
                 />
-              </CardContent>
-            </Card>
-          ) : userRole === 'provider' && event.patientInfo ? (
-            <Card className="py-6">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-1.5">
-                  <Users className="h-4 w-4" />
-                  Patient Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Patient Name</p>
-                    <p className="font-semibold text-sm">
-                      {event.patientInfo.firstName} {event.patientInfo.lastName}
-                    </p>
-                  </div>
-                  {event.patientInfo.patientId && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Patient ID</p>
-                      <p className="text-sm font-mono">{event.patientInfo.patientId}</p>
-                    </div>
-                  )}
-                  {event.patientInfo.age !== undefined && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Age</p>
-                      <p className="text-sm">{event.patientInfo.age}</p>
-                    </div>
-                  )}
-                  {event.patientInfo.gender && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Gender</p>
-                      <p className="text-sm capitalize">{event.patientInfo.gender}</p>
-                    </div>
-                  )}
-                  {event.patientInfo.dateOfBirth && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Date of Birth</p>
-                      <p className="text-sm">
-                        {format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}
-                      </p>
-                    </div>
-                  )}
-                  {event.patient && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">Patient Address</p>
-                      <p className="text-sm font-mono break-all">{event.patient}</p>
-                    </div>
-                  )}
-                  {event.patientInfo.contact && (
-                    <>
-                      {event.patientInfo.contact.phone && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Phone</p>
-                          <p className="text-sm">{event.patientInfo.contact.phone}</p>
-                        </div>
-                      )}
-                      {event.patientInfo.contact.email && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Email</p>
-                          <p className="text-sm break-all">{event.patientInfo.contact.email}</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {event.patientInfo.address && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">Address</p>
-                      <p className="text-sm">
-                        {[
-                          event.patientInfo.address.street,
-                          event.patientInfo.address.city,
-                          event.patientInfo.address.state,
-                          event.patientInfo.address.zipCode,
-                        ].filter(Boolean).join(', ')}
-                      </p>
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </Card>
           ) : null}
