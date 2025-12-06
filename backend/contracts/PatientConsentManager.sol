@@ -822,6 +822,11 @@ contract PatientConsentManager is ReentrancyGuard {
             bytes32[] memory dataTypeHashes = requestDataTypeHashes[requestId];
             bytes32[] memory purposeHashes = requestPurposeHashes[requestId];
             
+            // Validate arrays are non-empty (defense-in-depth security)
+            if (dataTypeHashes.length == 0 || purposeHashes.length == 0) {
+                revert EmptyBatch();
+            }
+            
             uint256 dataTypesLength = dataTypeHashes.length;
             uint256 purposesLength = purposeHashes.length;
             
@@ -830,12 +835,22 @@ contract PatientConsentManager is ReentrancyGuard {
             string[] memory batchPurposes = new string[](purposesLength);
             
             for (uint256 i = 0; i < dataTypesLength; ) {
-                batchDataTypes[i] = dataTypeHashToString[dataTypeHashes[i]];
+                string memory dataType = dataTypeHashToString[dataTypeHashes[i]];
+                // Validate string is non-empty (defense-in-depth - hash should always exist)
+                if (bytes(dataType).length == 0) {
+                    revert EmptyString();
+                }
+                batchDataTypes[i] = dataType;
                 unchecked { i++; }
             }
             
             for (uint256 j = 0; j < purposesLength; ) {
-                batchPurposes[j] = purposeHashToString[purposeHashes[j]];
+                string memory purpose = purposeHashToString[purposeHashes[j]];
+                // Validate string is non-empty (defense-in-depth - hash should always exist)
+                if (bytes(purpose).length == 0) {
+                    revert EmptyString();
+                }
+                batchPurposes[j] = purpose;
                 unchecked { j++; }
             }
             
@@ -1106,6 +1121,9 @@ contract PatientConsentManager is ReentrancyGuard {
         view 
         returns (string[] memory) 
     {
+        // Validate request exists (consistent with getAccessRequest)
+        if (!_requestExists[requestId]) revert RequestNotFound();
+        
         bytes32[] memory hashes = requestDataTypeHashes[requestId];
         string[] memory dataTypes = new string[](hashes.length);
         
@@ -1129,6 +1147,9 @@ contract PatientConsentManager is ReentrancyGuard {
         view 
         returns (string[] memory) 
     {
+        // Validate request exists (consistent with getAccessRequest)
+        if (!_requestExists[requestId]) revert RequestNotFound();
+        
         bytes32[] memory hashes = requestPurposeHashes[requestId];
         string[] memory purposes = new string[](hashes.length);
         
