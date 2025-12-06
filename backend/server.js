@@ -75,6 +75,29 @@ function attachDeterministicWallets() {
 
 attachDeterministicWallets();
 
+// Create lookup Maps for O(1) patient/provider lookups (performance optimization)
+const patientById = new Map();
+const patientByAddress = new Map();
+const providerById = new Map();
+const providerByAddress = new Map();
+
+// Build lookup maps at startup
+mockPatients.mockPatients.patients.forEach(patient => {
+  patientById.set(patient.patientId, patient);
+  if (patient.blockchainIntegration?.walletAddress) {
+    patientByAddress.set(patient.blockchainIntegration.walletAddress.toLowerCase(), patient);
+  }
+});
+
+mockProviders.mockProviders.providers.forEach(provider => {
+  providerById.set(provider.providerId, provider);
+  if (provider.blockchainIntegration?.walletAddress) {
+    providerByAddress.set(provider.blockchainIntegration.walletAddress.toLowerCase(), provider);
+  }
+});
+
+console.log(`✅ Created lookup maps: ${patientById.size} patients, ${providerById.size} providers`);
+
 // Import Web3 services and routes
 const web3Service = require('./services/web3Service');
 const consentService = require('./services/consentService');
@@ -91,7 +114,37 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Limit request body size
+
+// Add compression middleware (performance improvement)
+const compression = require('compression');
+app.use(compression());
+
+// Add rate limiting (security improvement)
+const rateLimit = require('express-rate-limit');
+
+// General API rate limiter
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Stricter limiter for expensive endpoints
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 requests per 15 minutes
+  message: 'Too many requests to this endpoint, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/consent/status', strictLimiter);
+app.use('/api/events/', strictLimiter);
+
+app.use(express.json({ limit: '1mb' })); // Reduced from 10mb for security
 
 // Log loaded data on startup
 console.log('='.repeat(60));
@@ -139,9 +192,8 @@ app.get('/api/patients', authenticate, requireProvider, (req, res) => {
 app.get('/api/patients/:patientId', authenticate, requirePatientOrProvider, async (req, res, next) => {
   try {
     const { patientId } = req.params;
-    const patient = mockPatients.mockPatients.patients.find(
-      p => p.patientId === patientId
-    );
+    // Use O(1) Map lookup instead of O(n) array search
+    const patient = patientById.get(patientId);
 
     if (!patient) {
       return res.status(404).json({
@@ -208,9 +260,8 @@ app.get('/api/patients/:patientId/data/:dataType', authenticate, requirePatientO
   const { patientId, dataType } = req.params;
   const { providerAddress } = req.query;
   
-  const patient = mockPatients.mockPatients.patients.find(
-    p => p.patientId === patientId
-  );
+  // Use O(1) Map lookup instead of O(n) array search
+  const patient = patientById.get(patientId);
 
   if (!patient) {
     return res.status(404).json({
@@ -387,9 +438,8 @@ app.get('/api/providers', authenticate, requireProvider, (req, res) => {
 // Get provider by ID
 app.get('/api/providers/:providerId', (req, res) => {
   const { providerId } = req.params;
-  const provider = mockProviders.mockProviders.providers.find(
-    p => p.providerId === providerId
-  );
+  // Use O(1) Map lookup instead of O(n) array search
+  const provider = providerById.get(providerId);
 
   if (!provider) {
     return res.status(404).json({
@@ -481,9 +531,8 @@ app.get('/api/provider/:providerAddress/patients', authenticate, verifyOwnership
     
     // Map to patient data with consent info
     const patientsWithConsents = patientAddresses.map(patientAddress => {
-      const patient = mockPatients.mockPatients.patients.find(
-        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === patientAddress.toLowerCase()
-      );
+      // Use O(1) Map lookup instead of O(n) array search
+      const patient = patientByAddress.get(patientAddress.toLowerCase());
       
       if (!patient) return null;
       
@@ -535,9 +584,8 @@ app.get('/api/provider/:providerAddress/pending-requests', authenticate, verifyO
     
     // Enrich with patient info
     const enrichedRequests = requests.map(request => {
-      const patient = mockPatients.mockPatients.patients.find(
-        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === request.patientAddress.toLowerCase()
-      );
+      // Use O(1) Map lookup instead of O(n) array search
+      const patient = patientByAddress.get(request.patientAddress.toLowerCase());
       
       return {
         ...request,
@@ -581,9 +629,8 @@ app.get('/api/provider/:providerAddress/patient/:patientId/data', authenticate, 
       });
     }
     
-    const patient = mockPatients.mockPatients.patients.find(
-      p => p.patientId === patientId
-    );
+    // Use O(1) Map lookup instead of O(n) array search
+    const patient = patientById.get(patientId);
 
     if (!patient) {
       return res.status(404).json({
@@ -709,9 +756,8 @@ app.get('/api/patient/:patientAddress/consents', authenticate, verifyOwnership('
     
     // Enrich with provider info
     const enrichedConsents = consents.map(consent => {
-      const provider = mockProviders.mockProviders.providers.find(
-        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === consent.providerAddress.toLowerCase()
-      );
+      // Use O(1) Map lookup instead of O(n) array search
+      const provider = providerByAddress.get(consent.providerAddress.toLowerCase());
       
       return {
         ...consent,
@@ -747,10 +793,8 @@ app.get('/api/patient/:patientAddress/info', authenticate, verifyOwnership('pati
   try {
     const { patientAddress } = req.params;
     
-    // Find patient by wallet address
-    const patient = mockPatients.mockPatients.patients.find(
-      p => p.blockchainIntegration?.walletAddress?.toLowerCase() === normalizeAddress(patientAddress).toLowerCase()
-    );
+    // Use O(1) Map lookup instead of O(n) array search
+    const patient = patientByAddress.get(normalizeAddress(patientAddress).toLowerCase());
 
     if (!patient) {
       return res.status(404).json({
@@ -827,9 +871,8 @@ app.get('/api/patient/:patientAddress/pending-requests', authenticate, verifyOwn
     
     // Enrich with provider info
     const enrichedRequests = requests.map(request => {
-      const provider = mockProviders.mockProviders.providers.find(
-        p => p.blockchainIntegration?.walletAddress?.toLowerCase() === request.requester.toLowerCase()
-      );
+      // Use O(1) Map lookup instead of O(n) array search
+      const provider = providerByAddress.get(request.requester.toLowerCase());
       
       return {
         ...request,
@@ -862,13 +905,18 @@ app.get('/api/contract/info', async (req, res, next) => {
     // Try to read deployment info if available
     let deploymentInfo = null;
     try {
-      const fs = require('fs');
-      const path = require('path');
       // deployment.json is in the backend directory (same directory as server.js)
       const deploymentPath = path.join(__dirname, 'deployment.json');
       
-      if (fs.existsSync(deploymentPath)) {
-        deploymentInfo = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+      // Use async file operations (non-blocking)
+      try {
+        const deploymentContent = await fs.readFile(deploymentPath, 'utf8');
+        deploymentInfo = JSON.parse(deploymentContent);
+      } catch (readError) {
+        // File doesn't exist or can't be read - that's okay
+        if (readError.code !== 'ENOENT') {
+          console.warn('Warning: Could not read deployment.json:', readError.message);
+        }
       }
     } catch (error) {
       console.error('Error reading deployment info:', error.message);

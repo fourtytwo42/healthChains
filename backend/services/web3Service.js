@@ -1,5 +1,6 @@
 const { ethers } = require('ethers');
-const fs = require('fs');
+const fs = require('fs').promises; // Use async file operations
+const fsSync = require('fs'); // Keep sync version for existsSync only
 const path = require('path');
 const { ConfigurationError, Web3ConnectionError } = require('../utils/errors');
 
@@ -287,8 +288,9 @@ class Web3Service {
     // Then try deployment.json
     const deploymentPath = path.join(__dirname, '..', 'deployment.json');
     try {
-      if (fs.existsSync(deploymentPath)) {
-        const deployment = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+      if (fsSync.existsSync(deploymentPath)) {
+        const deploymentContent = await fs.readFile(deploymentPath, 'utf8');
+        const deployment = JSON.parse(deploymentContent);
         if (deployment.address) {
           return deployment.address;
         }
@@ -317,8 +319,9 @@ class Web3Service {
     );
 
     try {
-      if (fs.existsSync(artifactPath)) {
-        const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+      if (fsSync.existsSync(artifactPath)) {
+        const artifactContent = await fs.readFile(artifactPath, 'utf8');
+        const artifact = JSON.parse(artifactContent);
         return artifact.abi;
       }
     } catch (error) {

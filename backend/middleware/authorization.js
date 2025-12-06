@@ -22,29 +22,39 @@ function getUserRole(address) {
   // This handles cases where mock data might have different casing
   const normalizedInput = normalizeAddress(address).toLowerCase();
   
-  // Check if address is a patient
-  const patient = mockPatients.mockPatients.patients.find(
+  // Use O(1) Map lookups instead of O(n) array searches
+  // Lazy load maps to avoid circular dependency
+  let patientByAddress, providerByAddress;
+  try {
+    const maps = require('../server').lookupMaps;
+    if (maps) {
+      patientByAddress = maps.patientByAddress;
+      providerByAddress = maps.providerByAddress;
+    }
+  } catch (error) {
+    // If maps not available (e.g., during module load), fall back to array search
+    console.warn('Lookup maps not available, falling back to array search:', error.message);
+  }
+  
+  const patient = patientByAddress ? patientByAddress.get(normalizedInput) : mockPatients.mockPatients.patients.find(
     p => {
       const patientAddr = p.blockchainIntegration?.walletAddress;
       if (!patientAddr) return false;
       try {
         return normalizeAddress(patientAddr).toLowerCase() === normalizedInput;
       } catch {
-        // If normalization fails, compare as lowercase
         return patientAddr.toLowerCase() === normalizedInput;
       }
     }
   );
   
-  // Check if address is a provider
-  const provider = mockProviders.mockProviders.providers.find(
+  const provider = providerByAddress ? providerByAddress.get(normalizedInput) : mockProviders.mockProviders.providers.find(
     p => {
       const providerAddr = p.blockchainIntegration?.walletAddress;
       if (!providerAddr) return false;
       try {
         return normalizeAddress(providerAddr).toLowerCase() === normalizedInput;
       } catch {
-        // If normalization fails, compare as lowercase
         return providerAddr.toLowerCase() === normalizedInput;
       }
     }

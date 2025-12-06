@@ -1072,6 +1072,28 @@ class ConsentService {
         revokedEvents = [];
       }
 
+      // Query AccessApproved events (request approvals that created consents)
+      // AccessApproved event: (uint256 indexed requestId, address indexed patient, uint256[] consentIds, uint128 timestamp)
+      const accessApprovedFilter = filter.patient 
+        ? contract.filters.AccessApproved(null, filter.patient)
+        : contract.filters.AccessApproved(null, null);
+      
+      let accessApprovedEvents;
+      try {
+        accessApprovedEvents = await contract.queryFilter(
+          accessApprovedFilter,
+          fromBlockArg,
+          toBlockArg
+        );
+        // Ensure it's an array
+        if (!Array.isArray(accessApprovedEvents)) {
+          accessApprovedEvents = [];
+        }
+      } catch (filterError) {
+        console.error('Error querying AccessApproved events:', filterError.message);
+        accessApprovedEvents = [];
+      }
+
       // Transform and combine events
       // ConsentGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
       // AccessApproved event: (uint256 indexed requestId, address indexed patient, uint256[] consentIds, uint128 timestamp)
