@@ -31,51 +31,15 @@ This document outlines critical findings from a comprehensive analysis of the He
 
 ---
 
-### 2. ❌ Inefficient Data Lookups
+### 2. ✅ Inefficient Data Lookups - **COMPLETED**
 
-**Problem**: O(n) linear array searches throughout `server.js`.
+**Status**: ✅ **IMPLEMENTED** - O(1) Map lookups replace O(n) array searches
+- Created lookup Maps at startup: `patientById`, `patientByAddress`, `providerById`, `providerByAddress`
+- Replaced all `.find()` calls with `.get()` Map lookups in `server.js`
+- Updated `authorization.js` to use lookup maps with fallback to array search
+- All patient/provider lookups now O(1) instead of O(n)
 
-**Locations**:
-- Line 125: `mockPatients.mockPatients.patients.find(p => p.patientId === patientId)`
-- Line 258: `mockPatients.mockPatients.patients.find(...)`
-- Line 303: `mockProviders.mockProviders.providers.find(...)`
-- Line 397: `mockPatients.mockPatients.patients.find(...)`
-- Line 451: `mockPatients.mockPatients.patients.find(...)`
-- Line 485: `mockPatients.mockPatients.patients.find(...)`
-- Line 613: `mockProviders.mockProviders.providers.find(...)`
-- Line 701: `mockProviders.mockProviders.providers.find(...)`
-
-**Impact**: Performance degrades linearly as data grows (10 patients = 10 checks, 1000 patients = 1000 checks).
-
-**Recommendation**: Create lookup Maps at startup
-
-```javascript
-// At startup, create lookup maps
-const patientById = new Map();
-const patientByAddress = new Map();
-const providerById = new Map();
-const providerByAddress = new Map();
-
-mockPatients.mockPatients.patients.forEach(p => {
-  patientById.set(p.patientId, p);
-  if (p.blockchainIntegration?.walletAddress) {
-    patientByAddress.set(p.blockchainIntegration.walletAddress.toLowerCase(), p);
-  }
-});
-
-mockProviders.mockProviders.providers.forEach(p => {
-  providerById.set(p.providerId, p);
-  if (p.blockchainIntegration?.walletAddress) {
-    providerByAddress.set(p.blockchainIntegration.walletAddress.toLowerCase(), p);
-  }
-});
-
-// Then use: patientById.get(patientId) // O(1) lookup
-```
-
-**Implementation Priority**: 🔴 **CRITICAL**
-
-**Estimated Effort**: 10 minutes
+**Implementation**: See `backend/server.js` lines 78-96
 
 ---
 
@@ -103,94 +67,40 @@ mockProviders.mockProviders.providers.forEach(p => {
 
 ---
 
-### 4. ❌ No Request Rate Limiting
+### 4. ✅ Request Rate Limiting - **COMPLETED**
 
-**Problem**: No protection against abuse or DoS attacks.
+**Status**: ✅ **IMPLEMENTED** - Rate limiting middleware added
+- General API limiter: 100 requests per 15 minutes per IP
+- Strict limiter for expensive endpoints: 20 requests per 15 minutes
+- Applied to `/api/`, `/api/consent/status`, and `/api/events/`
+- Uses `express-rate-limit` package
 
-**Impact**: 
-- Resource exhaustion
-- Blockchain RPC rate limiting
-- Poor experience for legitimate users
-- Potential service disruption
-
-**Recommendation**: Add `express-rate-limit`
-
-```javascript
-const rateLimit = require('express-rate-limit');
-
-// General API rate limiter
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Stricter limiter for expensive endpoints
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20, // 20 requests per 15 minutes
-});
-
-app.use('/api/', apiLimiter);
-app.use('/api/consent/status', strictLimiter);
-app.use('/api/events/', strictLimiter);
-```
-
-**Implementation Priority**: 🔴 **CRITICAL**
-
-**Estimated Effort**: 15 minutes
+**Implementation**: See `backend/server.js` lines 108-144
 
 ---
 
 ## Performance Issues (Medium Priority)
 
-### 5. ⚠️ Synchronous File I/O
+### 5. ✅ Synchronous File I/O - **COMPLETED**
 
-**Problem**: `fs.readFileSync` blocks event loop in:
-- `web3Service.js` lines 291, 321
-- `server.js` line 742
+**Status**: ✅ **IMPLEMENTED** - All file I/O converted to async
+- Replaced `fs.readFileSync` with `fs.promises.readFile` in `web3Service.js`
+- Replaced `fs.readFileSync` with async operations in `server.js`
+- Non-blocking file operations improve event loop performance
+- Kept `fs.existsSync` for synchronous existence checks (minimal impact)
 
-**Impact**: Blocks Node.js event loop, prevents handling other requests
-
-**Recommendation**: Use async file operations
-
-```javascript
-// Replace
-const fs = require('fs');
-const deployment = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-
-// With
-const fs = require('fs').promises;
-const deployment = JSON.parse(await fs.readFile(deploymentPath, 'utf8'));
-```
-
-**Implementation Priority**: 🟡 **HIGH**
-
-**Estimated Effort**: 20 minutes
+**Implementation**: See `backend/services/web3Service.js` and `backend/server.js`
 
 ---
 
-### 6. ⚠️ No Response Compression
+### 6. ✅ Response Compression - **COMPLETED**
 
-**Problem**: Large JSON responses sent uncompressed.
+**Status**: ✅ **IMPLEMENTED** - Compression middleware added
+- Uses `compression` package
+- Automatically compresses JSON responses
+- Reduces bandwidth usage and improves response times
 
-**Impact**: 
-- Higher bandwidth usage
-- Slower responses (especially on mobile)
-- Higher server costs
-
-**Recommendation**: Add compression middleware
-
-```javascript
-const compression = require('compression');
-app.use(compression()); // Add before routes
-```
-
-**Implementation Priority**: 🟡 **HIGH**
-
-**Estimated Effort**: 5 minutes
+**Implementation**: See `backend/server.js` line 105
 
 ---
 
@@ -458,21 +368,14 @@ setInterval(async () => {
 
 ---
 
-### 19. ⚠️ Large Request Body Limit
+### 19. ✅ Large Request Body Limit - **COMPLETED**
 
-**Problem**: `express.json({ limit: '10mb' })` is very large.
+**Status**: ✅ **IMPLEMENTED** - Request body limit reduced
+- Reduced from `10mb` to `1mb` for security
+- Prevents DoS attacks from large payloads
+- Still sufficient for all API operations
 
-**Impact**: DoS risk from large payloads
-
-**Recommendation**: Reduce to reasonable limit
-
-```javascript
-app.use(express.json({ limit: '1mb' })); // More reasonable
-```
-
-**Implementation Priority**: 🟡 **MEDIUM**
-
-**Estimated Effort**: 1 minute
+**Implementation**: See `backend/server.js` line 147
 
 ---
 
