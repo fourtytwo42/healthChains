@@ -266,131 +266,125 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           )}
         </DialogHeader>
 
-        <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
-          {/* Status and Timestamp */}
-          <Card className="py-6">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Event Information</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
+        <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+          {/* Event Summary - Compact header info */}
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
                   {statusBadge}
+                  {isExpired && event.type === 'ConsentGranted' && (
+                    <Badge variant="destructive" className="text-xs h-5">Expired</Badge>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Timestamp</p>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-2.5 w-2.5 text-muted-foreground" />
-                    <span className="text-xs">
-                      {format(new Date(event.timestamp), 'MMM d, yyyy HH:mm')}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{format(new Date(event.timestamp), 'MMM d, yyyy HH:mm')}</span>
                 </div>
-                {isExpired && event.type === 'ConsentGranted' && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Expiration Status</p>
-                    <Badge variant="destructive" className="text-xs h-4">Expired</Badge>
-                  </div>
-                )}
-                {event.blockNumber !== undefined && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Block Number</p>
-                    <span className="text-xs font-mono">{event.blockNumber}</span>
-                  </div>
-                )}
               </div>
-            </CardContent>
-          </Card>
-
-
-          {/* Consent/Request Details */}
-          {(event.consentId !== undefined || event.requestId !== undefined || event.dataType || event.purpose) && (
-            <Card className="py-6">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Details</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 gap-3">
+              {(event.consentId !== undefined || event.requestId !== undefined) && (
+                <div className="flex items-center gap-4 mt-3 pt-3 border-t">
                   {event.consentId !== undefined && (
                     <div>
-                      <p className="text-xs text-muted-foreground">Consent ID</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Consent ID</p>
                       <span className="text-sm font-mono font-semibold">#{event.consentId}</span>
                     </div>
                   )}
                   {event.requestId !== undefined && (
                     <div>
-                      <p className="text-xs text-muted-foreground">Request ID</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Request ID</p>
                       <span className="text-sm font-mono font-semibold">#{event.requestId}</span>
                     </div>
                   )}
-                  {event.dataTypes && event.dataTypes.length > 0 ? (
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">Data Types</p>
-                      <ColoredBadgeList type="dataType" values={event.dataTypes} size="sm" />
-                    </div>
-                  ) : event.dataType && (
+                  {event.blockNumber !== undefined && (
                     <div>
-                      <p className="text-xs text-muted-foreground">Data Type</p>
-                      <ColoredBadge type="dataType" value={event.dataType} size="sm" />
+                      <p className="text-xs text-muted-foreground mb-0.5">Block</p>
+                      <span className="text-sm font-mono">{event.blockNumber}</span>
                     </div>
                   )}
-                  {event.purposes && event.purposes.length > 0 ? (
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">Purposes</p>
-                      <ColoredBadgeList type="purpose" values={event.purposes} size="sm" />
-                    </div>
-                  ) : event.purpose && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Purpose</p>
-                      <ColoredBadge type="purpose" value={event.purpose} size="sm" />
-                    </div>
-                  )}
-                  {event.expirationTime && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Expiration Date</p>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-2.5 w-2.5 text-muted-foreground" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Data Types and Purposes */}
+          {(event.dataTypes || event.dataType || event.purposes || event.purpose) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Access Details</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-4">
+                {event.dataTypes && event.dataTypes.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Data Types</p>
+                    <ColoredBadgeList type="dataType" values={event.dataTypes} size="sm" />
+                  </div>
+                ) : event.dataType && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Data Type</p>
+                    <ColoredBadge type="dataType" value={event.dataType} size="sm" />
+                  </div>
+                )}
+                {event.purposes && event.purposes.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Purposes</p>
+                    <ColoredBadgeList type="purpose" values={event.purposes} size="sm" />
+                  </div>
+                ) : event.purpose && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Purpose</p>
+                    <ColoredBadge type="purpose" value={event.purpose} size="sm" />
+                  </div>
+                )}
+                {(event.expirationTime || (!event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested'))) && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-muted-foreground mb-1.5">Expiration</p>
+                    {event.expirationTime ? (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-sm">
                           {format(new Date(event.expirationTime), 'MMM d, yyyy HH:mm')}
                         </span>
                       </div>
-                    </div>
-                  )}
-                  {!event.expirationTime && (event.type === 'ConsentGranted' || event.type === 'AccessRequested') && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Expiration</p>
-                      <Badge variant="secondary" className="text-xs h-4">No expiration</Badge>
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs h-5">No expiration</Badge>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
-          {/* Transaction Information */}
+          {/* Blockchain Transaction */}
           {event.transactionHash && (
-            <Card className="py-6">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Blockchain Transaction</CardTitle>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  Blockchain Transaction
+                </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
                 <div>
-                  <p className="text-xs text-muted-foreground">Transaction Hash</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-sm font-mono break-all">{event.transactionHash}</p>
+                  <p className="text-xs text-muted-foreground mb-2">Transaction Hash</p>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                    <p className="text-xs font-mono break-all flex-1">{event.transactionHash}</p>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-4 w-4 p-0 flex-shrink-0"
-                      onClick={() => {
-                        // In a real app, this would link to a block explorer
-                        navigator.clipboard.writeText(event.transactionHash || '');
+                      className="h-6 w-6 p-0 flex-shrink-0"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(event.transactionHash || '');
+                          toast.success('Transaction hash copied to clipboard');
+                        } catch (error) {
+                          toast.error('Failed to copy transaction hash');
+                        }
                       }}
                       title="Copy transaction hash"
                       aria-label="Copy transaction hash to clipboard"
                     >
-                      <ExternalLink className="h-2 w-2" />
+                      <Copy className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
