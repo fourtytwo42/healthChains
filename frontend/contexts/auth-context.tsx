@@ -208,10 +208,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Only authenticate if wallet is connected and we don't have a valid token
-    if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating) {
+    // Also check the flag to prevent duplicate authentication during account changes
+    if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating && !isHandlingAccountChangeRef.current) {
       // Small delay to ensure wallet is fully connected
       const timer = setTimeout(() => {
-        authenticate();
+        // Double-check the flag hasn't changed (account change might have happened during delay)
+        if (!isHandlingAccountChangeRef.current) {
+          authenticate();
+        }
       }, 500);
 
       return () => clearTimeout(timer);
