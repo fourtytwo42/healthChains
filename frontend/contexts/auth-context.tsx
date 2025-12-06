@@ -135,16 +135,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      console.log('[AuthContext] authenticate() - Step 1: Getting message to sign');
       // Step 1: Get message to sign
       const { message, timestamp } = await getAuthMessage(account);
+      console.log('[AuthContext] authenticate() - Step 1 complete, got message');
 
       // Step 2: Sign message with MetaMask
+      console.log('[AuthContext] authenticate() - Step 2: Getting signer');
       const signer = await getSigner();
       if (!signer) {
         throw new Error('Failed to get signer');
       }
+      console.log('[AuthContext] authenticate() - Step 2 complete, got signer');
 
+      console.log('[AuthContext] authenticate() - Step 3: Requesting signature from MetaMask');
       const signature = await signer.signMessage(message);
+      console.log('[AuthContext] authenticate() - Step 3 complete, got signature');
 
       // Step 3: Login and get JWT token
       const authToken = await login(account, signature, message, timestamp);
