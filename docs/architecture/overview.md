@@ -336,6 +336,7 @@ See [Scalability Documentation](docs/scalability/overview.md) for more details.
 ## Next Steps
 
 - Read [Smart Contract Design](smart-contract-design.md) for contract architecture details
+- Read [Logging Architecture](logging.md) for logging system details
 - Read [Data Flow](data-flow.md) for detailed interaction flows
 - Read [Technology Stack](technology-stack.md) for deeper technology rationale
 
