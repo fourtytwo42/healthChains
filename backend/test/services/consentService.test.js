@@ -16,7 +16,6 @@ describe('ConsentService - Unit Tests', function () {
   beforeEach(function () {
     // Create mock contract
     mockContract = {
-      hasActiveConsent: sinon.stub(),
       getConsentRecord: sinon.stub(),
       getPatientConsents: sinon.stub(),
       getProviderConsents: sinon.stub(),
@@ -59,27 +58,31 @@ describe('ConsentService - Unit Tests', function () {
   });
 
   describe('getConsentStatus', function () {
-    it('should return consent status when consent exists', async function () {
+    it('should return consent status when consent exists (event-based)', async function () {
       const patientAddress = '0x1234567890123456789012345678901234567890';
       const providerAddress = '0x0987654321098765432109876543210987654321';
       const dataType = 'medical_records';
 
-      mockContract.hasActiveConsent.resolves([true, 1n]);
-      mockContract.getConsentRecord.resolves({
-      patientAddress: patientAddress,
-      providerAddress: providerAddress,
-      timestamp: 1000000n,
-      expirationTime: 0n,
-      isActive: true,
-      dataType: 'medical_records',
-      purpose: 'treatment'
-      });
+      // Mock event-based lookup (now uses getConsentEvents instead of hasActiveConsent)
+      const mockGrantedEvent = {
+        type: 'ConsentGranted',
+        consentId: 1,
+        patient: patientAddress,
+        provider: providerAddress,
+        dataType: dataType,
+        dataTypes: [dataType],
+        timestamp: new Date().toISOString(),
+        expirationTime: null
+      };
+
+      mockContract.queryFilter.onFirstCall().resolves([mockGrantedEvent]);
+      mockContract.queryFilter.onSecondCall().resolves([]); // No revoked events
 
       const result = await consentService.getConsentStatus(patientAddress, providerAddress, dataType);
 
       expect(result).to.have.property('hasConsent', true);
       expect(result).to.have.property('consentId', 1);
-      expect(mockContract.hasActiveConsent).to.have.been.calledOnce;
+      expect(mockContract.queryFilter).to.have.been.called;
     });
 
     it('should return false when no consent exists', async function () {
@@ -87,7 +90,9 @@ describe('ConsentService - Unit Tests', function () {
       const providerAddress = '0x0987654321098765432109876543210987654321';
       const dataType = 'medical_records';
 
-      mockContract.hasActiveConsent.resolves([false, 0n]);
+      // No events found
+      mockContract.queryFilter.onFirstCall().resolves([]);
+      mockContract.queryFilter.onSecondCall().resolves([]);
 
       const result = await consentService.getConsentStatus(patientAddress, providerAddress, dataType);
 
@@ -115,18 +120,6 @@ describe('ConsentService - Unit Tests', function () {
           ''
         )
       ).to.be.rejectedWith(ValidationError);
-    });
-
-    it('should handle contract call errors', async function () {
-      const patientAddress = '0x1234567890123456789012345678901234567890';
-      const providerAddress = '0x0987654321098765432109876543210987654321';
-      const dataType = 'medical_records';
-
-      mockContract.hasActiveConsent.rejects({ code: 'CALL_EXCEPTION' });
-
-      await expect(
-        consentService.getConsentStatus(patientAddress, providerAddress, dataType)
-      ).to.be.rejectedWith(ContractError);
     });
   });
 

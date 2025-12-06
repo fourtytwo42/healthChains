@@ -24,6 +24,7 @@ import { GrantedConsentDetailsCard } from '@/components/provider/granted-consent
 import { Pagination } from '@/components/ui/pagination';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Patient } from '@/lib/api-client';
+import { matchesDate } from '@/lib/date-utils';
 
 /**
  * Provider Dashboard Page
@@ -203,10 +204,13 @@ export default function ProviderDashboardPage() {
           ? `${(patient.demographics as any).address.street} ${(patient.demographics as any).address.city} ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`.toLowerCase()
           : '';
         
+        // Enhanced date search with multiple format support
+        const dateMatches = dob ? matchesDate(searchQuery, dob) : false;
+        
         return name.includes(query) || 
                patientId.includes(query) || 
                walletAddress.includes(query) ||
-               dob.includes(query) ||
+               dateMatches ||
                age.includes(query) ||
                gender.includes(query) ||
                phone.includes(query) ||
@@ -370,15 +374,27 @@ export default function ProviderDashboardPage() {
 
   // Export and Print Functions
   const exportPatientsToCSV = () => {
-    const rows: any[][] = [['Name', 'Patient ID', 'Wallet Address', 'Consent Status']];
+    const rows: any[][] = [['Name', 'Patient ID', 'Wallet Address', 'DOB', 'Age', 'Sex', 'Phone', 'Email', 'Address', 'Consent Status']];
     filteredPatients.forEach((patient) => {
       const hasWallet = !!patient.blockchainIntegration?.walletAddress;
       const patientAddress = patient.blockchainIntegration?.walletAddress || '';
       const consentInfo = getConsentStatus(patientAddress);
+      const dob = patient.demographics?.dateOfBirth 
+        ? format(new Date(String(patient.demographics.dateOfBirth)), 'MMM d, yyyy')
+        : 'N/A';
+      const address = (patient.demographics as any)?.address 
+        ? `${(patient.demographics as any).address.street}, ${(patient.demographics as any).address.city}, ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`
+        : 'N/A';
       rows.push([
-        `${patient.demographics.firstName} ${patient.demographics.lastName}`,
-        patient.patientId,
+        `${patient.demographics?.firstName || ''} ${patient.demographics?.lastName || ''}`.trim(),
+        patient.patientId || '',
         hasWallet ? patient.blockchainIntegration?.walletAddress || '' : 'No wallet',
+        dob,
+        String(patient.demographics?.age ?? 'N/A'),
+        patient.demographics?.gender || 'N/A',
+        (patient.demographics as any)?.contact?.phone || 'N/A',
+        (patient.demographics as any)?.contact?.email || 'N/A',
+        address,
         consentInfo.status
       ]);
     });
@@ -419,6 +435,12 @@ export default function ProviderDashboardPage() {
               <th>Name</th>
               <th>Patient ID</th>
               <th>Wallet Address</th>
+              <th>DOB</th>
+              <th>Age</th>
+              <th>Sex</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Address</th>
               <th>Consent Status</th>
             </tr>
           </thead>
@@ -428,11 +450,23 @@ export default function ProviderDashboardPage() {
       const hasWallet = !!patient.blockchainIntegration?.walletAddress;
       const patientAddress = patient.blockchainIntegration?.walletAddress || '';
       const consentInfo = getConsentStatus(patientAddress);
+      const dob = patient.demographics?.dateOfBirth 
+        ? format(new Date(String(patient.demographics.dateOfBirth)), 'MMM d, yyyy')
+        : 'N/A';
+      const address = (patient.demographics as any)?.address 
+        ? `${(patient.demographics as any).address.street}, ${(patient.demographics as any).address.city}, ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`
+        : 'N/A';
       htmlContent += `
         <tr>
-          <td>${patient.demographics.firstName} ${patient.demographics.lastName}</td>
-          <td>${patient.patientId}</td>
+          <td>${patient.demographics?.firstName || ''} ${patient.demographics?.lastName || ''}</td>
+          <td>${patient.patientId || ''}</td>
           <td>${hasWallet ? patient.blockchainIntegration?.walletAddress || '' : 'No wallet'}</td>
+          <td>${dob}</td>
+          <td>${patient.demographics?.age ?? 'N/A'}</td>
+          <td>${patient.demographics?.gender || 'N/A'}</td>
+          <td>${(patient.demographics as any)?.contact?.phone || 'N/A'}</td>
+          <td>${(patient.demographics as any)?.contact?.email || 'N/A'}</td>
+          <td>${address}</td>
           <td>${consentInfo.status}</td>
         </tr>
       `;
@@ -447,16 +481,18 @@ export default function ProviderDashboardPage() {
   const exportPendingToCSV = () => {
     const requestsData = stablePendingRequests as { data: any[]; pagination: any } | undefined;
     if (!requestsData?.data) return;
-    const rows: any[][] = [['Patient Name', 'Patient ID', 'Data Types', 'Purposes', 'Request Date', 'Expiration']];
+    const rows: any[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Request Date', 'Expiration', 'Status']];
     requestsData.data.forEach((request: any) => {
       const patientName = request.patient ? `${request.patient.firstName} ${request.patient.lastName}` : 'Unknown';
       rows.push([
         patientName,
         request.patient?.patientId || '',
+        request.patientAddress || 'N/A',
         (request.dataTypes || []).join('; '),
         (request.purposes || []).join('; '),
         format(new Date(request.timestamp), 'yyyy-MM-dd HH:mm'),
-        request.expirationTime ? format(new Date(request.expirationTime), 'yyyy-MM-dd HH:mm') : 'No expiration'
+        request.expirationTime ? format(new Date(request.expirationTime), 'yyyy-MM-dd HH:mm') : 'No expiration',
+        'Pending'
       ]);
     });
     const csvContent = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -497,10 +533,12 @@ export default function ProviderDashboardPage() {
             <tr>
               <th>Patient Name</th>
               <th>Patient ID</th>
+              <th>Patient Wallet Address</th>
               <th>Data Types</th>
               <th>Purposes</th>
               <th>Request Date</th>
               <th>Expiration</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -511,10 +549,12 @@ export default function ProviderDashboardPage() {
         <tr>
           <td>${patientName}</td>
           <td>${request.patient?.patientId || ''}</td>
+          <td>${request.patientAddress || 'N/A'}</td>
           <td>${(request.dataTypes || []).join(', ')}</td>
           <td>${(request.purposes || []).join(', ')}</td>
           <td>${format(new Date(request.timestamp), 'MMM d, yyyy HH:mm')}</td>
           <td>${request.expirationTime ? format(new Date(request.expirationTime), 'MMM d, yyyy HH:mm') : 'No expiration'}</td>
+          <td>Pending</td>
         </tr>
       `;
     });
@@ -528,7 +568,7 @@ export default function ProviderDashboardPage() {
   const exportGrantedToCSV = () => {
     const patientsData = stableGrantedPatients as { data: any[]; pagination: any } | undefined;
     if (!patientsData?.data) return;
-    const rows: any[][] = [['Patient Name', 'Patient ID', 'Data Types', 'Purposes', 'Granted Date', 'Expiration', 'Status']];
+    const rows: any[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Granted Date', 'Expiration', 'Status']];
     patientsData.data.forEach((patient: any) => {
       const allDataTypes = new Set<string>();
       const allPurposes = new Set<string>();
@@ -553,7 +593,8 @@ export default function ProviderDashboardPage() {
       const patientName = patient.demographics ? `${patient.demographics.firstName} ${patient.demographics.lastName}` : 'Unknown';
       rows.push([
         patientName,
-        patient.patientId,
+        patient.patientId || '',
+        patient.blockchainIntegration?.walletAddress || 'N/A',
         Array.from(allDataTypes).join('; '),
         Array.from(allPurposes).join('; '),
         latestConsent?.timestamp ? format(new Date(latestConsent.timestamp), 'yyyy-MM-dd HH:mm') : 'N/A',
@@ -599,6 +640,7 @@ export default function ProviderDashboardPage() {
             <tr>
               <th>Patient Name</th>
               <th>Patient ID</th>
+              <th>Patient Wallet Address</th>
               <th>Data Types</th>
               <th>Purposes</th>
               <th>Granted Date</th>
@@ -633,7 +675,8 @@ export default function ProviderDashboardPage() {
       htmlContent += `
         <tr>
           <td>${patientName}</td>
-          <td>${patient.patientId}</td>
+          <td>${patient.patientId || ''}</td>
+          <td>${patient.blockchainIntegration?.walletAddress || 'N/A'}</td>
           <td>${Array.from(allDataTypes).join(', ')}</td>
           <td>${Array.from(allPurposes).join(', ')}</td>
           <td>${latestConsent?.timestamp ? format(new Date(latestConsent.timestamp), 'MMM d, yyyy HH:mm') : 'N/A'}</td>
@@ -651,13 +694,14 @@ export default function ProviderDashboardPage() {
 
   const exportHistoryToCSV = () => {
     if (!historyData || historyData.length === 0) return;
-    const rows: any[][] = [['Event Type', 'Patient Name', 'Patient ID', 'Data Types', 'Purposes', 'Timestamp', 'Expiration', 'Status']];
+    const rows: any[][] = [['Event Type', 'Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Timestamp', 'Expiration', 'Status']];
     historyData.forEach((event: any) => {
       const patientName = event.patientInfo ? `${event.patientInfo.firstName} ${event.patientInfo.lastName}` : 'Unknown';
       rows.push([
         event.type || 'Unknown',
         patientName,
         event.patientInfo?.patientId || '',
+        event.patient || 'N/A',
         (event.dataTypes || []).join('; '),
         (event.purposes || []).join('; '),
         format(new Date(event.timestamp), 'yyyy-MM-dd HH:mm'),
@@ -703,6 +747,7 @@ export default function ProviderDashboardPage() {
               <th>Event Type</th>
               <th>Patient Name</th>
               <th>Patient ID</th>
+              <th>Patient Wallet Address</th>
               <th>Data Types</th>
               <th>Purposes</th>
               <th>Timestamp</th>
@@ -719,6 +764,7 @@ export default function ProviderDashboardPage() {
           <td>${event.type || 'Unknown'}</td>
           <td>${patientName}</td>
           <td>${event.patientInfo?.patientId || ''}</td>
+          <td>${event.patient || 'N/A'}</td>
           <td>${(event.dataTypes || []).join(', ')}</td>
           <td>${(event.purposes || []).join(', ')}</td>
           <td>${format(new Date(event.timestamp), 'MMM d, yyyy HH:mm')}</td>
@@ -1379,9 +1425,13 @@ export default function ProviderDashboardPage() {
                   const filteredPatients = patientsData.data.filter((patient: any) => {
                     if (!searchQuery) return true;
                     const query = searchQuery.toLowerCase();
-                    const name = `${patient.demographics.firstName} ${patient.demographics.lastName}`.toLowerCase();
-                    const patientId = patient.patientId.toLowerCase();
+                    const name = `${patient.demographics?.firstName || ''} ${patient.demographics?.lastName || ''}`.toLowerCase();
+                    const patientId = (patient.patientId || '').toLowerCase();
                     const walletAddress = (patient.blockchainIntegration?.walletAddress || '').toLowerCase();
+                    const dob = String(patient.demographics?.dateOfBirth || '');
+                    
+                    // Enhanced date search with multiple format support
+                    const dateMatches = dob ? matchesDate(searchQuery, dob) : false;
                     
                     // Get all data types and purposes from consents
                     const allDataTypes = new Set<string>();
@@ -1404,6 +1454,7 @@ export default function ProviderDashboardPage() {
                     return name.includes(query) || 
                            patientId.includes(query) || 
                            walletAddress.includes(query) ||
+                           dateMatches ||
                            dataTypesStr.includes(query) ||
                            purposesStr.includes(query);
                   });

@@ -144,6 +144,16 @@ class ConsentService {
    * @throws {ValidationError} If addresses or dataType are invalid
    * @throws {ContractError} If contract call fails
    */
+  /**
+   * Get consent status using event-based lookup (replaces hasActiveConsent contract call)
+   * 
+   * @param {string} patientAddress - Ethereum address of patient
+   * @param {string} providerAddress - Ethereum address of provider
+   * @param {string} dataType - Type of data to check
+   * @returns {Promise<Object>} Object with hasConsent, consentId, isExpired, expirationTime
+   * @throws {ValidationError} If inputs are invalid
+   * @throws {ContractError} If event query fails
+   */
   async getConsentStatus(patientAddress, providerAddress, dataType) {
     // Validate inputs
     validateAddress(patientAddress, 'patientAddress');
@@ -158,100 +168,97 @@ class ConsentService {
     const normalizedProvider = normalizeAddress(providerAddress);
 
     try {
-      const contract = await this._ensureContract();
+      // Use event-based lookup instead of contract call
+      // Get all consent events for this patient
+      const events = await this.getConsentEvents(normalizedPatient);
       
-      if (!contract) {
-        throw new ConfigurationError('Contract instance is not available');
+      // Current timestamp for expiration checking
+      const currentTimestamp = Math.floor(Date.now() / 1000);
+      
+      // Find the most recent active consent matching provider and dataType
+      // Process events in reverse chronological order (most recent first)
+      const sortedEvents = events.sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+      
+      // Track revoked/expired consent IDs
+      const revokedConsentIds = new Set();
+      const expiredConsentIds = new Set();
+      
+      // First pass: collect revoked and expired consent IDs
+      for (const event of sortedEvents) {
+        if (event.type === 'ConsentRevoked' || event.type === 'ConsentExpired') {
+          revokedConsentIds.add(event.consentId);
+        }
       }
       
-      // Check if method exists
-      if (typeof contract.hasActiveConsent !== 'function') {
-        throw new ConfigurationError('hasActiveConsent method not found on contract');
-      }
+      // Second pass: find the most recent active consent
+      let activeConsent = null;
       
-      // Call contract method with timeout wrapper
-      let result;
-      try {
-        // Direct call without Promise.race to avoid undefined results
-        result = await contract.hasActiveConsent(normalizedPatient, normalizedProvider, dataType);
+      for (const event of sortedEvents) {
+        if (event.type !== 'ConsentGranted') continue;
         
-        // Verify result is not undefined
-        if (result === undefined) {
-          throw new Error('Contract call returned undefined - this should not happen');
+        const consentId = event.consentId;
+        
+        // Skip if this consent was revoked
+        if (revokedConsentIds.has(consentId)) continue;
+        
+        // Check if provider matches
+        if (event.provider?.toLowerCase() !== normalizedProvider.toLowerCase()) continue;
+        
+        // Check if dataType matches (handle both single and batch consents)
+        const eventDataTypes = event.dataTypes || (event.dataType ? [event.dataType] : []);
+        if (!eventDataTypes.includes(dataType)) continue;
+        
+        // Check expiration
+        let isExpired = false;
+        if (event.expirationTime) {
+          const expirationTimestamp = Math.floor(new Date(event.expirationTime).getTime() / 1000);
+          isExpired = expirationTimestamp > 0 && expirationTimestamp < currentTimestamp;
         }
-      } catch (callError) {
-        // If it's a CALL_EXCEPTION, it might mean the method doesn't exist or the call failed
-        if (callError.code === 'CALL_EXCEPTION') {
-          throw new ContractError(
-            'Failed to check consent status',
-            'hasActiveConsent',
-            callError
-          );
+        
+        // If expired, skip it
+        if (isExpired) {
+          expiredConsentIds.add(consentId);
+          continue;
         }
-        if (callError.message === 'Request timeout') {
-          throw new Web3ConnectionError('Request timed out while checking consent status');
-        }
-        throw callError;
-      }
-
-      // In ethers v6, named tuple returns are objects with property names
-      // Handle both object (named tuple) and array returns
-      if (result === undefined || result === null) {
-        throw new Error(`Invalid result from hasActiveConsent: result is ${result}`);
+        
+        // Found an active consent!
+        activeConsent = {
+          consentId: consentId,
+          expirationTime: event.expirationTime,
+          isExpired: false
+        };
+        break; // Use most recent active consent
       }
       
-      let hasConsent, consentId;
-      if (typeof result === 'object') {
-        // Check if it's a named tuple (ethers v6 style)
-        if (result.hasOwnProperty('hasConsent') && result.hasOwnProperty('consentId')) {
-          hasConsent = result.hasConsent;
-          consentId = result.consentId;
-        } else if (result.hasOwnProperty('0') && result.hasOwnProperty('1')) {
-          // Indexed properties (alternative ethers v6 format)
-          hasConsent = result[0];
-          consentId = result[1];
-        } else if (Array.isArray(result)) {
-          // Array return
-          [hasConsent, consentId] = result;
-        } else if (result.length !== undefined && result.length >= 2) {
-          // Array-like object
-          hasConsent = result[0];
-          consentId = result[1];
-        } else {
-          throw new Error(`Unexpected result format from hasActiveConsent: ${JSON.stringify(result)}`);
-        }
+      // Return result
+      if (activeConsent) {
+        return {
+          hasConsent: true,
+          consentId: activeConsent.consentId,
+          isExpired: false,
+          expirationTime: activeConsent.expirationTime
+        };
       } else {
-        throw new Error(`Invalid result from hasActiveConsent: ${typeof result}`);
+        return {
+          hasConsent: false,
+          consentId: null,
+          isExpired: false,
+          expirationTime: null
+        };
       }
-      
-      // If consent exists, check if expired
-      let isExpired = false;
-      let expirationTime = null;
-      
-      if (hasConsent && consentId !== 0n) {
-        const record = await this.getConsentRecord(Number(consentId));
-        isExpired = record.isExpired;
-        expirationTime = record.expirationTime;
-      }
-
-      return {
-        hasConsent: hasConsent,
-        consentId: hasConsent ? Number(consentId) : null,
-        isExpired: isExpired,
-        expirationTime: expirationTime
-      };
     } catch (error) {
-      if (error.code === 'CALL_EXCEPTION') {
-        throw new ContractError(
-          'Failed to check consent status',
-          'hasActiveConsent',
-          error
-        );
+      if (error instanceof ValidationError || error instanceof ContractError) {
+        throw error;
       }
-      if (error.message === 'Request timeout') {
-        throw new Web3ConnectionError('Request timed out while checking consent status');
-      }
-      throw error;
+      throw new ContractError(
+        'Failed to check consent status using events',
+        'getConsentStatus',
+        error
+      );
     }
   }
 
@@ -608,32 +615,19 @@ class ConsentService {
   }
 
   /**
-   * Check and expire consents for a patient (view function that marks expired)
+   * Check and expire consents for a patient (DEPRECATED - using event-based approach instead)
    * 
+   * @deprecated This function is no longer needed. Expiration is checked client-side when reading events.
    * @param {string} patientAddress - Ethereum address of patient
-   * @returns {Promise<number>} Number of consents expired
+   * @returns {Promise<number>} Always returns 0 (functionality moved to event-based checks)
    * @throws {ValidationError} If address is invalid
-   * @throws {ContractError} If contract call fails
    */
   async checkAndExpireConsents(patientAddress) {
     validateAddress(patientAddress, 'patientAddress');
-    const normalizedAddress = normalizeAddress(patientAddress);
-
-    try {
-      const contract = await this._ensureContract();
-      
-      // Note: This is a state-changing function, but we're using a read-only provider
-      // In a real scenario, this would require a signer. For now, we'll just return 0
-      // and document that this requires write access
-      console.warn('checkAndExpireConsents requires write access - not implemented in read-only mode');
-      return 0;
-    } catch (error) {
-      throw new ContractError(
-        'Failed to check and expire consents',
-        'checkAndExpireConsents',
-        error
-      );
-    }
+    // This function is deprecated - expiration is now checked client-side when reading events
+    // No need to call the contract function which had unbounded loops
+    console.warn('checkAndExpireConsents is deprecated - expiration is checked client-side from events');
+    return 0;
   }
 
   /**

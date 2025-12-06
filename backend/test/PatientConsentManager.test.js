@@ -72,25 +72,32 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
           purpose
         );
 
-        await expect(tx)
-          .to.emit(consentManager, "ConsentGranted")
-          .withArgs(
-            (consentId) => consentId === 0n,
-            patient.address,
-            provider.address,
-            dataType,
-            expirationTime,
-            purpose,
-            (timestamp) => timestamp > 0n
-          );
+        const receipt = await tx.wait();
+        const event = receipt.logs.find(log => {
+          try {
+            const parsed = consentManager.interface.parseLog(log);
+            return parsed && parsed.name === "ConsentGranted";
+          } catch {
+            return false;
+          }
+        });
+        expect(event).to.not.be.undefined;
+        const parsedEvent = consentManager.interface.parseLog(event);
+        expect(parsedEvent.args.consentId).to.equal(0n);
+        expect(parsedEvent.args.patient).to.equal(patient.address);
+        expect(parsedEvent.args.provider).to.equal(provider.address);
+        // Events now emit hashes, not strings
+        expect(parsedEvent.args.dataTypeHash).to.be.a("string");
+        expect(parsedEvent.args.purposeHash).to.be.a("string");
 
         const consentId = 0n;
         const consent = await consentManager.getConsentRecord(consentId);
 
         expect(consent.patientAddress).to.equal(patient.address);
         expect(consent.providerAddress).to.equal(provider.address);
-        expect(consent.dataType).to.equal(dataType);
-        expect(consent.purpose).to.equal(purpose);
+        // ConsentRecord now stores hashes, not strings - verify hashes are present
+        expect(consent.dataTypeHash).to.be.a("string");
+        expect(consent.purposeHash).to.be.a("string");
         expect(consent.isActive).to.be.true;
         expect(consent.expirationTime).to.equal(0);
         expect(consent.timestamp).to.be.greaterThan(0);
@@ -289,8 +296,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         expect(parsedEvent.args.consentId).to.equal(0n);
         expect(parsedEvent.args.patient).to.equal(patient.address);
         expect(parsedEvent.args.provider).to.equal(provider.address);
-        expect(parsedEvent.args.dataType).to.equal(dataType);
-        expect(parsedEvent.args.purpose).to.equal(purpose);
+        // Events now emit hashes, not strings - verify hashes are present
+        expect(parsedEvent.args.dataTypeHash).to.be.a("string");
+        expect(parsedEvent.args.purposeHash).to.be.a("string");
       });
     });
   });
@@ -331,11 +339,13 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         // Verify individual consent records
         const consent0 = await consentManager.getConsentRecord(0);
         expect(consent0.providerAddress).to.equal(provider.address);
-        expect(consent0.dataType).to.equal("medical_records");
+        // ConsentRecord now stores hashes, not strings
+        expect(consent0.dataTypeHash).to.be.a("string");
 
         const consent1 = await consentManager.getConsentRecord(1);
         expect(consent1.providerAddress).to.equal(provider2.address);
-        expect(consent1.dataType).to.equal("genetic_data");
+        // ConsentRecord now stores hashes, not strings
+        expect(consent1.dataTypeHash).to.be.a("string");
       });
 
       it("Should emit individual ConsentGranted events for each consent in batch", async function () {
@@ -406,11 +416,11 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
             [0],
             ["treatment"]
           )
-        ).to.be.revertedWithCustomError(consentManager, "EmptyBatch");
+        ).to.be.revertedWithCustomError(consentManager, "ArrayLengthMismatch");
       });
 
       it("Should reject batch exceeding MAX_BATCH_SIZE", async function () {
-        const batchSize = 51; // Exceeds MAX_BATCH_SIZE (50)
+        const batchSize = 201; // Exceeds MAX_BATCH_SIZE (200)
         const providers = new Array(batchSize).fill(provider.address);
         const dataTypes = new Array(batchSize).fill("medical_records");
         const expirationTimes = new Array(batchSize).fill(0);
@@ -421,9 +431,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
             providers,
             dataTypes,
             expirationTimes,
-            purposes
-          )
-        ).to.be.revertedWithCustomError(consentManager, "EmptyBatch");
+          purposes
+        )
+        ).to.be.revertedWithCustomError(consentManager, "BatchSizeExceeded");
       });
 
       it("Should revert entire batch if any validation fails", async function () {
@@ -632,155 +642,6 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       });
     });
 
-    describe("Automatic Expiration Handling", function () {
-      it("Should mark expired consents as inactive", async function () {
-        const expirationTime = (await getCurrentTimestamp()) + 60; // Expires in 1 minute
-        
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          expirationTime,
-          "treatment"
-        );
-
-        // Advance time past expiration
-        await time.increase(120); // 2 minutes
-
-        // Call the function and get the return value using staticCall first, then execute
-        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
-        await consentManager.checkAndExpireConsents(patient.address);
-        expect(Number(expiredCount)).to.equal(1);
-        
-        // Check that consent was marked inactive
-        const consentRecord = await consentManager.getConsentRecord(0);
-        expect(consentRecord.isActive).to.be.false;
-      });
-
-      it("Should emit ConsentExpired event when marking expired consents", async function () {
-        const expirationTime = (await getCurrentTimestamp()) + 60;
-        
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          expirationTime,
-          "treatment"
-        );
-
-        await time.increase(120);
-
-        await expect(
-          consentManager.checkAndExpireConsents(patient.address)
-        ).to.emit(consentManager, "ConsentExpired");
-      });
-
-      it("Should return count of expired consents", async function () {
-        // Create multiple consents with different expiration times
-        const exp1 = (await getCurrentTimestamp()) + 60;
-        const exp2 = (await getCurrentTimestamp()) + 120;
-        
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          exp1,
-          "treatment"
-        );
-        await consentManager.connect(patient).grantConsent(
-          provider2.address,
-          "genetic_data",
-          exp2,
-          "research"
-        );
-
-        await time.increase(90); // Expires first but not second
-
-        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
-        await consentManager.checkAndExpireConsents(patient.address);
-        expect(Number(expiredCount)).to.equal(1);
-      });
-
-      it("Should handle patient with no expired consents", async function () {
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          0, // No expiration
-          "treatment"
-        );
-
-        const expiredCount = await consentManager.checkAndExpireConsents.staticCall(patient.address);
-        await consentManager.checkAndExpireConsents(patient.address);
-        expect(Number(expiredCount)).to.equal(0);
-      });
-    });
-
-    describe("Get Expired Consents", function () {
-      it("Should return array of expired consent IDs", async function () {
-        const exp1 = (await getCurrentTimestamp()) + 60;
-        const exp2 = (await getCurrentTimestamp()) + 120;
-        
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          exp1,
-          "treatment"
-        );
-        await consentManager.connect(patient).grantConsent(
-          provider2.address,
-          "genetic_data",
-          exp2,
-          "research"
-        );
-        await consentManager.connect(patient).grantConsent(
-          provider3.address,
-          "imaging_data",
-          0, // No expiration
-          "diagnosis"
-        );
-
-        await time.increase(90);
-
-        const expiredIds = await consentManager.getExpiredConsents(patient.address);
-        expect(expiredIds.length).to.equal(1);
-        expect(expiredIds[0]).to.equal(0);
-      });
-    });
-
-    describe("Expiration in hasActiveConsent", function () {
-      it("Should return false for expired consent", async function () {
-        const expirationTime = (await getCurrentTimestamp()) + 60;
-        
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          expirationTime,
-          "treatment"
-        );
-
-        await time.increase(120);
-
-        const [hasConsent] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider.address,
-          "medical_records"
-        );
-        expect(hasConsent).to.be.false;
-      });
-
-      it("Should return true for consent with no expiration", async function () {
-        await consentManager.connect(patient).grantConsent(
-          provider.address,
-          "medical_records",
-          0,
-          "treatment"
-        );
-
-        const [hasConsent] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider.address,
-          "medical_records"
-        );
-        expect(hasConsent).to.be.true;
-      });
-    });
   });
 
   // ==================== ACCESS REQUEST TESTS ====================
@@ -794,8 +655,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(requester).requestAccess(
             patient.address,
-            dataType,
-            purpose,
+            [dataType],
+            [purpose],
             expirationTime
           )
         ).to.emit(consentManager, "AccessRequested");
@@ -816,16 +677,16 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           0
         );
         expect(await consentManager.requestCounter()).to.equal(1);
 
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "genetic_data",
-          "research",
+          ["genetic_data"],
+          ["research"],
           0
         );
         expect(await consentManager.requestCounter()).to.equal(2);
@@ -834,8 +695,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should track requests in patientRequests mapping", async function () {
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           0
         );
 
@@ -850,8 +711,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(requester).requestAccess(
             ethers.ZeroAddress,
-            "medical_records",
-            "treatment",
+            ["medical_records"],
+            ["treatment"],
             0
           )
         ).to.be.revertedWithCustomError(consentManager, "InvalidAddress");
@@ -861,8 +722,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).requestAccess(
             patient.address,
-            "medical_records",
-            "treatment",
+            ["medical_records"],
+            ["treatment"],
             0
           )
         ).to.be.revertedWithCustomError(consentManager, "CannotRequestAccessFromSelf");
@@ -872,8 +733,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(requester).requestAccess(
             patient.address,
-            "",
-            "treatment",
+            [""],
+            ["treatment"],
             0
           )
         ).to.be.revertedWithCustomError(consentManager, "EmptyString");
@@ -885,8 +746,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(requester).requestAccess(
             patient.address,
-            "medical_records",
-            "treatment",
+            ["medical_records"],
+            ["treatment"],
             pastTime
           )
         ).to.be.revertedWithCustomError(consentManager, "ExpirationInPast");
@@ -897,8 +758,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       beforeEach(async function () {
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           0
         );
       });
@@ -920,15 +781,19 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should automatically grant consent when request is approved", async function () {
         const requestId = 0n;
 
+        // When approving a request, it creates a batch consent and emits ConsentBatchGranted
         await expect(
           consentManager.connect(patient).respondToAccessRequest(requestId, true)
-        ).to.emit(consentManager, "ConsentGranted");
+        ).to.emit(consentManager, "ConsentBatchGranted");
 
-        // Verify consent was created
-        const consent = await consentManager.getConsentRecord(0);
-        expect(consent.patientAddress).to.equal(patient.address);
-        expect(consent.providerAddress).to.equal(requester.address);
-        expect(consent.isActive).to.be.true;
+        // Verify batch consent was created (approving a request creates a batch consent)
+        const patientConsents = await consentManager.getPatientConsents(patient.address);
+        expect(patientConsents.length).to.be.greaterThan(0);
+        const batchConsentId = patientConsents[patientConsents.length - 1];
+        const batchConsent = await consentManager.getBatchConsentRecord(batchConsentId);
+        expect(batchConsent.patientAddress).to.equal(patient.address);
+        expect(batchConsent.providerAddress).to.equal(requester.address);
+        expect(batchConsent.isActive).to.be.true;
       });
 
       it("Should allow patient to deny request", async function () {
@@ -977,8 +842,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           expirationTime
         );
 
@@ -1014,61 +879,6 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       );
     });
 
-    describe("hasActiveConsent", function () {
-      it("Should return true and consent ID for active consent", async function () {
-        const [hasConsent, consentId] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider.address,
-          "medical_records"
-        );
-
-        expect(hasConsent).to.be.true;
-        expect(consentId).to.equal(0);
-      });
-
-      it("Should return false for non-existent consent", async function () {
-        const [hasConsent, consentId] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider3.address,
-          "imaging_data"
-        );
-
-        expect(hasConsent).to.be.false;
-        expect(consentId).to.equal(0);
-      });
-
-      it("Should return false for revoked consent", async function () {
-        await consentManager.connect(patient).revokeConsent(0);
-
-        const [hasConsent] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider.address,
-          "medical_records"
-        );
-
-        expect(hasConsent).to.be.false;
-      });
-
-      it("Should return false for wrong data type", async function () {
-        const [hasConsent] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider.address,
-          "genetic_data" // Different from "medical_records"
-        );
-
-        expect(hasConsent).to.be.false;
-      });
-
-      it("Should return false for wrong provider", async function () {
-        const [hasConsent] = await consentManager.hasActiveConsent(
-          patient.address,
-          provider3.address, // Different provider
-          "medical_records"
-        );
-
-        expect(hasConsent).to.be.false;
-      });
-    });
 
     describe("getPatientConsents", function () {
       it("Should return all consent IDs for a patient", async function () {
@@ -1090,8 +900,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         
         expect(consent.patientAddress).to.equal(patient.address);
         expect(consent.providerAddress).to.equal(provider.address);
-        expect(consent.dataType).to.equal("medical_records");
-        expect(consent.purpose).to.equal("treatment");
+        // ConsentRecord now stores hashes, not strings - verify hashes are present
+        expect(consent.dataTypeHash).to.be.a("string");
+        expect(consent.purposeHash).to.be.a("string");
         expect(consent.isActive).to.be.true;
         expect(consent.expirationTime).to.equal(0);
         expect(consent.timestamp).to.be.greaterThan(0);
@@ -1108,8 +919,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should return complete access request", async function () {
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           0
         );
 
@@ -1178,8 +989,8 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should prevent unauthorized request response", async function () {
         await consentManager.connect(requester).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           0
         );
 
@@ -1260,7 +1071,7 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
     it("Should handle maximum uint256 expiration time", async function () {
       const maxUint256 = ethers.MaxUint256;
       
-      // This should not revert, but expiration will effectively never occur
+      // Now correctly rejects values > uint128.max with ExpirationTooLarge error
       await expect(
         consentManager.connect(patient).grantConsent(
           provider.address,
@@ -1268,7 +1079,7 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
           maxUint256,
           "treatment"
         )
-      ).to.emit(consentManager, "ConsentGranted");
+      ).to.be.revertedWithCustomError(consentManager, "ExpirationTooLarge");
     });
 
     it("Should handle many consents for single patient", async function () {
@@ -1339,21 +1150,18 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       // 1. Request access
       await consentManager.connect(requester).requestAccess(
         patient.address,
-        "medical_records",
-        "treatment",
+        ["medical_records"],
+        ["treatment"],
         0
       );
 
       // 2. Approve request
       await consentManager.connect(patient).respondToAccessRequest(0, true);
 
-      // 3. Verify consent was automatically granted
-      const [hasConsent] = await consentManager.hasActiveConsent(
-        patient.address,
-        requester.address,
-        "medical_records"
-      );
-      expect(hasConsent).to.be.true;
+      // 3. Verify consent was automatically granted (hasActiveConsent removed, use event-based lookup)
+      // Check that batch consent was created
+      const patientConsents = await consentManager.getPatientConsents(patient.address);
+      expect(patientConsents.length).to.be.greaterThan(0);
     });
 
     it("Should handle workflow: grant -> revoke -> check inactive", async function () {
@@ -1365,24 +1173,16 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         "treatment"
       );
 
-      // 2. Verify active
-      let [hasConsent] = await consentManager.hasActiveConsent(
-        patient.address,
-        provider.address,
-        "medical_records"
-      );
-      expect(hasConsent).to.be.true;
+      // 2. Verify active (hasActiveConsent removed, check consent record directly)
+      const consent = await consentManager.getConsentRecord(0);
+      expect(consent.isActive).to.be.true;
 
       // 3. Revoke
       await consentManager.connect(patient).revokeConsent(0);
 
       // 4. Verify inactive
-      [hasConsent] = await consentManager.hasActiveConsent(
-        patient.address,
-        provider.address,
-        "medical_records"
-      );
-      expect(hasConsent).to.be.false;
+      const revokedConsent = await consentManager.getConsentRecord(0);
+      expect(revokedConsent.isActive).to.be.false;
     });
 
     it("Should handle complex scenario with multiple patients and providers", async function () {
@@ -1657,20 +1457,20 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const requests = [
         consentManager.connect(requester1).requestAccess(
           patient.address,
-          "medical_records",
-          "treatment",
+          ["medical_records"],
+          ["treatment"],
           expirationTime
         ),
         consentManager.connect(requester2).requestAccess(
           patient.address,
-          "diagnostic_data",
-          "research",
+          ["diagnostic_data"],
+          ["research"],
           expirationTime
         ),
         consentManager.connect(requester3).requestAccess(
           patient.address,
-          "genetic_data",
-          "analytics",
+          ["genetic_data"],
+          ["analytics"],
           expirationTime
         ),
       ];

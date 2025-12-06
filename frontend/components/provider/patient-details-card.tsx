@@ -805,6 +805,16 @@ export function PatientDetailsCard({
                     {demographics.age ? ` • Age: ${demographics.age}` : ''}
                     {demographics.gender ? ` • ${demographics.gender}` : ''}
                   </p>
+                  {patientId && (
+                    <p className="text-muted-foreground text-xs font-mono mt-1">
+                      <strong>Patient ID:</strong> {patientId}
+                    </p>
+                  )}
+                  {patientWalletAddress && (
+                    <p className="text-muted-foreground text-xs font-mono mt-1">
+                      <strong>Wallet:</strong> {patientWalletAddress.slice(0, 6)}...{patientWalletAddress.slice(-4)}
+                    </p>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {demographics.contact?.phone && (

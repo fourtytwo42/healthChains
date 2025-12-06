@@ -201,16 +201,15 @@ describe('Consent Routes - Integration Tests', function () {
         'treatment'
       );
 
-      // Fast-forward time beyond expiration and mark consents as expired
+      // Fast-forward time beyond expiration (checkAndExpireConsents removed - expiration checked off-chain)
       await time.increaseTo(expirationTime + 120);
-      await consentManager.connect(patient).checkAndExpireConsents(patientAddress);
 
       const res = await request(app)
         .get(`/api/consent/patient/${patientAddress}`)
         .query({ includeExpired: 'false' });
 
       expect(res.status).to.equal(200);
-      // Expired consent should be filtered out
+      // Expired consent should be filtered out by service layer (off-chain check)
       const expiredConsents = res.body.data.filter(c => c.isExpired);
       expect(expiredConsents.length).to.equal(0);
     });
