@@ -140,63 +140,82 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
               {/* Patient Name - Full width row */}
               <div className="mb-3">
                 <p className="font-semibold text-base">{patientName}</p>
-                <p className="text-muted-foreground text-xs mt-0.5">
-                  {event.patientInfo.dateOfBirth ? `DOB: ${format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}` : ''}
-                  {event.patientInfo.age !== undefined ? ` • Age: ${event.patientInfo.age}` : ''}
-                  {event.patientInfo.gender ? ` • ${event.patientInfo.gender}` : ''}
-                </p>
               </div>
               
-              {/* Two column layout below name */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  {event.patientInfo.patientId && (
-                    <p className="text-muted-foreground text-xs font-mono mb-2">
-                      <strong>Patient ID:</strong> {event.patientInfo.patientId}
+              {/* Row layout: Left item paired with Right item on same row */}
+              <div className="space-y-2">
+                {/* Row 1: DOB/Age/Sex on left, Phone on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground text-xs">
+                      {event.patientInfo.dateOfBirth ? `DOB: ${format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}` : ''}
+                      {event.patientInfo.age !== undefined ? ` • Age: ${event.patientInfo.age}` : ''}
+                      {event.patientInfo.gender ? ` • ${event.patientInfo.gender}` : ''}
                     </p>
-                  )}
-                  {event.patient && (
-                    <p className="text-muted-foreground text-xs font-mono">
-                      <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
-                    </p>
-                  )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {event.patientInfo.contact?.phone && (
+                      <p>
+                        <strong>Phone:</strong>{' '}
+                        <a 
+                          href={`tel:${event.patientInfo.contact.phone}`}
+                          className="text-primary hover:underline"
+                        >
+                          {event.patientInfo.contact.phone}
+                        </a>
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {event.patientInfo.contact?.phone && (
-                    <p>
-                      <strong>Phone:</strong>{' '}
-                      <a 
-                        href={`tel:${event.patientInfo.contact.phone}`}
-                        className="text-primary hover:underline"
-                      >
-                        {event.patientInfo.contact.phone}
-                      </a>
-                    </p>
-                  )}
-                  {event.patientInfo.contact?.email && (
-                    <p>
-                      <strong>Email:</strong>{' '}
-                      <a 
-                        href={`mailto:${event.patientInfo.contact.email}`}
-                        className="text-primary hover:underline"
-                      >
-                        {event.patientInfo.contact.email}
-                      </a>
-                    </p>
-                  )}
-                  {patientAddress !== 'N/A' && (
-                    <p>
-                      <strong>Address:</strong>{' '}
-                      <a 
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {patientAddress}
-                      </a>
-                    </p>
-                  )}
+                
+                {/* Row 2: Patient ID on left, Email on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {event.patientInfo.patientId && (
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Patient ID:</strong> {event.patientInfo.patientId}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {event.patientInfo.contact?.email && (
+                      <p>
+                        <strong>Email:</strong>{' '}
+                        <a 
+                          href={`mailto:${event.patientInfo.contact.email}`}
+                          className="text-primary hover:underline"
+                        >
+                          {event.patientInfo.contact.email}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Row 3: Wallet on left, Address on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {event.patient && (
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {patientAddress !== 'N/A' && (
+                      <p>
+                        <strong>Address:</strong>{' '}
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {patientAddress}
+                        </a>
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
