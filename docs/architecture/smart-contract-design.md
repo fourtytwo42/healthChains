@@ -111,12 +111,16 @@ struct AccessRequest {
 ### Primary Data Mappings
 
 ```solidity
-mapping(uint256 => ConsentRecord) public consentRecords;
 mapping(uint256 => BatchConsentRecord) public batchConsentRecords;
+mapping(uint256 => ConsentRecord) public consentRecords;  // Legacy - for backward compatibility
 mapping(uint256 => AccessRequest) public accessRequests;
 ```
 
-**Design**: Sequential IDs (0, 1, 2, ...) for easy enumeration and event correlation.
+**Design**: 
+- Sequential IDs (0, 1, 2, ...) for easy enumeration and event correlation
+- **All new consents use `BatchConsentRecord`** (stored in `batchConsentRecords`)
+- `ConsentRecord` mapping exists for backward compatibility with old consents
+- `getConsentRecord()` automatically converts old `ConsentRecord` to `BatchConsentRecord` format
 
 ### Index Mappings
 
@@ -155,36 +159,48 @@ mapping(bytes32 => bool) private _purposeHashExists;
 
 #### grantConsent()
 
-**Purpose**: Grant a single consent
+**Purpose**: Grant consent for a provider to access patient data
+
+**Function Signature**:
+```solidity
+function grantConsent(
+    address provider,
+    string[] calldata dataTypes,
+    uint256 expirationTime,
+    string[] calldata purposes
+) external returns (uint256 consentId)
+```
+
+**Implementation**: Always creates a single `BatchConsentRecord` struct
+- **ONE consent ID** stores arrays of all dataTypes and purposes
+- Covers all combinations (dataTypes.length × purposes.length)
+- Works for single or multiple items - always uses `BatchConsentRecord`
+- Stored in `batchConsentRecords` mapping
+- Emits `ConsentGranted` event with array of consent IDs (typically one)
+
+**Example**: 
+- Input: `dataTypes = ["medical_records", "genetic_data"]`, `purposes = ["treatment", "research"]`
+- Result: **ONE** `BatchConsentRecord` covering 4 combinations (2 × 2)
+- Backend serves as ONE consent record with `dataTypes: [2 items]` and `purposes: [2 items]`
 
 **Security Measures**:
 - `nonReentrant` modifier
 - Address validation (not zero, not self)
-- String validation (not empty, max length)
+- Array validation (not empty, within limits)
+- String validation per item (not empty, max length)
 - Expiration validation (future or zero)
+- Total combinations limit (dataTypes.length × purposes.length ≤ MAX_BATCH_SIZE = 200)
 
 **Gas Optimizations**:
+- Single struct write regardless of number of combinations
 - Hash storage instead of strings
-- Unchecked counter increment (safe in Solidity 0.8+)
 - Only store strings once (check existence first)
+- Unchecked counter increment (safe in Solidity 0.8+)
 
-**Gas Cost**: ~320,000 gas
-
-#### grantConsentBatch()
-
-**Purpose**: Grant multiple consents in one transaction
-
-**Security Measures**:
-- All validations from `grantConsent()` per item
-- Array length validation
-- Batch size limit (`MAX_BATCH_SIZE = 200`)
-
-**Gas Optimizations**:
-- Single transaction overhead
-- Shared storage operations
-- Cached counter to avoid repeated reads
-
-**Gas Cost**: ~200,000 gas per consent (vs ~320,000 for individual)
+**Gas Cost**: 
+- Single combination: ~250,000 gas
+- 10 combinations: ~280,000 gas (vs ~3.2M for 10 individual records = 91% savings)
+- Scales efficiently with more combinations
 
 #### revokeConsent()
 
@@ -218,14 +234,29 @@ mapping(bytes32 => bool) private _purposeHashExists;
 
 **Purpose**: Approve or deny an access request
 
+**Implementation - When Approved**: Creates a single `BatchConsentRecord` struct (same as `grantConsent()`)
+- **ONE consent ID** stores arrays of all dataTypes and purposes from the request
+- Uses the same `BatchConsentRecord` structure as `grantConsent()`
+- Stored in `batchConsentRecords` mapping
+- Emits `ConsentGranted` event with array of consent IDs (one element)
+
+**Example**: If request has 7 dataTypes and 8 purposes:
+- Creates **1 `BatchConsentRecord`** with arrays (1 consent ID, 1 event)
+- **Backend reads the event, fetches the BatchConsentRecord, and serves it as ONE consent record with arrays**
+- **Frontend receives ONE consent with `dataTypes: [7 items]` and `purposes: [8 items]`**
+- Gas savings: ~56 × 320,000 = 17.9M gas vs ~250,000 gas (98.6% savings!)
+
 **Security Measures**:
 - Only patient can respond
 - Request must exist and not be processed
 - Expiration check (auto-deny if expired)
+- Validates arrays are non-empty
+- Validates hash-to-string mappings exist (defense-in-depth)
 
 **Gas Optimizations**:
-- Creates batch consent on approval (more efficient than individual)
-- Validates hash-to-string mappings exist
+- Single struct write instead of many
+- Array storage (one write per array)
+- Same efficient structure as `grantConsent()`
 
 **Gas Cost**: ~250,000 gas (approval with batch consent)
 

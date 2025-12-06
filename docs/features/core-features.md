@@ -20,17 +20,18 @@ This document provides an overview of all core features in HealthChains.
 **Purpose**: Allow patients to grant providers access to their healthcare data.
 
 **Features**:
-- Grant consent to specific data types
-- Specify purposes for data access
+- Grant consent to specific data types (single or multiple)
+- Specify purposes for data access (single or multiple)
 - Set optional expiration dates
-- Supports single and batch operations
+- Always uses efficient `BatchConsentRecord` structure
+- Covers all combinations automatically (dataTypes × purposes)
 
 **Use Cases**:
 - Patient proactively grants access
 - Provider requests and patient approves
-- Grant multiple data types/purposes at once
+- Grant multiple data types/purposes at once (e.g., 3 data types × 2 purposes = 6 combinations in one consent)
 
-**Implementation**: Smart contract function `grantConsent()` with event emission.
+**Implementation**: Smart contract function `grantConsent(provider, dataTypes[], expirationTime, purposes[])` with event emission.
 
 ### Revoke Consent
 
@@ -112,22 +113,28 @@ This document provides an overview of all core features in HealthChains.
 
 ## Batch Operations
 
-### Batch Consent Grant
+### Consent Grant with Multiple Combinations
 
-**Purpose**: Grant multiple consents in a single transaction.
+**Purpose**: Grant consent covering multiple data type/purpose combinations in a single transaction.
 
 **Features**:
-- Grant to multiple providers at once
-- Different data types/purposes per provider
-- Gas-efficient (40-60% savings)
+- Grant to one provider with multiple data types and purposes
+- Automatically covers all combinations (dataTypes × purposes)
+- Gas-efficient (up to 92% savings vs individual records)
 - Atomic operation (all or nothing)
+- Always uses `BatchConsentRecord` structure
 
 **Use Cases**:
-- Grant access to multiple providers
-- Grant multiple data types/purposes
-- Reduce transaction costs
+- Grant access with multiple data types (e.g., medical_records, genetic_data, imaging_data)
+- Grant access for multiple purposes (e.g., treatment, research, diagnosis)
+- Reduce transaction costs for complex consents
 
-**Implementation**: Smart contract function `grantConsentBatch()` with validation.
+**Implementation**: Smart contract function `grantConsent(provider, dataTypes[], expirationTime, purposes[])` with validation.
+
+**Example**:
+- Input: `dataTypes = ["medical_records", "genetic_data"]`, `purposes = ["treatment", "research"]`
+- Result: ONE consent covering 4 combinations (2 × 2)
+- Gas: ~250,000 gas vs ~1.28M gas for 4 individual records (80% savings)
 
 ### Batch Access Request
 
@@ -163,9 +170,10 @@ This document provides an overview of all core features in HealthChains.
 ### Event Types
 
 **Consent Events**:
-- `ConsentGranted`: Single consent granted
+- `ConsentGranted`: Consent granted (includes array of consent IDs, typically one)
+  - Event structure: `(address indexed patient, uint256[] consentIds, uint128 timestamp)`
+  - Always uses `BatchConsentRecord` structure
 - `ConsentRevoked`: Consent revoked
-- `ConsentBatchGranted`: Batch consent granted
 - `ConsentExpired`: Consent expired (future use)
 
 **Request Events**:

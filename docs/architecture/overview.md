@@ -100,7 +100,7 @@ HealthChains is a decentralized patient consent management system that leverages
 
 ### 4. Why Batch Operations?
 
-**Decision**: Implemented batch consent operations alongside individual operations.
+**Decision**: Implemented batch consent operations alongside individual operations, with two different batch approaches.
 
 **Rationale**:
 - **Gas Efficiency**: Single transaction overhead for multiple operations
@@ -108,16 +108,33 @@ HealthChains is a decentralized patient consent management system that leverages
 - **Network Efficiency**: Fewer transactions = less network congestion
 - **Cost Savings**: Up to 40-60% gas savings for batch of 10 consents
 
-**Implementation**:
-- `grantConsentBatch()` - Grant multiple consents in one transaction
-- `requestAccess()` - Request multiple data types and purposes
-- Batch records store arrays instead of individual records
+**Implementation - Unified Batch Approach**:
+
+**`grantConsent()`**: Always creates a single `BatchConsentRecord` struct
+   - **ONE consent ID** stores arrays of dataTypes and purposes
+   - **ONE struct represents all combinations** (e.g., 2 data types × 3 purposes = 6 combinations in ONE record)
+   - Works for single or multiple items - always uses `BatchConsentRecord`
+   - **Emits ONE `ConsentGranted` event** with array containing the consent ID
+   - **Backend reads the event, fetches the BatchConsentRecord, and serves it as ONE consent record with arrays**
+   - Frontend receives ONE consent with `dataTypes: []` and `purposes: []` arrays
+   - Much more gas-efficient: ~250,000 gas vs ~3.2M gas for 10 individual records (92% savings)
+
+**`respondToAccessRequest()` (when approved)**: Creates a single `BatchConsentRecord` struct (same structure)
+   - Uses the same `BatchConsentRecord` structure as `grantConsent()`
+   - ONE consent ID stores arrays from the access request
+   - Same gas efficiency and structure
+
+**Why Unified Approach?**:
+- **Simpler API**: One function signature, one data structure
+- **Consistent behavior**: All consents work the same way
+- **Maximum gas efficiency**: Single struct write regardless of number of combinations
+- **Better UX**: Frontend always receives arrays, making it easy to display all data types/purposes
 
 **Trade-offs**:
-- ✅ Pro: Significant gas savings
+- ✅ Pro: Significant gas savings (especially BatchConsentRecord)
 - ✅ Pro: Better UX for complex consent scenarios
 - ⚠️ Con: More complex validation logic
-- ⚠️ Con: Larger transaction payloads
+- ⚠️ Con: Two different data structures to handle
 
 ### 5. Why Next.js App Router?
 
@@ -211,8 +228,20 @@ User (Provider)                   Frontend              MetaMask         Smart C
 
 ### On-Chain Data (Smart Contract)
 
-- **ConsentRecord**: Individual consent with patient, provider, data type, purpose, expiration
-- **BatchConsentRecord**: Batch consent with arrays of data types and purposes
+**Consent Storage - Two Types**:
+
+1. **ConsentRecord**: Individual consent record
+   - One data type, one purpose per record
+   - Created by `grantConsent()` or `grantConsentBatch()`
+   - Each gets its own consent ID
+
+2. **BatchConsentRecord**: Batch consent record
+   - Arrays of data types and purposes in ONE record
+   - Created by `respondToAccessRequest()` when approved
+   - More gas-efficient for large combinations
+   - ONE consent ID covers all combinations
+
+**Other Data**:
 - **AccessRequest**: Request for access with requester, patient, data types, purposes, status
 - **Events**: Immutable logs of all consent actions
 

@@ -67,9 +67,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         const tx = await consentManager.connect(patient).grantConsent(
           provider.address,
-          dataType,
+          [dataType],
           expirationTime,
-          purpose
+          [purpose]
         );
 
         const receipt = await tx.wait();
@@ -83,21 +83,19 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         });
         expect(event).to.not.be.undefined;
         const parsedEvent = consentManager.interface.parseLog(event);
-        expect(parsedEvent.args.consentId).to.equal(0n);
         expect(parsedEvent.args.patient).to.equal(patient.address);
-        expect(parsedEvent.args.provider).to.equal(provider.address);
-        // Events now emit hashes, not strings
-        expect(parsedEvent.args.dataTypeHash).to.be.a("string");
-        expect(parsedEvent.args.purposeHash).to.be.a("string");
+        // New event format: (address indexed patient, uint256[] consentIds, uint128 timestamp)
+        expect(parsedEvent.args.consentIds.length).to.equal(1);
+        expect(parsedEvent.args.consentIds[0]).to.equal(0n);
 
         const consentId = 0n;
         const consent = await consentManager.getConsentRecord(consentId);
 
         expect(consent.patientAddress).to.equal(patient.address);
         expect(consent.providerAddress).to.equal(provider.address);
-        // ConsentRecord now stores hashes, not strings - verify hashes are present
-        expect(consent.dataTypeHash).to.be.a("string");
-        expect(consent.purposeHash).to.be.a("string");
+        // BatchConsentRecord stores arrays of hashes
+        expect(consent.dataTypeHashes.length).to.equal(1);
+        expect(consent.purposeHashes.length).to.equal(1);
         expect(consent.isActive).to.be.true;
         expect(consent.expirationTime).to.equal(0);
         expect(consent.timestamp).to.be.greaterThan(0);
@@ -111,9 +109,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            dataType,
+            [dataType],
             futureTime,
-            purpose
+            [purpose]
           )
         ).to.emit(consentManager, "ConsentGranted");
 
@@ -128,17 +126,17 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
         expect(await consentManager.consentCounter()).to.equal(1);
 
         await consentManager.connect(patient).grantConsent(
           provider2.address,
-          "genetic_data",
+          ["genetic_data"],
           0,
-          "research"
+          ["research"]
         );
         expect(await consentManager.consentCounter()).to.equal(2);
       });
@@ -146,9 +144,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should track consents in patientConsents mapping", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const consents = await consentManager.getPatientConsents(patient.address);
@@ -159,9 +157,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should track consents in providerConsents mapping", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         // Note: We don't have a getProviderConsents function, but we can verify through consent record
@@ -172,15 +170,15 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should allow multiple consents for same patient", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
         await consentManager.connect(patient).grantConsent(
           provider2.address,
-          "genetic_data",
+          ["genetic_data"],
           0,
-          "research"
+          ["research"]
         );
 
         const consents = await consentManager.getPatientConsents(patient.address);
@@ -193,9 +191,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             ethers.ZeroAddress,
-            "medical_records",
+            ["medical_records"],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.be.revertedWithCustomError(consentManager, "InvalidAddress");
       });
@@ -204,9 +202,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             patient.address,
-            "medical_records",
+            ["medical_records"],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.be.revertedWithCustomError(consentManager, "CannotGrantConsentToSelf");
       });
@@ -215,9 +213,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            "",
+            [""],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.be.revertedWithCustomError(consentManager, "EmptyString");
       });
@@ -226,9 +224,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            "medical_records",
+            ["medical_records"],
             0,
-            ""
+            [""]
           )
         ).to.be.revertedWithCustomError(consentManager, "EmptyString");
       });
@@ -239,9 +237,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            "medical_records",
+            ["medical_records"],
             pastTime,
-            "treatment"
+            ["treatment"]
           )
         ).to.be.revertedWithCustomError(consentManager, "ExpirationInPast");
       });
@@ -265,9 +263,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            maxLengthString,
+            [maxLengthString],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.emit(consentManager, "ConsentGranted");
       });
@@ -281,9 +279,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         const tx = await consentManager.connect(patient).grantConsent(
           provider.address,
-          dataType,
+          [dataType],
           expirationTime,
-          purpose
+          [purpose]
         );
 
         const receipt = await tx.wait();
@@ -293,12 +291,11 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
         expect(event).to.not.be.undefined;
         const parsedEvent = consentManager.interface.parseLog(event);
-        expect(parsedEvent.args.consentId).to.equal(0n);
+        // New event format: (address indexed patient, uint256[] consentIds, uint128 timestamp)
         expect(parsedEvent.args.patient).to.equal(patient.address);
-        expect(parsedEvent.args.provider).to.equal(provider.address);
-        // Events now emit hashes, not strings - verify hashes are present
-        expect(parsedEvent.args.dataTypeHash).to.be.a("string");
-        expect(parsedEvent.args.purposeHash).to.be.a("string");
+        expect(parsedEvent.args.consentIds.length).to.equal(1);
+        expect(parsedEvent.args.consentIds[0]).to.equal(0n);
+        expect(parsedEvent.args.timestamp).to.be.greaterThan(0n);
       });
     });
   });
@@ -307,57 +304,50 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
   describe("Batch Consent Operations", function () {
     describe("Successful Batch Grants", function () {
       it("Should grant multiple consents in a single transaction", async function () {
-        const providers = [provider.address, provider2.address, provider3.address];
+        // New grantConsent() takes single provider, arrays of dataTypes and purposes
+        // Creates ONE BatchConsentRecord covering all combinations
         const dataTypes = ["medical_records", "genetic_data", "imaging_data"];
-        const expirationTimes = [0, 0, await getFutureTimestamp(30)];
-        const purposes = ["treatment", "research", "diagnosis"];
+        const expirationTime = 0;
+        const purposes = ["treatment", "research"];
 
-        const tx = await consentManager.connect(patient).grantConsentBatch(
-          providers,
+        const tx = await consentManager.connect(patient).grantConsent(
+          provider.address,
           dataTypes,
-          expirationTimes,
+          expirationTime,
           purposes
         );
 
         await expect(tx)
-          .to.emit(consentManager, "ConsentBatchGranted")
+          .to.emit(consentManager, "ConsentGranted")
           .withArgs(
             patient.address,
-            (ids) => ids.length === 3,
+            (ids) => ids.length === 1, // One BatchConsentRecord created
             (timestamp) => timestamp > 0n
           );
 
-        // Verify all consents were created
-        expect(await consentManager.consentCounter()).to.equal(3);
+        // Verify one consent was created (BatchConsentRecord)
+        expect(await consentManager.consentCounter()).to.equal(1);
         
         const consents = await consentManager.getPatientConsents(patient.address);
-        expect(consents.length).to.equal(3);
+        expect(consents.length).to.equal(1);
         expect(consents[0]).to.equal(0);
-        expect(consents[1]).to.equal(1);
-        expect(consents[2]).to.equal(2);
 
-        // Verify individual consent records
+        // Verify BatchConsentRecord
         const consent0 = await consentManager.getConsentRecord(0);
         expect(consent0.providerAddress).to.equal(provider.address);
-        // ConsentRecord now stores hashes, not strings
-        expect(consent0.dataTypeHash).to.be.a("string");
-
-        const consent1 = await consentManager.getConsentRecord(1);
-        expect(consent1.providerAddress).to.equal(provider2.address);
-        // ConsentRecord now stores hashes, not strings
-        expect(consent1.dataTypeHash).to.be.a("string");
+        expect(consent0.dataTypeHashes.length).to.equal(3);
+        expect(consent0.purposeHashes.length).to.equal(2);
       });
 
-      it("Should emit individual ConsentGranted events for each consent in batch", async function () {
-        const providers = [provider.address, provider2.address];
+      it("Should emit ConsentGranted event with single consent ID", async function () {
         const dataTypes = ["medical_records", "genetic_data"];
-        const expirationTimes = [0, 0];
+        const expirationTime = 0;
         const purposes = ["treatment", "research"];
 
-        const tx = await consentManager.connect(patient).grantConsentBatch(
-          providers,
+        const tx = await consentManager.connect(patient).grantConsent(
+          provider.address,
           dataTypes,
-          expirationTimes,
+          expirationTime,
           purposes
         );
 
@@ -366,87 +356,96 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
           log => consentManager.interface.parseLog(log)?.name === "ConsentGranted"
         );
 
-        expect(consentGrantedEvents.length).to.equal(2);
+        // One event with one consent ID (BatchConsentRecord)
+        expect(consentGrantedEvents.length).to.equal(1);
       });
 
-      it("Should handle large batch operations (up to MAX_BATCH_SIZE)", async function () {
-        const batchSize = 10;
-        const providers = [];
+      it("Should handle large combinations (up to MAX_BATCH_SIZE)", async function () {
+        // Create arrays that result in many combinations
         const dataTypes = [];
-        const expirationTimes = [];
         const purposes = [];
-
-        for (let i = 0; i < batchSize; i++) {
-          providers.push(accounts[i].address);
+        
+        // 10 data types × 10 purposes = 100 combinations (within MAX_BATCH_SIZE of 200)
+        for (let i = 0; i < 10; i++) {
           dataTypes.push(`data_type_${i}`);
-          expirationTimes.push(0);
           purposes.push(`purpose_${i}`);
         }
 
         await expect(
-          consentManager.connect(patient).grantConsentBatch(
-            providers,
+          consentManager.connect(patient).grantConsent(
+            provider.address,
             dataTypes,
-            expirationTimes,
+            0,
             purposes
           )
-        ).to.emit(consentManager, "ConsentBatchGranted");
+        ).to.emit(consentManager, "ConsentGranted");
 
-        expect(await consentManager.consentCounter()).to.equal(batchSize);
+        // One BatchConsentRecord created
+        expect(await consentManager.consentCounter()).to.equal(1);
       });
     });
 
     describe("Batch Validation", function () {
-      it("Should reject empty batch", async function () {
+      it("Should reject empty data types array", async function () {
         await expect(
-          consentManager.connect(patient).grantConsentBatch(
+          consentManager.connect(patient).grantConsent(
+            provider.address,
             [],
-            [],
-            [],
+            0,
+            ["treatment"]
+          )
+        ).to.be.revertedWithCustomError(consentManager, "EmptyBatch");
+      });
+
+      it("Should reject empty purposes array", async function () {
+        await expect(
+          consentManager.connect(patient).grantConsent(
+            provider.address,
+            ["medical_records"],
+            0,
             []
           )
         ).to.be.revertedWithCustomError(consentManager, "EmptyBatch");
       });
 
-      it("Should reject batch with mismatched array lengths", async function () {
-        await expect(
-          consentManager.connect(patient).grantConsentBatch(
-            [provider.address],
-            ["medical_records", "genetic_data"], // Different length
-            [0],
-            ["treatment"]
-          )
-        ).to.be.revertedWithCustomError(consentManager, "ArrayLengthMismatch");
-      });
-
-      it("Should reject batch exceeding MAX_BATCH_SIZE", async function () {
-        const batchSize = 201; // Exceeds MAX_BATCH_SIZE (200)
-        const providers = new Array(batchSize).fill(provider.address);
-        const dataTypes = new Array(batchSize).fill("medical_records");
-        const expirationTimes = new Array(batchSize).fill(0);
-        const purposes = new Array(batchSize).fill("treatment");
+      it("Should reject if total combinations exceed MAX_BATCH_SIZE", async function () {
+        // Create arrays that result in > 200 combinations
+        const dataTypes = Array(15).fill("medical_records");
+        const purposes = Array(15).fill("treatment"); // 15 × 15 = 225 > 200
 
         await expect(
-          consentManager.connect(patient).grantConsentBatch(
-            providers,
+          consentManager.connect(patient).grantConsent(
+            provider.address,
             dataTypes,
-            expirationTimes,
-          purposes
-        )
+            0,
+            purposes
+          )
         ).to.be.revertedWithCustomError(consentManager, "BatchSizeExceeded");
       });
 
-      it("Should revert entire batch if any validation fails", async function () {
-        const providers = [provider.address, ethers.ZeroAddress]; // Second one invalid
-        const dataTypes = ["medical_records", "genetic_data"];
-        const expirationTimes = [0, 0];
-        const purposes = ["treatment", "research"];
+      it("Should reject if dataTypes array exceeds MAX_BATCH_SIZE", async function () {
+        const dataTypes = new Array(201).fill("medical_records"); // Exceeds MAX_BATCH_SIZE (200)
+        const purposes = ["treatment"];
 
         await expect(
-          consentManager.connect(patient).grantConsentBatch(
-            providers,
+          consentManager.connect(patient).grantConsent(
+            provider.address,
             dataTypes,
-            expirationTimes,
+            0,
+            purposes
+          )
+        ).to.be.revertedWithCustomError(consentManager, "BatchSizeExceeded");
+      });
+
+      it("Should revert if provider address is invalid", async function () {
+        const dataTypes = ["medical_records"];
+        const purposes = ["treatment"];
+
+        await expect(
+          consentManager.connect(patient).grantConsent(
+            ethers.ZeroAddress, // Invalid address
+            dataTypes,
+            0,
             purposes
           )
         ).to.be.revertedWithCustomError(consentManager, "InvalidAddress");
@@ -471,11 +470,11 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
           purposes.push(`purpose_${i}`);
         }
 
-        // Measure batch gas
-        const batchTx = await consentManager.connect(patient).grantConsentBatch(
-          providers,
+        // Measure batch gas (using arrays for dataTypes and purposes)
+        const batchTx = await consentManager.connect(patient).grantConsent(
+          provider.address,
           dataTypes,
-          expirationTimes,
+          0,
           purposes
         );
         const batchReceipt = await batchTx.wait();
@@ -510,9 +509,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should allow patient to revoke their own consent", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const consentId = 0n;
@@ -533,9 +532,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should preserve consent record after revocation", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const consentId = 0n;
@@ -555,9 +554,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should reject revocation by non-patient", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const consentId = 0n;
@@ -576,9 +575,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should reject revocation of already inactive consent", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const consentId = 0n;
@@ -627,9 +626,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should return false for consent with no expiration", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         const expired = await consentManager.isConsentExpired(0);
@@ -781,16 +780,16 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should automatically grant consent when request is approved", async function () {
         const requestId = 0n;
 
-        // When approving a request, it creates a batch consent and emits ConsentBatchGranted
+        // When approving a request, it creates a batch consent and emits ConsentGranted
         await expect(
           consentManager.connect(patient).respondToAccessRequest(requestId, true)
-        ).to.emit(consentManager, "ConsentBatchGranted");
+        ).to.emit(consentManager, "ConsentGranted");
 
         // Verify batch consent was created (approving a request creates a batch consent)
         const patientConsents = await consentManager.getPatientConsents(patient.address);
         expect(patientConsents.length).to.be.greaterThan(0);
         const batchConsentId = patientConsents[patientConsents.length - 1];
-        const batchConsent = await consentManager.getBatchConsentRecord(batchConsentId);
+        const batchConsent = await consentManager.getConsentRecord(batchConsentId);
         expect(batchConsent.patientAddress).to.equal(patient.address);
         expect(batchConsent.providerAddress).to.equal(requester.address);
         expect(batchConsent.isActive).to.be.true;
@@ -953,19 +952,19 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             provider.address,
-            "medical_records",
+            ["medical_records"],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.not.be.reverted;
       });
 
       it("Should prevent reentrancy in batch operations", async function () {
         await expect(
-          consentManager.connect(patient).grantConsentBatch(
-            [provider.address],
+          consentManager.connect(patient).grantConsent(
+            provider.address,
             ["medical_records"],
-            [0],
+            0,
             ["treatment"]
           )
         ).to.not.be.reverted;
@@ -976,9 +975,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       it("Should prevent unauthorized consent revocation", async function () {
         await consentManager.connect(patient).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           0,
-          "treatment"
+          ["treatment"]
         );
 
         await expect(
@@ -1005,9 +1004,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         await expect(
           consentManager.connect(patient).grantConsent(
             ethers.ZeroAddress,
-            "medical_records",
+            ["medical_records"],
             0,
-            "treatment"
+            ["treatment"]
           )
         ).to.be.revertedWithCustomError(consentManager, "InvalidAddress");
       });
@@ -1131,10 +1130,10 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
         purposes.push(`purpose_${i}`);
       }
 
-      const tx = await consentManager.connect(patient).grantConsentBatch(
-        providers,
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
         dataTypes,
-        expirationTimes,
+        0,
         purposes
       );
       const receipt = await tx.wait();
@@ -1191,21 +1190,21 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       // Patient 1 grants consents
       await consentManager.connect(patient).grantConsent(
         provider.address,
-        "medical_records",
+        ["medical_records"],
         0,
-        "treatment"
+        ["treatment"]
       );
       await consentManager.connect(patient).grantConsent(
         provider2.address,
-        "genetic_data",
+        ["genetic_data"],
         0,
-        "research"
+        ["research"]
       );
 
       // Patient 2 grants consents
       await consentManager.connect(patient2).grantConsent(
         provider.address,
-        "medical_records",
+        ["medical_records"],
         0,
         "treatment"
       );
@@ -1227,9 +1226,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
       const tx = await consentManager.connect(patient).grantConsent(
         provider.address,
-        "medical_records",
+        ["medical_records"],
         expirationTime,
-        "treatment"
+        ["treatment"]
       );
       const receipt = await tx.wait();
 
@@ -1244,15 +1243,14 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const [patient, provider] = await ethers.getSigners();
       const expirationTime = Math.floor(Date.now() / 1000) + 86400;
 
-      const providers = Array(10).fill(provider.address);
+      // Create arrays with 10 data types and 1 purpose = 10 combinations
       const dataTypes = Array(10).fill("medical_records");
-      const expirationTimes = Array(10).fill(expirationTime);
-      const purposes = Array(10).fill("treatment");
+      const purposes = ["treatment"];
 
-      const tx = await consentManager.connect(patient).grantConsentBatch(
-        providers,
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
         dataTypes,
-        expirationTimes,
+        expirationTime,
         purposes
       );
       const receipt = await tx.wait();
@@ -1268,15 +1266,14 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const [patient, provider] = await ethers.getSigners();
       const expirationTime = Math.floor(Date.now() / 1000) + 86400;
 
-      const providers = Array(50).fill(provider.address);
+      // Create arrays with 50 data types and 1 purpose = 50 combinations
       const dataTypes = Array(50).fill("medical_records");
-      const expirationTimes = Array(50).fill(expirationTime);
-      const purposes = Array(50).fill("treatment");
+      const purposes = ["treatment"];
 
-      const tx = await consentManager.connect(patient).grantConsentBatch(
-        providers,
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
         dataTypes,
-        expirationTimes,
+        expirationTime,
         purposes
       );
       const receipt = await tx.wait();
@@ -1295,23 +1292,21 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       // Single consent
       const tx1 = await consentManager.connect(patient).grantConsent(
         provider.address,
-        "medical_records",
+        ["medical_records"],
         expirationTime,
-        "treatment"
+        ["treatment"]
       );
       const receipt1 = await tx1.wait();
       const singleGas = receipt1.gasUsed;
 
-      // Batch of 5
-      const providers = Array(5).fill(provider.address);
+      // Batch of 5 combinations (5 data types × 1 purpose)
       const dataTypes = Array(5).fill("diagnostic_data");
-      const expirationTimes = Array(5).fill(expirationTime);
-      const purposes = Array(5).fill("research");
+      const purposes = ["research"];
 
-      const tx2 = await consentManager.connect(patient).grantConsentBatch(
-        providers,
+      const tx2 = await consentManager.connect(patient).grantConsent(
+        provider.address,
         dataTypes,
-        expirationTimes,
+        expirationTime,
         purposes
       );
       const receipt2 = await tx2.wait();
@@ -1319,11 +1314,11 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
       console.log(`\n[Gas Comparison] Single vs Batch:`);
       console.log(`  Single consent: ${singleGas.toString()}`);
-      console.log(`  Batch (5 consents): ${batchGas.toString()}`);
-      console.log(`  Average per consent (batch): ${batchGas / 5n}`);
-      console.log(`  Savings per consent: ${singleGas - (batchGas / 5n)}`);
+      console.log(`  Batch (5 combinations): ${batchGas.toString()}`);
+      console.log(`  Average per combination (batch): ${batchGas / 5n}`);
+      console.log(`  Savings per combination: ${singleGas - (batchGas / 5n)}`);
 
-      // Batch should be more efficient per consent
+      // Batch should be more efficient per combination
       expect(batchGas / 5n).to.be.lessThan(singleGas);
     });
   });
@@ -1334,22 +1329,21 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const [patient, provider] = await ethers.getSigners();
       const expirationTime = Math.floor(Date.now() / 1000) + 86400;
 
-      const providers = Array(50).fill(provider.address);
+      // Create 50 combinations (50 data types × 1 purpose)
       const dataTypes = Array(50).fill("medical_records");
-      const expirationTimes = Array(50).fill(expirationTime);
-      const purposes = Array(50).fill("treatment");
+      const purposes = ["treatment"];
 
-      const tx = await consentManager.connect(patient).grantConsentBatch(
-        providers,
+      const tx = await consentManager.connect(patient).grantConsent(
+        provider.address,
         dataTypes,
-        expirationTimes,
+        expirationTime,
         purposes
       );
       const receipt = await tx.wait();
 
-      // Verify all consents were created
+      // Verify one BatchConsentRecord was created (covering 50 combinations)
       const consents = await consentManager.getPatientConsents(patient.address);
-      expect(consents.length).to.be.greaterThanOrEqual(50);
+      expect(consents.length).to.equal(1);
 
       console.log(`\n[Stress Test] Maximum batch size (50 consents):`);
       console.log(`  Gas Used: ${receipt.gasUsed.toString()}`);
@@ -1360,23 +1354,22 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const [patient, provider] = await ethers.getSigners();
       const expirationTime = Math.floor(Date.now() / 1000) + 86400;
 
-      // Create 100 consents in batches
+      // Create 100 combinations in batches (2 batches of 50 combinations each)
       for (let i = 0; i < 2; i++) {
-        const providers = Array(50).fill(provider.address);
         const dataTypes = Array(50).fill(`data_type_${i}`);
-        const expirationTimes = Array(50).fill(expirationTime);
-        const purposes = Array(50).fill("treatment");
+        const purposes = ["treatment"];
 
-        await consentManager.connect(patient).grantConsentBatch(
-          providers,
+        await consentManager.connect(patient).grantConsent(
+          provider.address,
           dataTypes,
-          expirationTimes,
+          expirationTime,
           purposes
         );
       }
 
+      // Should have 2 BatchConsentRecords (one per batch)
       const consents = await consentManager.getPatientConsents(patient.address);
-      expect(consents.length).to.be.greaterThanOrEqual(100);
+      expect(consents.length).to.equal(2);
 
       console.log(`\n[Stress Test] Many consents per patient:`);
       console.log(`  Total consents: ${consents.length}`);
@@ -1390,21 +1383,21 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
       const promises = [
         consentManager.connect(patient1).grantConsent(
           provider.address,
-          "medical_records",
+          ["medical_records"],
           expirationTime,
-          "treatment"
+          ["treatment"]
         ),
         consentManager.connect(patient2).grantConsent(
           provider.address,
-          "diagnostic_data",
+          ["diagnostic_data"],
           expirationTime,
-          "research"
+          ["research"]
         ),
         consentManager.connect(patient3).grantConsent(
           provider.address,
-          "genetic_data",
+          ["genetic_data"],
           expirationTime,
-          "analytics"
+          ["analytics"]
         ),
       ];
 
@@ -1435,9 +1428,9 @@ describe("PatientConsentManager - Comprehensive Test Suite", function () {
 
       const tx = await consentManager.connect(patient).grantConsent(
         provider.address,
-        longDataType,
+        [longDataType],
         expirationTime,
-        longPurpose
+        [longPurpose]
       );
       const receipt = await tx.wait();
 

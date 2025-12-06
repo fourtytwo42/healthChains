@@ -99,18 +99,16 @@ The contract uses a combination of mappings and arrays to efficiently store and 
 - **Non-Empty Strings**: All string parameters (dataType, purpose) must be non-empty
 - **String Length Limits**: Strings limited to 256 characters (MAX_STRING_LENGTH)
 - **Expiration Time Validation**: Expiration times must be in the future if non-zero
-- **Batch Size Limits**: Batch operations limited to 50 items (MAX_BATCH_SIZE)
+- **Batch Size Limits**: Total combinations (dataTypes.length × purposes.length) limited to 200 (MAX_BATCH_SIZE)
 
 ### Reentrancy Protection
 
 All state-changing functions are protected by OpenZeppelin's `ReentrancyGuard`:
 
 - `grantConsent()`
-- `grantConsentBatch()`
 - `revokeConsent()`
 - `requestAccess()`
 - `respondToAccessRequest()`
-- `checkAndExpireConsents()`
 
 ### Checks-Effects-Interactions Pattern
 
@@ -198,9 +196,11 @@ unchecked {
 External functions use `calldata` instead of `memory` for arrays and strings to avoid copying:
 
 ```solidity
-function grantConsentBatch(
-    address[] calldata providers,  // calldata, not memory
+function grantConsent(
+    address provider,              // Single provider address
     string[] calldata dataTypes,   // calldata, not memory
+    uint256 expirationTime,        // Single expiration time
+    string[] calldata purposes     // calldata, not memory
     // ...
 )
 ```
@@ -250,50 +250,39 @@ enum RequestStatus {
 
 ### Core Functions
 
-#### `grantConsent(address provider, string memory dataType, uint256 expirationTime, string memory purpose) → uint256`
+#### `grantConsent(address provider, string[] calldata dataTypes, uint256 expirationTime, string[] calldata purposes) → uint256`
 
-Grants consent for a provider to access specific patient data.
+Grants consent for a provider to access patient data. Always creates a single `BatchConsentRecord` covering all combinations of dataTypes × purposes.
 
 **Parameters:**
-- `provider`: Address of the healthcare provider receiving consent (must be non-zero)
-- `dataType`: Type of data (e.g., "medical_records", "genetic_data")
+- `provider`: Address of the healthcare provider receiving consent (must be non-zero, single address)
+- `dataTypes`: Array of data types (e.g., ["medical_records", "genetic_data"])
 - `expirationTime`: Unix timestamp when consent expires (0 = no expiration, must be in future if non-zero)
-- `purpose`: Purpose for data use (e.g., "treatment", "research")
+- `purposes`: Array of purposes (e.g., ["treatment", "research"])
 
-**Returns:** Unique consent ID
+**Returns:** Unique consent ID (single ID for the BatchConsentRecord)
 
 **Reverts:**
 - `InvalidAddress()` - If provider is zero address
 - `CannotGrantConsentToSelf()` - If provider is the caller
-- `EmptyString()` - If dataType or purpose is empty
-- `StringTooLong()` - If string exceeds 256 characters
+- `EmptyBatch()` - If dataTypes or purposes arrays are empty
+- `EmptyString()` - If any dataType or purpose string is empty
+- `StringTooLong()` - If any string exceeds 256 characters
+- `BatchSizeExceeded()` - If dataTypes.length, purposes.length, or total combinations exceed MAX_BATCH_SIZE (200)
 - `ExpirationInPast()` - If expirationTime is in the past
+- `ExpirationTooLarge()` - If expirationTime exceeds uint128 max
 
-**Events:** `ConsentGranted`
+**Events:** `ConsentGranted` (includes array of consent IDs, typically one element)
 
-**Gas Cost:** ~100,000-150,000 gas
+**Gas Cost:** 
+- Single combination: ~250,000 gas
+- 10 combinations: ~280,000 gas (vs ~3.2M for 10 individual records = 91% savings)
+- Scales efficiently with more combinations
 
----
-
-#### `grantConsentBatch(address[] calldata providers, string[] calldata dataTypes, uint256[] calldata expirationTimes, string[] calldata purposes) → uint256[]`
-
-Grants multiple consents in a single transaction.
-
-**Parameters:**
-- `providers`: Array of provider addresses
-- `dataTypes`: Array of data types (must match providers length)
-- `expirationTimes`: Array of expiration times (must match providers length)
-- `purposes`: Array of purposes (must match providers length)
-
-**Returns:** Array of consent IDs created
-
-**Reverts:**
-- `EmptyBatch()` - If arrays are empty or exceed MAX_BATCH_SIZE (50)
-- Same validation errors as `grantConsent()` for each item
-
-**Events:** `ConsentGranted` (one per consent), `ConsentBatchGranted`
-
-**Gas Cost:** ~80,000-100,000 gas per consent (40-60% savings vs. individual calls)
+**Example:**
+- Input: `dataTypes = ["medical_records", "genetic_data"]`, `purposes = ["treatment", "research"]`
+- Result: ONE `BatchConsentRecord` covering 4 combinations (2 × 2)
+- Backend serves as ONE consent with `dataTypes: [2 items]` and `purposes: [2 items]`
 
 ---
 
@@ -468,17 +457,19 @@ event ConsentRevoked(
 );
 ```
 
-### ConsentBatchGranted
+### ConsentGranted (Updated)
 
-Emitted when multiple consents are granted in a batch operation.
+Emitted when consent is granted. Always uses `BatchConsentRecord` structure.
 
 ```solidity
-event ConsentBatchGranted(
+event ConsentGranted(
     address indexed patient,
-    uint256[] consentIds,
+    uint256[] consentIds,  // Array containing the consent ID (typically one element)
     uint128 timestamp
 );
 ```
+
+**Note:** The event always includes an array of consent IDs, but typically contains one element since `grantConsent()` creates one `BatchConsentRecord` per call.
 
 ### AccessRequested
 
@@ -568,10 +559,10 @@ string[] memory dataTypes = ["medical_records", "genetic_data", "imaging_data"];
 uint256[] memory expirationTimes = [0, 0, futureTimestamp];
 string[] memory purposes = ["treatment", "research", "diagnosis"];
 
-uint256[] memory consentIds = await consentManager.grantConsentBatch(
-    providers,
+uint256 consentId = await consentManager.grantConsent(
+    provider,
     dataTypes,
-    expirationTimes,
+    expirationTime,
     purposes
 );
 ```

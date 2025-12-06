@@ -345,195 +345,71 @@ export function useGrantConsent() {
       }
 
       // Validate providers are valid addresses
-      for (const provider of data.providers) {
-        if (!provider || provider === '0x0000000000000000000000000000000000000000') {
-          throw new Error('Invalid provider address');
+      if (data.providers.length !== 1) {
+        throw new Error('Currently only one provider at a time is supported');
+      }
+      
+      const provider = data.providers[0];
+      if (!provider || provider === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid provider address');
+      }
+      if (!ethers.isAddress(provider)) {
+        throw new Error('Invalid address format');
+      }
+
+      // Validate data types and purposes are not empty
+      for (const dataType of data.dataTypes) {
+        if (!dataType || dataType.trim().length === 0) {
+          throw new Error('Data type cannot be empty');
+        }
+      }
+      for (const purpose of data.purposes) {
+        if (!purpose || purpose.trim().length === 0) {
+          throw new Error('Purpose cannot be empty');
         }
       }
 
-      // Generate all combinations (cartesian product)
-      // For each provider, data type, and purpose combination
-      const providers: string[] = [];
-      const dataTypes: string[] = [];
-      const purposes: string[] = [];
-      const expirationTimes: number[] = [];
-
-      for (const provider of data.providers) {
-        for (const dataType of data.dataTypes) {
-          // Validate data type is not empty
-          if (!dataType || dataType.trim().length === 0) {
-            throw new Error('Data type cannot be empty');
-          }
-          for (const purpose of data.purposes) {
-            // Validate purpose is not empty
-            if (!purpose || purpose.trim().length === 0) {
-              throw new Error('Purpose cannot be empty');
-            }
-            providers.push(provider);
-            dataTypes.push(dataType);
-            purposes.push(purpose);
-            expirationTimes.push(expirationTime);
-          }
-        }
+      // Calculate total combinations to validate against contract limit
+      const totalCombinations = data.dataTypes.length * data.purposes.length;
+      if (totalCombinations > 200) {
+        throw new Error(`Too many combinations (${totalCombinations}). Maximum 200 combinations per consent.`);
       }
 
-      const totalConsents = providers.length;
+      // Call grantConsent with arrays - creates ONE BatchConsentRecord with all combinations
+      const tx = await contract.grantConsent(
+        provider,
+        data.dataTypes,
+        expirationTime,
+        data.purposes
+      );
 
-      // Validate batch size doesn't exceed contract limit
-      if (totalConsents > 50) {
-        throw new Error('Too many consents. Maximum 50 consents per transaction.');
-      }
+      const receipt = await waitForTransaction(tx);
 
-      // Use single function if only one consent, batch otherwise
-      if (totalConsents === 1) {
-        // Single consent
-        const tx = await contract.grantConsent(
-          providers[0],
-          dataTypes[0],
-          expirationTimes[0],
-          purposes[0]
-        );
-
-        const receipt = await waitForTransaction(tx);
-
-        // Extract consent ID from event
-        let consentId: number | null = null;
-        for (const log of receipt.logs) {
-          try {
-            const parsed = contract.interface.parseLog(log);
-            if (parsed && parsed.name === 'ConsentGranted') {
-              consentId = Number(parsed.args.consentId);
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-
-        return {
-          consentIds: consentId ? [consentId] : [],
-          transactionHash: receipt.hash,
-          blockNumber: receipt.blockNumber,
-          gasUsed: receipt.gasUsed.toString(),
-        };
-      } else {
-        // Batch consent - all combinations in one transaction
-        // Add validation and error handling
+      // Extract consent ID from ConsentGranted event
+      // Event signature: ConsentGranted(address indexed patient, uint256[] consentIds, uint128 timestamp)
+      let consentId: number | null = null;
+      for (const log of receipt.logs) {
         try {
-          // Log what we're sending for debugging
-          console.log('Granting batch consent:', {
-            count: totalConsents,
-            providers: providers.length,
-            dataTypes: dataTypes.length,
-            purposes: purposes.length,
-            expirationTimes: expirationTimes.length,
-            sampleProvider: providers[0],
-            sampleDataType: dataTypes[0],
-            samplePurpose: purposes[0],
-            sampleExpiration: expirationTimes[0],
-            expirationDate: expirationTime > 0 ? new Date(expirationTime * 1000).toISOString() : 'none',
-          });
-
-          // Validate all arrays have same length
-          if (providers.length !== dataTypes.length || 
-              providers.length !== purposes.length || 
-              providers.length !== expirationTimes.length) {
-            throw new Error('Array length mismatch. This should not happen.');
-          }
-
-          // Validate all provider addresses
-          for (let i = 0; i < providers.length; i++) {
-            if (!providers[i] || providers[i] === '0x0000000000000000000000000000000000000000') {
-              throw new Error(`Invalid provider address at index ${i}: ${providers[i]}`);
+          const parsed = contract.interface.parseLog(log);
+          if (parsed && parsed.name === 'ConsentGranted') {
+            // consentIds is the second argument (index 1), should be array with one element
+            const ids = parsed.args[1] as bigint[];
+            if (ids && Array.isArray(ids) && ids.length > 0) {
+              consentId = Number(ids[0]);
             }
-            if (!ethers.isAddress(providers[i])) {
-              throw new Error(`Invalid address format at index ${i}: ${providers[i]}`);
-            }
+            break;
           }
-
-          const tx = await contract.grantConsentBatch(
-            providers,
-            dataTypes,
-            expirationTimes,
-            purposes
-          );
-
-          const receipt = await waitForTransaction(tx);
-
-        // Extract consent IDs from batch event
-        let consentIds: number[] = [];
-        for (const log of receipt.logs) {
-          try {
-            const parsed = contract.interface.parseLog(log);
-            if (parsed && parsed.name === 'ConsentBatchGranted') {
-              // Event signature: ConsentBatchGranted(address indexed patient, uint256[] consentIds, uint128 timestamp)
-              // consentIds is the second argument (index 1)
-              const ids = parsed.args[1] as bigint[];
-              if (ids && Array.isArray(ids)) {
-                consentIds = ids.map((id) => Number(id));
-              }
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-
-          return {
-            consentIds,
-            transactionHash: receipt.hash,
-            blockNumber: receipt.blockNumber,
-            gasUsed: receipt.gasUsed.toString(),
-          };
-        } catch (error: any) {
-          // Try to decode the error - ethers v6 error handling
-          let errorMessage = error.message || 'Unknown error';
-          
-          // Log full error for debugging
-          console.error('Grant consent error details:', {
-            message: error.message,
-            reason: error.reason,
-            shortMessage: error.shortMessage,
-            data: error.data,
-            code: error.code,
-            cause: error.cause,
-          });
-          
-          // Check for ethers v6 error properties
-          if (error.reason) {
-            errorMessage = error.reason;
-          } else if (error.shortMessage) {
-            errorMessage = error.shortMessage;
-          } else if (error.data) {
-            // Try to decode error data using contract interface
-            try {
-              const iface = contract.interface;
-              // Try to parse as a custom error
-              const decoded = iface.parseError(error.data);
-              if (decoded) {
-                errorMessage = `${decoded.name}: ${decoded.args.join(', ')}`;
-              } else if (error.data === '0x' || error.data.length < 10) {
-                // Empty error data - likely a require(false) or similar
-                errorMessage = 'Transaction reverted. Please check: expiration date must be in the future, provider addresses must be valid, and you cannot grant consent to yourself.';
-              } else {
-                errorMessage = `Contract revert: ${error.data.slice(0, 20)}...`;
-              }
-            } catch (decodeError) {
-              // If we can't decode, provide helpful message
-              if (error.data === '0x' || error.data.length < 10) {
-                errorMessage = 'Transaction reverted. Please verify: expiration date is in the future, all provider addresses are valid, and you are not granting consent to yourself.';
-              } else {
-                errorMessage = `Contract error (unable to decode): ${error.data.slice(0, 30)}...`;
-              }
-            }
-          } else if (error.message?.includes('revert') || error.message?.includes('reverted')) {
-            errorMessage = 'Transaction reverted. Please check your selections and try again.';
-          }
-          
-          // Re-throw with decoded message
-          throw new Error(errorMessage);
+        } catch {
+          continue;
         }
       }
+
+      return {
+        consentIds: consentId ? [consentId] : [],
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+      };
     },
     onSuccess: (data) => {
       const count = data.consentIds.length;

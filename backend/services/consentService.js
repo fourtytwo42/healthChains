@@ -280,125 +280,55 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      // Check if it's a batch consent
-      const isBatch = await contract.isBatchConsent(consentId);
+      // Fetch consent record (always returns BatchConsentRecord, with backward compatibility for old ConsentRecords)
+      const result = await Promise.race([
+        contract.getConsentRecord(consentId),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 30000)
+        )
+      ]);
       
-      let result;
-      if (isBatch) {
-        // Fetch batch consent record
-        result = await Promise.race([
-          contract.getBatchConsentRecord(consentId),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), 30000)
-          )
-        ]);
-        
-        // Transform batch consent
-        const batchRecord = result;
-        
-        // Look up strings from hashes for all data types and purposes
-        const dataTypes = await Promise.all(
-          batchRecord.dataTypeHashes.map(async (hash) => {
-            try {
-              return await contract.dataTypeHashToString(hash);
-            } catch (error) {
-              console.warn('Failed to look up dataType from hash:', error.message);
-              return hash; // Fallback to hash as string
-            }
-          })
-        );
-        
-        const purposes = await Promise.all(
-          batchRecord.purposeHashes.map(async (hash) => {
-            try {
-              return await contract.purposeHashToString(hash);
-            } catch (error) {
-              console.warn('Failed to look up purpose from hash:', error.message);
-              return hash; // Fallback to hash as string
-            }
-          })
-        );
-        
-        return {
-          consentId: Number(consentId),
-          patientAddress: ethers.getAddress(batchRecord.patientAddress),
-          providerAddress: ethers.getAddress(batchRecord.providerAddress),
-          timestamp: new Date(Number(batchRecord.timestamp) * 1000).toISOString(),
-          expirationTime: batchRecord.expirationTime === 0n 
-            ? null 
-            : new Date(Number(batchRecord.expirationTime) * 1000).toISOString(),
-          isActive: batchRecord.isActive,
-          dataTypes: dataTypes,
-          purposes: purposes,
-          isBatch: true,
-          isExpired: batchRecord.expirationTime !== 0n && 
-                     Number(batchRecord.expirationTime) < Math.floor(Date.now() / 1000)
-        };
-      } else {
-        // Fetch regular consent record
-        result = await Promise.race([
-          contract.getConsentRecord(consentId),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), 30000)
-          )
-        ]);
-
-        // Handle ethers v6 return format (may be object with named properties or array)
-        let record;
-        if (result && typeof result === 'object') {
-          if (result.patientAddress !== undefined) {
-            // Named struct return
-            record = result;
-          } else if (Array.isArray(result)) {
-            // Array return - convert to object (new format with hashes)
-            record = {
-              patientAddress: result[0],
-              providerAddress: result[1],
-              timestamp: result[2],
-              expirationTime: result[3],
-              isActive: result[4],
-              dataTypeHash: result[5],  // bytes32 hash
-              purposeHash: result[6]   // bytes32 hash
-            };
-          } else {
-            // Try indexed access
-            record = {
-              patientAddress: result[0] || result.patientAddress,
-              providerAddress: result[1] || result.providerAddress,
-              timestamp: result[2] || result.timestamp,
-              expirationTime: result[3] || result.expirationTime,
-              isActive: result[4] !== undefined ? result[4] : result.isActive,
-              dataTypeHash: result[5] || result.dataTypeHash,
-              purposeHash: result[6] || result.purposeHash,
-              // Backward compatibility
-              dataType: result.dataType,
-              purpose: result.purpose
-            };
-          }
-        } else {
-          throw new Error('Unexpected result format from getConsentRecord');
-        }
-
-        // Look up strings from hashes if needed
-        if (record.dataTypeHash && !record.dataType) {
+      // getConsentRecord always returns BatchConsentRecord (new format)
+      const batchRecord = result;
+      
+      // Look up strings from hashes for all data types and purposes
+      const dataTypes = await Promise.all(
+        batchRecord.dataTypeHashes.map(async (hash) => {
           try {
-            record.dataType = await contract.dataTypeHashToString(record.dataTypeHash);
+            return await contract.dataTypeHashToString(hash);
           } catch (error) {
             console.warn('Failed to look up dataType from hash:', error.message);
-            record.dataType = record.dataTypeHash; // Fallback to hash as string
+            return hash; // Fallback to hash as string
           }
-        }
-        if (record.purposeHash && !record.purpose) {
+        })
+      );
+      
+      const purposes = await Promise.all(
+        batchRecord.purposeHashes.map(async (hash) => {
           try {
-            record.purpose = await contract.purposeHashToString(record.purposeHash);
+            return await contract.purposeHashToString(hash);
           } catch (error) {
             console.warn('Failed to look up purpose from hash:', error.message);
-            record.purpose = record.purposeHash; // Fallback to hash as string
+            return hash; // Fallback to hash as string
           }
-        }
-
-        return this._transformConsentRecord(record, consentId);
-      }
+        })
+      );
+      
+      return {
+        consentId: Number(consentId),
+        patientAddress: ethers.getAddress(batchRecord.patientAddress),
+        providerAddress: ethers.getAddress(batchRecord.providerAddress),
+        timestamp: new Date(Number(batchRecord.timestamp) * 1000).toISOString(),
+        expirationTime: batchRecord.expirationTime === 0n 
+          ? null 
+          : new Date(Number(batchRecord.expirationTime) * 1000).toISOString(),
+        isActive: batchRecord.isActive,
+        dataTypes: dataTypes,
+        purposes: purposes,
+        isBatch: true,
+        isExpired: batchRecord.expirationTime !== 0n && 
+                   Number(batchRecord.expirationTime) < Math.floor(Date.now() / 1000)
+      };
     } catch (error) {
       if (error.code === 'CALL_EXCEPTION' || error.reason === 'ConsentNotFound()') {
         throw new NotFoundError('Consent', consentId);
@@ -487,43 +417,23 @@ class ConsentService {
     try {
       const contract = await this._ensureContract();
       
-      // Query ConsentGranted events filtered by provider address
-      // ConsentGranted event: (uint256 indexed consentId, address indexed patient, address indexed provider, ...)
-      const grantedFilter = contract.filters.ConsentGranted(null, null, normalizedAddress);
-      
-      // Query ConsentBatchGranted events (no provider filter, we'll filter by checking consent records)
-      // ConsentBatchGranted event: (address indexed patient, uint256[] consentIds, uint128 timestamp)
-      const batchFilter = contract.filters.ConsentBatchGranted(null);
+      // Query ConsentGranted events (new format: address indexed patient, uint256[] consentIds, uint128 timestamp)
+      // We query all events and filter by provider address after fetching records
+      const consentFilter = contract.filters.ConsentGranted(null);
       
       // Query from deployment block to latest
       const fromBlock = 0; // Start from contract deployment
       const toBlock = 'latest';
       
-      // Query both event types
-      const [grantedEvents, batchEvents] = await Promise.all([
-        contract.queryFilter(grantedFilter, fromBlock, toBlock),
-        contract.queryFilter(batchFilter, fromBlock, toBlock)
-      ]);
+      // Query ConsentGranted events
+      const consentEvents = await contract.queryFilter(consentFilter, fromBlock, toBlock);
       
       // Transform ConsentGranted events to consent records
-      const grantedConsents = await Promise.all(
-        grantedEvents.map(async (event) => {
-          const consentId = Number(event.args.consentId);
-          try {
-            return await this.getConsentRecord(consentId);
-          } catch (error) {
-            // Consent might have been revoked or doesn't exist
-            return null;
-          }
-        })
-      );
-
-      // Transform ConsentBatchGranted events to consent records
-      // For each batch event, check all consent IDs to see if they belong to this provider
-      const batchConsentsArrays = await Promise.all(
-        batchEvents.map(async (event) => {
+      // For each event, check all consent IDs to see if they belong to this provider
+      const consentArrays = await Promise.all(
+        consentEvents.map(async (event) => {
           const consentIds = event.args.consentIds || [];
-          // For each consent ID in the batch, fetch the record and check if provider matches
+          // For each consent ID, fetch the record and check if provider matches
           return Promise.all(
             consentIds.map(async (consentIdBigInt) => {
               const consentId = Number(consentIdBigInt);
@@ -543,11 +453,8 @@ class ConsentService {
         })
       );
 
-      // Flatten batch consents array (it's an array of arrays)
-      const flattenedBatchConsents = batchConsentsArrays.flat();
-
-      // Combine both types of consents
-      const allConsents = [...grantedConsents, ...flattenedBatchConsents];
+      // Flatten consents array (it's an array of arrays)
+      const allConsents = consentArrays.flat();
 
       // Filter out nulls and by expiration if needed
       let filtered = allConsents.filter(c => c !== null);
@@ -1339,7 +1246,7 @@ class ConsentService {
   }
 
   /**
-   * Query batch consent events (ConsentBatchGranted)
+   * Query consent events (ConsentGranted)
    * 
    * @param {string} patientAddress - Optional patient address filter
    * @param {number} fromBlock - Starting block number (optional)
@@ -1385,16 +1292,16 @@ class ConsentService {
         filter.toBlock = toBlock;
       }
 
-      // Query ConsentBatchGranted events
+      // Query ConsentGranted events
       const batchEvents = await contract.queryFilter(
-        contract.filters.ConsentBatchGranted(filter.patient),
+        contract.filters.ConsentGranted(filter.patient),
         filter.fromBlock,
         filter.toBlock
       );
 
       // Transform events
       const events = batchEvents.map(event => ({
-        type: 'ConsentBatchGranted',
+        type: 'ConsentGranted',
         blockNumber: event.blockNumber,
         transactionHash: event.transactionHash,
         patient: ethers.getAddress(event.args.patient),

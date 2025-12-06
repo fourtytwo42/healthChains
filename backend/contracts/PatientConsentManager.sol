@@ -226,21 +226,13 @@ contract PatientConsentManager is ReentrancyGuard {
     
     /**
      * @notice Emitted when a patient grants consent to a provider
-     * @param consentId Unique identifier for the consent record
      * @param patient Address of the patient granting consent
-     * @param provider Address of the provider receiving consent
-     * @param dataTypeHash Hash of data type (keccak256 of original string)
-     * @param expirationTime When consent expires (0 = no expiration)
-     * @param purposeHash Hash of purpose (keccak256 of original string)
+     * @param consentIds Array of consent IDs created (typically one BatchConsentRecord)
      * @param timestamp Block timestamp when consent was granted
      */
     event ConsentGranted(
-        uint256 indexed consentId,
         address indexed patient,
-        address indexed provider,
-        bytes32 dataTypeHash,
-        uint128 expirationTime,
-        bytes32 purposeHash,
+        uint256[] consentIds,
         uint128 timestamp
     );
 
@@ -253,18 +245,6 @@ contract PatientConsentManager is ReentrancyGuard {
     event ConsentRevoked(
         uint256 indexed consentId,
         address indexed patient,
-        uint128 timestamp
-    );
-
-    /**
-     * @notice Emitted when multiple consents are granted in a batch operation
-     * @param patient Address of the patient granting consents
-     * @param consentIds Array of consent IDs created in this batch
-     * @param timestamp Block timestamp when batch was processed
-     */
-    event ConsentBatchGranted(
-        address indexed patient,
-        uint256[] consentIds,
         uint128 timestamp
     );
 
@@ -359,44 +339,68 @@ contract PatientConsentManager is ReentrancyGuard {
     
     /**
      * @notice Grants consent for a provider to access specific patient data
-     * @dev Implements Checks-Effects-Interactions pattern for security.
-     *      Validates all inputs, creates consent record, updates mappings, and emits event.
+     * @dev Creates a BatchConsentRecord with arrays of data types and purposes.
+     *      Works for single or multiple data types/purposes - always uses BatchConsentRecord struct.
+     *      Implements Checks-Effects-Interactions pattern for security.
      *      Protected by ReentrancyGuard to prevent reentrancy attacks.
      * 
      * @param provider Address of the healthcare provider receiving consent (must be non-zero)
-     * @param dataType Type of data being consented to (e.g., "medical_records", "genetic_data")
+     * @param dataTypes Array of data types being consented to (e.g., ["medical_records", "genetic_data"])
      * @param expirationTime Unix timestamp when consent expires; 0 means no expiration
      *                      Must be in the future if non-zero
-     * @param purpose Purpose for which data will be used (e.g., "treatment", "research")
+     * @param purposes Array of purposes for which data will be used (e.g., ["treatment", "research"])
      * @return consentId Unique identifier for the created consent record
      * 
      * @custom:security
      * - Validates provider is not zero address
      * - Validates provider is not the caller (patient cannot grant consent to self)
-     * - Validates strings are not empty and within length limits
+     * - Validates arrays are not empty and within length limits
+     * - Validates all strings are not empty and within length limits
      * - Validates expiration time is in the future if non-zero
+     * - Validates total combinations (dataTypes.length × purposes.length) don't exceed MAX_BATCH_SIZE
      * - Protected by ReentrancyGuard
      * 
      * @custom:gas-optimization
+     * - Uses BatchConsentRecord struct (efficient for single or multiple items)
+     * - Stores arrays of hashes instead of individual records
+     * - Single struct write regardless of number of combinations
      * - Uses uint128 for timestamps (saves storage gas)
      * - Uses custom errors instead of require strings
-     * - Uses unchecked block for counter increment (safe in Solidity 0.8+)
      */
     function grantConsent(
         address provider,
-        string memory dataType,
+        string[] calldata dataTypes,
         uint256 expirationTime,
-        string memory purpose
+        string[] calldata purposes
     ) 
         external 
         nonReentrant
         validAddress(provider)
-        validString(dataType)
-        validString(purpose)
         returns (uint256 consentId) 
     {
         // Additional validation: cannot grant consent to self
         if (provider == msg.sender) revert CannotGrantConsentToSelf();
+        
+        // Validate arrays are not empty
+        uint256 dataTypesLength = dataTypes.length;
+        uint256 purposesLength = purposes.length;
+        
+        if (dataTypesLength == 0) revert EmptyBatch();
+        if (purposesLength == 0) revert EmptyBatch();
+        
+        // Check bounds before multiplication to prevent overflow
+        if (dataTypesLength > MAX_BATCH_SIZE) {
+            revert BatchSizeExceeded(dataTypesLength, MAX_BATCH_SIZE);
+        }
+        if (purposesLength > MAX_BATCH_SIZE) {
+            revert BatchSizeExceeded(purposesLength, MAX_BATCH_SIZE);
+        }
+        
+        // Now safe to multiply (max: 200 * 200 = 40,000, well below uint256 max)
+        uint256 totalCombinations = dataTypesLength * purposesLength;
+        if (totalCombinations > MAX_BATCH_SIZE) {
+            revert BatchSizeExceeded(totalCombinations, MAX_BATCH_SIZE);
+        }
         
         // Validate expiration time is in the future if non-zero
         if (expirationTime > 0 && expirationTime < block.timestamp) {
@@ -408,159 +412,77 @@ contract PatientConsentManager is ReentrancyGuard {
             revert ExpirationTooLarge(expirationTime, MAX_UINT128);
         }
         
-        // Safe to use unchecked for counter increment (Solidity 0.8+ has overflow protection)
-        // But we still check bounds to prevent issues
+        // Validate all data types and purposes
+        for (uint256 i = 0; i < dataTypesLength; ) {
+            if (bytes(dataTypes[i]).length == 0) revert EmptyString();
+            if (bytes(dataTypes[i]).length > MAX_STRING_LENGTH) revert StringTooLong();
+            unchecked { i++; }
+        }
+        
+        for (uint256 i = 0; i < purposesLength; ) {
+            if (bytes(purposes[i]).length == 0) revert EmptyString();
+            if (bytes(purposes[i]).length > MAX_STRING_LENGTH) revert StringTooLong();
+            unchecked { i++; }
+        }
+        
+        // Generate consent ID
         unchecked {
             consentId = consentCounter++;
         }
         
-        // Compute hashes for gas-efficient storage
-        bytes32 dataTypeHash = keccak256(bytes(dataType));
-        bytes32 purposeHash = keccak256(bytes(purpose));
+        // Mark as batch consent
+        isBatchConsent[consentId] = true;
         
-        // Store string mappings (only if not already stored - saves gas on duplicates)
-        // Use bool mapping for efficient existence check
-        if (!_dataTypeHashExists[dataTypeHash]) {
-            _dataTypeHashExists[dataTypeHash] = true;
-            dataTypeHashToString[dataTypeHash] = dataType;
+        // Compute hashes for all data types and purposes
+        bytes32[] memory dataTypeHashes = new bytes32[](dataTypesLength);
+        bytes32[] memory purposeHashes = new bytes32[](purposesLength);
+        
+        for (uint256 i = 0; i < dataTypesLength; ) {
+            bytes32 hash = keccak256(bytes(dataTypes[i]));
+            dataTypeHashes[i] = hash;
+            // Store string mapping only if not already stored
+            if (!_dataTypeHashExists[hash]) {
+                _dataTypeHashExists[hash] = true;
+                dataTypeHashToString[hash] = dataTypes[i];
+            }
+            unchecked { i++; }
         }
-        if (!_purposeHashExists[purposeHash]) {
-            _purposeHashExists[purposeHash] = true;
-            purposeHashToString[purposeHash] = purpose;
+        
+        for (uint256 i = 0; i < purposesLength; ) {
+            bytes32 hash = keccak256(bytes(purposes[i]));
+            purposeHashes[i] = hash;
+            // Store string mapping only if not already stored
+            if (!_purposeHashExists[hash]) {
+                _purposeHashExists[hash] = true;
+                purposeHashToString[hash] = purposes[i];
+            }
+            unchecked { i++; }
         }
         
-        // Create consent record with optimized storage layout
-        ConsentRecord storage consent = consentRecords[consentId];
-        consent.patientAddress = msg.sender;
-        consent.providerAddress = provider;
-        consent.timestamp = uint128(block.timestamp);
-        consent.expirationTime = uint128(expirationTime);
-        consent.isActive = true;
-        consent.dataTypeHash = dataTypeHash;
-        consent.purposeHash = purposeHash;
-        
-        // Note: We don't need _consentExists mapping - we can check if patientAddress is non-zero
-        // This saves one storage write per consent
+        // Create BatchConsentRecord (works for single or multiple items)
+        BatchConsentRecord storage batchConsent = batchConsentRecords[consentId];
+        batchConsent.patientAddress = msg.sender;
+        batchConsent.providerAddress = provider;
+        batchConsent.timestamp = uint128(block.timestamp);
+        batchConsent.expirationTime = uint128(expirationTime);
+        batchConsent.isActive = true;
+        batchConsent.dataTypeHashes = dataTypeHashes;
+        batchConsent.purposeHashes = purposeHashes;
         
         // Update patient and provider consent arrays
         patientConsents[msg.sender].push(consentId);
         providerConsents[provider].push(consentId);
         
-        // Emit event with hashes (much cheaper than strings)
+        // Emit event with single consent ID
+        uint256[] memory consentIds = new uint256[](1);
+        consentIds[0] = consentId;
         emit ConsentGranted(
-            consentId,
-            msg.sender,
-            provider,
-            dataTypeHash,
-            uint128(expirationTime),
-            purposeHash,
-            uint128(block.timestamp)
-        );
-        
-        return consentId;
-    }
-
-    /**
-     * @notice Grants multiple consents in a single transaction (batch operation)
-     * @dev Significantly more gas-efficient than multiple individual grantConsent calls.
-     *      Processes all consents or reverts if any validation fails.
-     *      Each consent in the batch follows the same validation rules as grantConsent.
-     * 
-     * @param providers Array of provider addresses receiving consent
-     * @param dataTypes Array of data types for each consent (must match providers length)
-     * @param expirationTimes Array of expiration times for each consent (must match providers length)
-     * @param purposes Array of purposes for each consent (must match providers length)
-     * @return consentIds Array of consent IDs created in this batch
-     * 
-     * @custom:security
-     * - All arrays must have the same length
-     * - All validations from grantConsent apply to each item
-     * - Batch size limited to MAX_BATCH_SIZE to prevent gas limit issues
-     * - Protected by ReentrancyGuard
-     * 
-     * @custom:gas-optimization
-     * - Single transaction overhead instead of multiple
-     * - Shared storage operations
-     * - More efficient event emission
-     * - Estimated 40-60% gas savings for batch of 10 consents
-     */
-    function grantConsentBatch(
-        address[] calldata providers,
-        string[] calldata dataTypes,
-        uint256[] calldata expirationTimes,
-        string[] calldata purposes
-    )
-        external
-        nonReentrant
-        returns (uint256[] memory consentIds)
-    {
-        uint256 batchSize = providers.length;
-        uint256 dataTypesLength = dataTypes.length;
-        uint256 expirationTimesLength = expirationTimes.length;
-        uint256 purposesLength = purposes.length;
-        
-        // Validate batch size
-        if (batchSize == 0) revert EmptyBatch();
-        if (batchSize > MAX_BATCH_SIZE) {
-            revert BatchSizeExceeded(batchSize, MAX_BATCH_SIZE);
-        }
-        
-        // Validate individual array lengths (defensive programming)
-        if (dataTypesLength > MAX_BATCH_SIZE) {
-            revert BatchSizeExceeded(dataTypesLength, MAX_BATCH_SIZE);
-        }
-        if (expirationTimesLength > MAX_BATCH_SIZE) {
-            revert BatchSizeExceeded(expirationTimesLength, MAX_BATCH_SIZE);
-        }
-        if (purposesLength > MAX_BATCH_SIZE) {
-            revert BatchSizeExceeded(purposesLength, MAX_BATCH_SIZE);
-        }
-        
-        // Validate all arrays have same length
-        if (batchSize != dataTypesLength || 
-            batchSize != expirationTimesLength || 
-            batchSize != purposesLength) {
-            revert ArrayLengthMismatch(
-                batchSize,
-                dataTypesLength,
-                expirationTimesLength,
-                purposesLength
-            );
-        }
-        
-        // Allocate memory for consent IDs
-        consentIds = new uint256[](batchSize);
-        
-        // Cache current counter to avoid multiple storage reads
-        uint256 currentCounter = consentCounter;
-        
-        // Process each consent in the batch
-        for (uint256 i = 0; i < batchSize; ) {
-            consentIds[i] = _createConsentRecord(
-                providers[i],
-                dataTypes[i],
-                expirationTimes[i],
-                purposes[i],
-                currentCounter
-            );
-            
-            unchecked {
-                currentCounter++;
-                i++;
-            }
-        }
-        
-        // Update counter once after batch
-        consentCounter = currentCounter;
-        
-        // Emit batch event for efficient batch queries
-        emit ConsentBatchGranted(
             msg.sender,
             consentIds,
             uint128(block.timestamp)
         );
         
-        return consentIds;
+        return consentId;
     }
 
     /**
@@ -876,10 +798,10 @@ contract PatientConsentManager is ReentrancyGuard {
                 patientConsents[msg.sender].push(batchConsentId);
                 providerConsents[request.requester].push(batchConsentId);
                 
-                // Emit batch event with single consent ID
+                // Emit event with single consent ID
                 uint256[] memory consentIds = new uint256[](1);
                 consentIds[0] = batchConsentId;
-                emit ConsentBatchGranted(
+                emit ConsentGranted(
                     msg.sender,
                     consentIds,
                     uint128(block.timestamp)
@@ -890,106 +812,6 @@ contract PatientConsentManager is ReentrancyGuard {
             emit AccessDenied(requestId, msg.sender, uint128(block.timestamp));
         }
     }
-
-    // ==================== INTERNAL HELPER FUNCTIONS ====================
-    
-    /**
-     * @notice Internal helper to create a consent record
-     * @dev Reduces stack depth by encapsulating consent creation logic.
-     *      Validates all inputs, creates consent record, updates mappings, and emits event.
-     *      Uses string storage (for backward compatibility with grantConsent).
-     * 
-     * @param provider Address of the healthcare provider receiving consent (must be non-zero, not self)
-     * @param dataType Type of data being consented to (must be non-empty, <= MAX_STRING_LENGTH)
-     * @param expirationTime Unix timestamp when consent expires; 0 means no expiration.
-     *                      Must be in the future if non-zero, and must fit in uint128.
-     * @param purpose Purpose for which data will be used (must be non-empty, <= MAX_STRING_LENGTH)
-     * @param consentId ID to use for this consent (should be from consentCounter)
-     * @return The consent ID created (same as input consentId)
-     * 
-     * @custom:security
-     * - Validates provider is not zero address
-     * - Validates provider is not the caller (patient cannot grant consent to self)
-     * - Validates strings are not empty and within length limits
-     * - Validates expiration time is in the future if non-zero
-     * - Validates expiration time fits in uint128
-     * 
-     * @custom:gas-optimization
-     * - Uses bool mappings for efficient string existence checks
-     * - Uses uint128 for timestamps (saves storage gas)
-     * - Only stores string mappings if not already stored
-     */
-    function _createConsentRecord(
-        address provider,
-        string memory dataType,
-        uint256 expirationTime,
-        string memory purpose,
-        uint256 consentId
-    ) internal returns (uint256) {
-        // Validate provider address
-        if (provider == address(0)) revert InvalidAddress();
-        if (provider == msg.sender) revert CannotGrantConsentToSelf();
-        
-        // Validate strings
-        if (bytes(dataType).length == 0) revert EmptyString();
-        if (bytes(dataType).length > MAX_STRING_LENGTH) revert StringTooLong();
-        if (bytes(purpose).length == 0) revert EmptyString();
-        if (bytes(purpose).length > MAX_STRING_LENGTH) revert StringTooLong();
-        
-        // Validate expiration time
-        if (expirationTime > 0 && expirationTime < block.timestamp) {
-            revert ExpirationInPast();
-        }
-        
-        // Validate expiration time fits in uint128
-        if (expirationTime > MAX_UINT128) {
-            revert ExpirationTooLarge(expirationTime, MAX_UINT128);
-        }
-        
-        // Compute hashes
-        bytes32 dataTypeHash = keccak256(bytes(dataType));
-        bytes32 purposeHash = keccak256(bytes(purpose));
-        
-        // Store string mappings (only if not already stored - use bool mapping for efficiency)
-        if (!_dataTypeHashExists[dataTypeHash]) {
-            _dataTypeHashExists[dataTypeHash] = true;
-            dataTypeHashToString[dataTypeHash] = dataType;
-        }
-        if (!_purposeHashExists[purposeHash]) {
-            _purposeHashExists[purposeHash] = true;
-            purposeHashToString[purposeHash] = purpose;
-        }
-        
-        // Create consent record
-        ConsentRecord storage consent = consentRecords[consentId];
-        consent.patientAddress = msg.sender;
-        consent.providerAddress = provider;
-        consent.timestamp = uint128(block.timestamp);
-        consent.expirationTime = uint128(expirationTime);
-        consent.isActive = true;
-        consent.dataTypeHash = dataTypeHash;
-        consent.purposeHash = purposeHash;
-        
-        // Note: We don't need _consentExists mapping - we can check if patientAddress is non-zero
-        
-        // Update arrays
-        patientConsents[msg.sender].push(consentId);
-        providerConsents[provider].push(consentId);
-        
-        // Emit event with hashes
-        emit ConsentGranted(
-            consentId,
-            msg.sender,
-            provider,
-            dataTypeHash,
-            uint128(expirationTime),
-            purposeHash,
-            uint128(block.timestamp)
-        );
-        
-        return consentId;
-    }
-
 
     // ==================== VIEW FUNCTIONS ====================
     
@@ -1054,43 +876,46 @@ contract PatientConsentManager is ReentrancyGuard {
 
     /**
      * @notice Gets detailed consent record information
-     * @dev Returns complete consent record including all fields
+     * @dev Returns complete consent record including all fields.
+     *      Handles both old ConsentRecord (for backward compatibility) and new BatchConsentRecord.
+     *      New consents always use BatchConsentRecord.
      * 
      * @param consentId Unique identifier of the consent
-     * @return Complete consent record struct
+     * @return Complete consent record struct (BatchConsentRecord for new consents, ConsentRecord for old)
      */
     function getConsentRecord(uint256 consentId) 
         external 
         view 
-        returns (ConsentRecord memory) 
-    {
-        // Batch consents cannot be returned as ConsentRecord - use getBatchConsentRecord instead
-        if (isBatchConsent[consentId]) revert ConsentNotFound();
-        
-        ConsentRecord memory consent = consentRecords[consentId];
-        // Check if consent exists (patientAddress is non-zero)
-        if (consent.patientAddress == address(0)) revert ConsentNotFound();
-        return consent;
-    }
-    
-    /**
-     * @notice Gets detailed batch consent record information
-     * @dev Returns complete batch consent record including all fields
-     * 
-     * @param consentId Unique identifier of the batch consent
-     * @return Complete batch consent record struct
-     */
-    function getBatchConsentRecord(uint256 consentId) 
-        external 
-        view 
         returns (BatchConsentRecord memory) 
     {
-        if (!isBatchConsent[consentId]) revert ConsentNotFound();
+        // Check if it's a batch consent (new format - always used for new consents)
+        if (isBatchConsent[consentId]) {
+            BatchConsentRecord memory batchConsent = batchConsentRecords[consentId];
+            // Check if consent exists (patientAddress is non-zero)
+            if (batchConsent.patientAddress == address(0)) revert ConsentNotFound();
+            return batchConsent;
+        }
         
-        BatchConsentRecord memory batchConsent = batchConsentRecords[consentId];
+        // Backward compatibility: convert old ConsentRecord to BatchConsentRecord format
+        ConsentRecord memory oldConsent = consentRecords[consentId];
         // Check if consent exists (patientAddress is non-zero)
-        if (batchConsent.patientAddress == address(0)) revert ConsentNotFound();
-        return batchConsent;
+        if (oldConsent.patientAddress == address(0)) revert ConsentNotFound();
+        
+        // Convert old format to new format for consistent API
+        bytes32[] memory dataTypeHashes = new bytes32[](1);
+        dataTypeHashes[0] = oldConsent.dataTypeHash;
+        bytes32[] memory purposeHashes = new bytes32[](1);
+        purposeHashes[0] = oldConsent.purposeHash;
+        
+        return BatchConsentRecord({
+            patientAddress: oldConsent.patientAddress,
+            providerAddress: oldConsent.providerAddress,
+            timestamp: oldConsent.timestamp,
+            expirationTime: oldConsent.expirationTime,
+            isActive: oldConsent.isActive,
+            dataTypeHashes: dataTypeHashes,
+            purposeHashes: purposeHashes
+        });
     }
 
     /**
