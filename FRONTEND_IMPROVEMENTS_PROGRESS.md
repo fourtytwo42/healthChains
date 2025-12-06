@@ -68,10 +68,18 @@
 ### 9. TypeScript Improvements ✅
 - Replaced remaining `any` types:
   - Created `types/consent.ts` with proper type definitions
+  - Created `types/patient.ts` with comprehensive patient data type definitions
   - Replaced `selectedHistoryEvent: any | null` with `ConsentHistoryEvent | null`
   - Replaced `any` types in filter functions with proper types
   - Added type definitions for `ConsentHistoryEvent`, `AccessRequest`, `ProviderPatient`, `PaginatedResponse`
+  - Added type definitions for `Demographics`, `VitalSign`, `Medication`, `MedicalCondition`, `Allergy`, `LaboratoryResult`, `ImagingStudy`, `GeneticData`, `ConsentedData`, `ProviderPatientData`
   - Fixed type errors in hooks and component props
+  - Replaced all `any` types in:
+    - `hooks/patient/use-patient-data.ts` (30 instances)
+    - `components/provider/patient-details-card.tsx` (27 instances)
+    - `hooks/provider/use-provider-dashboard.ts` (29 instances)
+    - `components/provider/dashboard/provider-granted-consents.tsx` (13 instances)
+  - **Total**: Replaced ~99 `any` types across 4 files
 
 ### 10. Additional ARIA Labels ✅
 - Added `aria-label` to:

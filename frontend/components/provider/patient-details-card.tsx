@@ -21,6 +21,19 @@ import { PatientDetailsHeader } from './patient-details/patient-details-header';
 import { VitalSignsChart } from './patient-details/vital-signs-chart';
 import { MedicalDataSection } from './patient-details/medical-data-section';
 import { ExportPrintControls } from './patient-details/export-print-controls';
+import type {
+  VitalSign,
+  Medication,
+  MedicalCondition,
+  Allergy,
+  LaboratoryResult,
+  ImagingStudy,
+  GeneticData,
+  GeneticVariant,
+  DiagnosticData,
+  MedicalRecords,
+  TreatmentHistory,
+} from '@/types/patient';
 
 interface PatientDetailsCardProps {
   patientId: string;
@@ -133,7 +146,7 @@ export function PatientDetailsCard({
               icon={Heart}
               dataType="vital_signs"
               hasData={!!consentedData.vital_signs}
-              isEmpty={!consentedData.vital_signs || (consentedData.vital_signs as any[]).length === 0}
+              isEmpty={!consentedData.vital_signs || (consentedData.vital_signs as VitalSign[]).length === 0}
               hasConsent={hasConsentForDataType('vital_signs')}
               consents={getConsentForDataType('vital_signs')}
               isExpanded={expandedSection === 'vital_signs'}
@@ -146,7 +159,7 @@ export function PatientDetailsCard({
                 
                 {/* Paginated Readings Section */}
                 {(() => {
-                  const allReadings = ((consentedData.vital_signs as any) || []).slice().reverse();
+                  const allReadings = ((consentedData.vital_signs as VitalSign[]) || []).slice().reverse();
                   const totalReadings = allReadings.length;
                   const readingsPerPage = 3;
                   const totalPages = Math.ceil(totalReadings / readingsPerPage);
@@ -172,7 +185,7 @@ export function PatientDetailsCard({
                       )}
                       
                       <div className="grid grid-cols-3 gap-2 text-xs flex-1">
-                        {currentReadings.map((vital: any, idx: number) => (
+                        {currentReadings.map((vital: VitalSign, idx: number) => (
                           <div key={startIndex + idx} className="border rounded p-2">
                             <p className="text-muted-foreground mb-1">
                               {format(new Date(vital.timestamp), 'MMM d, yyyy')}
@@ -209,14 +222,14 @@ export function PatientDetailsCard({
               icon={Pill}
               dataType="prescription_history"
               hasData={!!consentedData.current_medications}
-              isEmpty={!consentedData.current_medications || (consentedData.current_medications as any[]).length === 0}
+              isEmpty={!consentedData.current_medications || (consentedData.current_medications as Medication[]).length === 0}
               hasConsent={hasConsentForDataType('prescription_history')}
               consents={getConsentForDataType('prescription_history')}
               isExpanded={expandedSection === 'medications'}
               onToggle={() => setExpandedSection(expandedSection === 'medications' ? null : 'medications')}
             >
               <div className="space-y-2">
-                {((consentedData.current_medications as any) || []).map((med: any, idx: number) => (
+                {((consentedData.current_medications as Medication[]) || []).map((med: Medication, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-2 border rounded">
                     <div>
                       <span className="font-medium text-sm">{med.name}</span>
@@ -238,22 +251,22 @@ export function PatientDetailsCard({
               title="Medical Records"
               icon={FileText}
               dataType="medical_records"
-              hasData={!!consentedData.medical_records || !!(consentedData.treatment_history as any)?.conditions}
+              hasData={!!consentedData.medical_records || !!(consentedData.treatment_history as TreatmentHistory | undefined)?.conditions}
               isEmpty={(!consentedData.medical_records || 
-                (!(consentedData.medical_records as any).conditions?.length && 
-                 !(consentedData.medical_records as any).allergies?.length)) &&
-                (!(consentedData.treatment_history as any)?.conditions?.length)}
+                (!(consentedData.medical_records as MedicalRecords | undefined)?.conditions?.length && 
+                 !(consentedData.medical_records as MedicalRecords | undefined)?.allergies?.length)) &&
+                (!(consentedData.treatment_history as TreatmentHistory | undefined)?.conditions?.length)}
               hasConsent={hasConsentForDataType('medical_records')}
               consents={getConsentForDataType('medical_records')}
               isExpanded={expandedSection === 'medical_records'}
               onToggle={() => setExpandedSection(expandedSection === 'medical_records' ? null : 'medical_records')}
             >
               <div className="space-y-3">
-                {((consentedData.medical_records as any)?.conditions || (consentedData.treatment_history as any)?.conditions) && (
+                {((consentedData.medical_records as MedicalRecords | undefined)?.conditions || (consentedData.treatment_history as TreatmentHistory | undefined)?.conditions) && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Conditions</h4>
                     <div className="space-y-2">
-                      {((consentedData.medical_records as any)?.conditions || (consentedData.treatment_history as any)?.conditions || []).map((condition: any, idx: number) => (
+                      {((consentedData.medical_records as MedicalRecords | undefined)?.conditions || (consentedData.treatment_history as TreatmentHistory | undefined)?.conditions || []).map((condition: MedicalCondition, idx: number) => (
                         <div key={idx} className="border rounded p-2">
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-medium text-sm">{condition.name}</span>
@@ -271,11 +284,11 @@ export function PatientDetailsCard({
                     </div>
                   </div>
                 )}
-                {(consentedData.medical_records as any)?.allergies && (
+                {(consentedData.medical_records as MedicalRecords | undefined)?.allergies && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Allergies</h4>
                     <div className="space-y-1">
-                      {((consentedData.medical_records as any).allergies || []).map((allergy: any, idx: number) => (
+                      {((consentedData.medical_records as MedicalRecords | undefined)?.allergies || []).map((allergy: Allergy, idx: number) => (
                         <div key={idx} className="text-sm">
                           <span className="font-medium">{allergy.allergen}</span>
                           {allergy.severity && <span className="text-muted-foreground ml-2">({allergy.severity})</span>}
@@ -292,16 +305,16 @@ export function PatientDetailsCard({
               title="Laboratory Results"
               icon={FlaskConical}
               dataType="laboratory_results"
-              hasData={!!consentedData.laboratory_results || !!(consentedData.diagnostic_data as any)?.laboratoryResults}
-              isEmpty={(!consentedData.laboratory_results || (consentedData.laboratory_results as any[]).length === 0) && 
-                       (!(consentedData.diagnostic_data as any)?.laboratoryResults || ((consentedData.diagnostic_data as any).laboratoryResults as any[]).length === 0)}
+              hasData={!!consentedData.laboratory_results || !!(consentedData.diagnostic_data as DiagnosticData | undefined)?.laboratoryResults}
+              isEmpty={(!consentedData.laboratory_results || (consentedData.laboratory_results as LaboratoryResult[]).length === 0) && 
+                       (!(consentedData.diagnostic_data as DiagnosticData | undefined)?.laboratoryResults || ((consentedData.diagnostic_data as DiagnosticData | undefined)?.laboratoryResults as LaboratoryResult[]).length === 0)}
               hasConsent={hasConsentForDataType('laboratory_results')}
               consents={getConsentForDataType('laboratory_results')}
               isExpanded={expandedSection === 'laboratory_results'}
               onToggle={() => setExpandedSection(expandedSection === 'laboratory_results' ? null : 'laboratory_results')}
             >
               <div className="space-y-2">
-                {((consentedData.laboratory_results || (consentedData.diagnostic_data as any)?.laboratoryResults) as any[] || []).map((lab: any, idx: number) => (
+                {((consentedData.laboratory_results || (consentedData.diagnostic_data as DiagnosticData | undefined)?.laboratoryResults) as LaboratoryResult[] || []).map((lab: LaboratoryResult, idx: number) => (
                   <div key={idx} className="border rounded p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm">{lab.testName}</span>
@@ -314,9 +327,9 @@ export function PatientDetailsCard({
                     )}
                     {lab.results && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        {Object.entries(lab.results).map(([key, value]: [string, any]) => (
+                        {Object.entries(lab.results || {}).map(([key, value]: [string, unknown]) => (
                           <div key={key} className="text-xs">
-                            <span className="text-muted-foreground">{key}:</span> <span className="font-medium">{value}</span>
+                            <span className="text-muted-foreground">{key}:</span> <span className="font-medium">{String(value)}</span>
                           </div>
                         ))}
                       </div>
@@ -331,21 +344,21 @@ export function PatientDetailsCard({
               title="Imaging Studies"
               icon={Scan}
               dataType="imaging_data"
-              hasData={!!consentedData.imaging_studies || !!(consentedData.diagnostic_data as any)?.imagingStudies || !!consentedData.imaging_data}
-              isEmpty={(!consentedData.imaging_studies || (consentedData.imaging_studies as any[]).length === 0) && 
-                       (!(consentedData.diagnostic_data as any)?.imagingStudies || ((consentedData.diagnostic_data as any).imagingStudies as any[]).length === 0) &&
-                       (!consentedData.imaging_data || (consentedData.imaging_data as any[]).length === 0)}
+              hasData={!!consentedData.imaging_studies || !!(consentedData.diagnostic_data as DiagnosticData | undefined)?.imagingStudies || !!consentedData.imaging_data}
+              isEmpty={(!consentedData.imaging_studies || (consentedData.imaging_studies as ImagingStudy[]).length === 0) && 
+                       (!(consentedData.diagnostic_data as DiagnosticData | undefined)?.imagingStudies || ((consentedData.diagnostic_data as DiagnosticData | undefined)?.imagingStudies as ImagingStudy[]).length === 0) &&
+                       (!consentedData.imaging_data || (consentedData.imaging_data as ImagingStudy[]).length === 0)}
               hasConsent={hasConsentForDataType('imaging_data')}
               consents={getConsentForDataType('imaging_data')}
               isExpanded={expandedSection === 'imaging_studies'}
               onToggle={() => setExpandedSection(expandedSection === 'imaging_studies' ? null : 'imaging_studies')}
             >
               <div className="space-y-2">
-                {((consentedData.imaging_studies || (consentedData.diagnostic_data as any)?.imagingStudies || consentedData.imaging_data) as any[] || []).map((study: any, idx: number) => (
+                {((consentedData.imaging_studies || (consentedData.diagnostic_data as DiagnosticData | undefined)?.imagingStudies || consentedData.imaging_data) as ImagingStudy[] || []).map((study: ImagingStudy, idx: number) => (
                   <div key={idx} className="border rounded p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm">{study.studyType}</span>
-                      <Badge variant="outline" className="text-xs">{study.modality}</Badge>
+                      {study.modality && <Badge variant="outline" className="text-xs">{study.modality}</Badge>}
                     </div>
                     {study.performedDate && (
                       <p className="text-xs text-muted-foreground mb-2">
@@ -374,11 +387,11 @@ export function PatientDetailsCard({
             >
               {consentedData.genetic_data && (
                 <div className="space-y-3">
-                  {(consentedData.genetic_data as any).variants && (
+                  {(consentedData.genetic_data as GeneticData).variants && (
                     <div>
                       <h4 className="font-semibold text-sm mb-2">Variants</h4>
                       <div className="space-y-2">
-                        {((consentedData.genetic_data as any).variants || []).map((variant: any, idx: number) => (
+                        {((consentedData.genetic_data as GeneticData).variants || []).map((variant: GeneticVariant, idx: number) => (
                           <div key={idx} className="border rounded p-2">
                             <div className="font-medium text-sm">{variant.gene}: {variant.variant}</div>
                             {variant.classification && (
@@ -392,13 +405,13 @@ export function PatientDetailsCard({
                       </div>
                     </div>
                   )}
-                  {(consentedData.genetic_data as any).pharmacogenomics && (
+                  {(consentedData.genetic_data as GeneticData).pharmacogenomics && (
                     <div>
                       <h4 className="font-semibold text-sm mb-2">Pharmacogenomics</h4>
                       <div className="space-y-1">
-                        {Object.entries((consentedData.genetic_data as any).pharmacogenomics).map(([drug, info]: [string, any]) => (
+                        {Object.entries((consentedData.genetic_data as GeneticData).pharmacogenomics || {}).map(([drug, info]: [string, unknown]) => (
                           <div key={drug} className="text-sm">
-                            <span className="font-medium">{drug}:</span> <span className="text-muted-foreground">{info}</span>
+                            <span className="font-medium">{drug}:</span> <span className="text-muted-foreground">{String(info)}</span>
                           </div>
                         ))}
                       </div>

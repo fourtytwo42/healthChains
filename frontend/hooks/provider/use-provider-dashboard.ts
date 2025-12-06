@@ -18,6 +18,7 @@ import { matchesDate } from '@/lib/date-utils';
 import { format } from 'date-fns';
 import type { Patient, ConsentRecord } from '@/lib/api-client';
 import type { ConsentHistoryEvent, AccessRequest, ProviderPatient, PaginatedResponse } from '@/types/consent';
+import type { Demographics } from '@/types/patient';
 
 const ALL_DATA_TYPES = [
   'medical_records',
@@ -116,7 +117,7 @@ export function useProviderDashboard() {
 
     const consentsArray = Array.isArray(allConsentsData) 
       ? allConsentsData 
-      : (allConsentsData as any)?.data || [];
+      : (allConsentsData as { data?: ConsentRecord[] } | undefined)?.data || [];
 
     if (!Array.isArray(consentsArray) || consentsArray.length === 0) {
       return { status: 'none', dataTypesCount: 0 };
@@ -177,10 +178,11 @@ export function useProviderDashboard() {
         const dob = String(patient.demographics?.dateOfBirth || '');
         const age = String(patient.demographics?.age || '');
         const gender = (patient.demographics?.gender || '').toLowerCase();
-        const phone = String((patient.demographics as any)?.contact?.phone || '');
-        const email = String((patient.demographics as any)?.contact?.email || '').toLowerCase();
-        const address = (patient.demographics as any)?.address 
-          ? `${(patient.demographics as any).address.street} ${(patient.demographics as any).address.city} ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`.toLowerCase()
+        const demographics = patient.demographics as Demographics | undefined;
+        const phone = String(demographics?.contact?.phone || '');
+        const email = String(demographics?.contact?.email || '').toLowerCase();
+        const address = demographics?.address 
+          ? `${demographics.address.street || ''} ${demographics.address.city || ''} ${demographics.address.state || ''} ${demographics.address.zipCode || ''}`.toLowerCase()
           : '';
         
         const dateMatches = dob ? matchesDate(debouncedSearchQuery, dob) : false;
@@ -228,19 +230,21 @@ export function useProviderDashboard() {
             bValue = b.demographics?.gender?.toLowerCase() || '';
             break;
           case 'phone':
-            aValue = (a.demographics as any)?.contact?.phone || '';
-            bValue = (b.demographics as any)?.contact?.phone || '';
+            aValue = ((a.demographics as Demographics | undefined)?.contact?.phone || '');
+            bValue = ((b.demographics as Demographics | undefined)?.contact?.phone || '');
             break;
           case 'email':
-            aValue = ((a.demographics as any)?.contact?.email || '').toLowerCase();
-            bValue = ((b.demographics as any)?.contact?.email || '').toLowerCase();
+            aValue = ((a.demographics as Demographics | undefined)?.contact?.email || '').toLowerCase();
+            bValue = ((b.demographics as Demographics | undefined)?.contact?.email || '').toLowerCase();
             break;
           case 'address':
-            aValue = (a.demographics as any)?.address 
-              ? `${(a.demographics as any).address.city} ${(a.demographics as any).address.state}`.toLowerCase()
+            const aAddr = (a.demographics as Demographics | undefined)?.address;
+            const bAddr = (b.demographics as Demographics | undefined)?.address;
+            aValue = aAddr 
+              ? `${aAddr.city || ''} ${aAddr.state || ''}`.toLowerCase()
               : '';
-            bValue = (b.demographics as any)?.address 
-              ? `${(b.demographics as any).address.city} ${(b.demographics as any).address.state}`.toLowerCase()
+            bValue = bAddr 
+              ? `${bAddr.city || ''} ${bAddr.state || ''}`.toLowerCase()
               : '';
             break;
           case 'consent':
@@ -294,7 +298,7 @@ export function useProviderDashboard() {
       const patientWithWallet: ProviderPatient = {
         ...patient,
         patientWalletAddress: patient.patientWalletAddress || 
-          (patient as any)?.blockchainIntegration?.walletAddress ||
+          (patient as ProviderPatient & { blockchainIntegration?: { walletAddress?: string } })?.blockchainIntegration?.walletAddress ||
           undefined
       };
       setSelectedGrantedPatient(patientWithWallet);
@@ -370,18 +374,19 @@ export function useProviderDashboard() {
       const dob = patient.demographics?.dateOfBirth 
         ? format(new Date(String(patient.demographics.dateOfBirth)), 'MMM d, yyyy')
         : 'N/A';
-      const address = (patient.demographics as any)?.address 
-        ? `${(patient.demographics as any).address.street}, ${(patient.demographics as any).address.city}, ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`
+      const demographics = patient.demographics as Demographics | undefined;
+      const address = demographics?.address 
+        ? `${demographics.address.street || ''}, ${demographics.address.city || ''}, ${demographics.address.state || ''} ${demographics.address.zipCode || ''}`
         : 'N/A';
       rows.push([
-        `${patient.demographics?.firstName || ''} ${patient.demographics?.lastName || ''}`.trim(),
+        `${demographics?.firstName || ''} ${demographics?.lastName || ''}`.trim(),
         patient.patientId || '',
         hasWallet ? patient.blockchainIntegration?.walletAddress || '' : 'No wallet',
         dob,
-        String(patient.demographics?.age ?? 'N/A'),
-        patient.demographics?.gender || 'N/A',
-        (patient.demographics as any)?.contact?.phone || 'N/A',
-        (patient.demographics as any)?.contact?.email || 'N/A',
+        String(demographics?.age ?? 'N/A'),
+        demographics?.gender || 'N/A',
+        demographics?.contact?.phone || 'N/A',
+        demographics?.contact?.email || 'N/A',
         address,
         consentInfo.status
       ]);
@@ -441,19 +446,20 @@ export function useProviderDashboard() {
       const dob = patient.demographics?.dateOfBirth 
         ? format(new Date(String(patient.demographics.dateOfBirth)), 'MMM d, yyyy')
         : 'N/A';
-      const address = (patient.demographics as any)?.address 
-        ? `${(patient.demographics as any).address.street}, ${(patient.demographics as any).address.city}, ${(patient.demographics as any).address.state} ${(patient.demographics as any).address.zipCode}`
+      const demographics = patient.demographics as Demographics | undefined;
+      const address = demographics?.address 
+        ? `${demographics.address.street || ''}, ${demographics.address.city || ''}, ${demographics.address.state || ''} ${demographics.address.zipCode || ''}`
         : 'N/A';
       htmlContent += `
         <tr>
-          <td>${patient.demographics?.firstName || ''} ${patient.demographics?.lastName || ''}</td>
+          <td>${demographics?.firstName || ''} ${demographics?.lastName || ''}</td>
           <td>${patient.patientId || ''}</td>
           <td>${hasWallet ? patient.blockchainIntegration?.walletAddress || '' : 'No wallet'}</td>
           <td>${dob}</td>
-          <td>${patient.demographics?.age ?? 'N/A'}</td>
-          <td>${patient.demographics?.gender || 'N/A'}</td>
-          <td>${(patient.demographics as any)?.contact?.phone || 'N/A'}</td>
-          <td>${(patient.demographics as any)?.contact?.email || 'N/A'}</td>
+          <td>${demographics?.age ?? 'N/A'}</td>
+          <td>${demographics?.gender || 'N/A'}</td>
+          <td>${demographics?.contact?.phone || 'N/A'}</td>
+          <td>${demographics?.contact?.email || 'N/A'}</td>
           <td>${address}</td>
           <td>${consentInfo.status}</td>
         </tr>
@@ -531,7 +537,7 @@ export function useProviderDashboard() {
           </thead>
           <tbody>
     `;
-    requestsData.data.forEach((request: any) => {
+    requestsData.data.forEach((request: AccessRequest) => {
       const patientName = request.patient ? `${request.patient.firstName} ${request.patient.lastName}` : 'Unknown';
       htmlContent += `
         <tr>
@@ -554,7 +560,7 @@ export function useProviderDashboard() {
   };
 
   const exportGrantedToCSV = () => {
-    const patientsData = stableGrantedPatients as { data: any[]; pagination: any } | undefined;
+    const patientsData = stableGrantedPatients as PaginatedResponse<ProviderPatient> | undefined;
     if (!patientsData?.data) return;
     const rows: string[][] = [['Patient Name', 'Patient ID', 'Patient Wallet Address', 'Data Types', 'Purposes', 'Granted Date', 'Expiration', 'Status']];
     patientsData?.data.forEach((patient) => {
@@ -572,17 +578,21 @@ export function useProviderDashboard() {
           allPurposes.add(c.purpose);
         }
       });
-      const sortedConsents = patient.consents ? [...patient.consents].sort((a: any, b: any) => {
+      const sortedConsents = patient.consents ? [...patient.consents].sort((a: ConsentRecord, b: ConsentRecord) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
       }) : [];
       const latestConsent = sortedConsents[0];
-      const patientName = patient.demographics ? `${patient.demographics.firstName} ${patient.demographics.lastName}` : 'Unknown';
+      const patientDemographics = patient.demographics as Demographics | undefined;
+      const patientName = patientDemographics 
+        ? `${patientDemographics.firstName || ''} ${patientDemographics.lastName || ''}`.trim() || 'Unknown'
+        : 'Unknown';
+      const patientBlockchain = patient.blockchainIntegration as { walletAddress?: string } | undefined;
       rows.push([
         patientName,
         patient.patientId || '',
-        patient.blockchainIntegration?.walletAddress || 'N/A',
+        patientBlockchain?.walletAddress || 'N/A',
         Array.from(allDataTypes).join('; '),
         Array.from(allPurposes).join('; '),
         latestConsent?.timestamp ? format(new Date(latestConsent.timestamp), 'yyyy-MM-dd HH:mm') : 'N/A',
@@ -603,7 +613,7 @@ export function useProviderDashboard() {
   };
 
   const printGranted = () => {
-    const patientsData = stableGrantedPatients as { data: any[]; pagination: any } | undefined;
+    const patientsData = stableGrantedPatients as PaginatedResponse<ProviderPatient> | undefined;
     if (!patientsData?.data) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -638,10 +648,10 @@ export function useProviderDashboard() {
           </thead>
           <tbody>
     `;
-    patientsData.data.forEach((patient: any) => {
+    patientsData.data.forEach((patient: ProviderPatient) => {
       const allDataTypes = new Set<string>();
       const allPurposes = new Set<string>();
-      patient.consents?.forEach((c: any) => {
+      patient.consents?.forEach((c: ConsentRecord) => {
         if (c.dataTypes && Array.isArray(c.dataTypes)) {
           c.dataTypes.forEach((dt: string) => allDataTypes.add(dt));
         } else if (c.dataType) {
@@ -653,18 +663,22 @@ export function useProviderDashboard() {
           allPurposes.add(c.purpose);
         }
       });
-      const sortedConsents = patient.consents ? [...patient.consents].sort((a: any, b: any) => {
+      const sortedConsents = patient.consents ? [...patient.consents].sort((a: ConsentRecord, b: ConsentRecord) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
       }) : [];
       const latestConsent = sortedConsents[0];
-      const patientName = patient.demographics ? `${patient.demographics.firstName} ${patient.demographics.lastName}` : 'Unknown';
+      const patientDemographics = patient.demographics as Demographics | undefined;
+      const patientName = patientDemographics 
+        ? `${patientDemographics.firstName || ''} ${patientDemographics.lastName || ''}`.trim() || 'Unknown'
+        : 'Unknown';
+      const printPatientBlockchain = patient.blockchainIntegration as { walletAddress?: string } | undefined;
       htmlContent += `
         <tr>
           <td>${patientName}</td>
           <td>${patient.patientId || ''}</td>
-          <td>${patient.blockchainIntegration?.walletAddress || 'N/A'}</td>
+          <td>${printPatientBlockchain?.walletAddress || 'N/A'}</td>
           <td>${Array.from(allDataTypes).join(', ')}</td>
           <td>${Array.from(allPurposes).join(', ')}</td>
           <td>${latestConsent?.timestamp ? format(new Date(latestConsent.timestamp), 'MMM d, yyyy HH:mm') : 'N/A'}</td>

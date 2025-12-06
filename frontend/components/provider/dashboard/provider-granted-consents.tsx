@@ -13,10 +13,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ColoredBadgeList } from '@/components/shared/colored-badge';
 import { format } from 'date-fns';
 import { matchesDate } from '@/lib/date-utils';
-import type { ProviderPatient } from '@/types/consent';
+import type { ProviderPatient, PaginatedResponse, PaginationData } from '@/types/consent';
+import type { ConsentRecord } from '@/lib/api-client';
+import type { Demographics } from '@/types/patient';
 
 interface ProviderGrantedConsentsProps {
-  patients: { data: ProviderPatient[]; pagination: any } | undefined;
+  patients: PaginatedResponse<ProviderPatient> | undefined;
   isLoading: boolean;
   searchQuery: string;
   debouncedSearchQuery: string;
@@ -156,13 +158,13 @@ export function ProviderGrantedConsents({
   }
 
   // Filter patients by search query
-  const filteredPatients = patients.data.filter((patient: any) => {
+  const filteredPatients = patients.data.filter((patient: ProviderPatient) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    const demographics = patient.demographics as any;
+    const demographics = patient.demographics as Demographics | undefined;
     const name = `${demographics?.firstName || ''} ${demographics?.lastName || ''}`.toLowerCase();
     const patientId = (patient.patientId || '').toLowerCase();
-    const blockchainIntegration = patient.blockchainIntegration as any;
+    const blockchainIntegration = patient.blockchainIntegration as { walletAddress?: string } | undefined;
     const walletAddress = (blockchainIntegration?.walletAddress || '').toLowerCase();
     const dob = String(demographics?.dateOfBirth || '');
     
@@ -170,7 +172,7 @@ export function ProviderGrantedConsents({
     
     const allDataTypes = new Set<string>();
     const allPurposes = new Set<string>();
-    patient.consents?.forEach((c: any) => {
+    patient.consents?.forEach((c: ConsentRecord) => {
       if (c.dataTypes && Array.isArray(c.dataTypes)) {
         c.dataTypes.forEach((dt: string) => allDataTypes.add(dt.toLowerCase()));
       } else if (c.dataType) {
@@ -343,12 +345,12 @@ export function ProviderGrantedConsents({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedFiltered.map((patient: any) => {
+            {paginatedFiltered.map((patient: ProviderPatient) => {
               const allDataTypes = new Set<string>();
               const allPurposes = new Set<string>();
               
               const sortedConsents = patient.consents
-                ? [...patient.consents].sort((a: any, b: any) => {
+                ? [...patient.consents].sort((a: ConsentRecord, b: ConsentRecord) => {
                     const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
                     const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
                     return timeB - timeA;
@@ -356,7 +358,7 @@ export function ProviderGrantedConsents({
                 : [];
               const latestConsent = sortedConsents[0];
               
-              patient.consents?.forEach((c: any) => {
+              patient.consents?.forEach((c: ConsentRecord) => {
                 if (c.dataTypes && Array.isArray(c.dataTypes)) {
                   c.dataTypes.forEach((dt: string) => allDataTypes.add(dt));
                 } else if (c.dataType) {
@@ -370,8 +372,8 @@ export function ProviderGrantedConsents({
                 }
               });
               
-              const patientDemographics = patient.demographics as any;
-              const patientBlockchain = patient.blockchainIntegration as any;
+              const patientDemographics = patient.demographics as Demographics | undefined;
+              const patientBlockchain = patient.blockchainIntegration as { walletAddress?: string } | undefined;
               const patientName = patientDemographics
                 ? `${patientDemographics.firstName} ${patientDemographics.lastName}`
                 : `${patientBlockchain?.walletAddress?.slice(0, 6) || ''}...${patientBlockchain?.walletAddress?.slice(-4) || ''}`;

@@ -3,6 +3,23 @@
 import { useState, useMemo } from 'react';
 import { useProviderPatientData } from '@/hooks/use-api';
 import { format } from 'date-fns';
+import type {
+  ProviderPatientData,
+  Demographics,
+  ConsentInfo,
+  ConsentedData,
+  VitalSignsChartDataPoint,
+  VitalSign,
+  Medication,
+  MedicalCondition,
+  Allergy,
+  LaboratoryResult,
+  ImagingStudy,
+  GeneticData,
+  DiagnosticData,
+  MedicalRecords,
+  TreatmentHistory,
+} from '@/types/patient';
 
 export function usePatientData(providerAddress: string, patientId: string) {
   const { data, isLoading, error } = useProviderPatientData(providerAddress, patientId);
@@ -11,16 +28,16 @@ export function usePatientData(providerAddress: string, patientId: string) {
   const [isExporting, setIsExporting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // Extract data directly
-  const patientData = data?.data;
-  const consentedData = (patientData as any)?.consentedData || {};
-  const consentInfo = (patientData as any)?.consentInfo || [];
-  const demographics = (patientData as any)?.demographics || {};
+  // Extract data directly with proper typing
+  const patientData = data?.data as ProviderPatientData | undefined;
+  const consentedData: ConsentedData = patientData?.consentedData || {};
+  const consentInfo: ConsentInfo[] = patientData?.consentInfo || [];
+  const demographics: Demographics = patientData?.demographics || {};
   const hasNoConsent = consentInfo.length === 0;
 
   // Helper functions
-  const getConsentForDataType = (dataType: string) => {
-    return consentInfo.filter((c: any) => {
+  const getConsentForDataType = (dataType: string): ConsentInfo[] => {
+    return consentInfo.filter((c: ConsentInfo) => {
       if (c.dataTypes && Array.isArray(c.dataTypes)) {
         return c.dataTypes.includes(dataType);
       }
@@ -28,8 +45,8 @@ export function usePatientData(providerAddress: string, patientId: string) {
     });
   };
 
-  const hasConsentForDataType = (dataType: string) => {
-    return consentInfo.some((c: any) => {
+  const hasConsentForDataType = (dataType: string): boolean => {
+    return consentInfo.some((c: ConsentInfo) => {
       if (c.dataTypes && Array.isArray(c.dataTypes)) {
         return c.dataTypes.includes(dataType);
       }
@@ -38,21 +55,37 @@ export function usePatientData(providerAddress: string, patientId: string) {
   };
 
   // Memoize chart data
-  const vitalSignsChartData = useMemo(() => {
+  const vitalSignsChartData = useMemo((): VitalSignsChartDataPoint[] => {
     if (!consentedData.vital_signs || !Array.isArray(consentedData.vital_signs)) {
       return [];
     }
     
     return consentedData.vital_signs
       .slice(-30)
-      .map((vital: any) => ({
+      .map((vital: VitalSign) => ({
         date: format(new Date(vital.timestamp), 'MMM d'),
         timestamp: vital.timestamp,
-        systolic: vital.bloodPressure?.systolic || null,
-        diastolic: vital.bloodPressure?.diastolic || null,
-        heartRate: vital.heartRate || null,
-        temperature: vital.temperature ? parseFloat(vital.temperature) : null,
-        oxygenSaturation: vital.oxygenSaturation || null,
+        systolic: typeof vital.bloodPressure?.systolic === 'number' 
+          ? vital.bloodPressure.systolic 
+          : (typeof vital.bloodPressure?.systolic === 'string' 
+            ? parseFloat(vital.bloodPressure.systolic) || null 
+            : null),
+        diastolic: typeof vital.bloodPressure?.diastolic === 'number'
+          ? vital.bloodPressure.diastolic
+          : (typeof vital.bloodPressure?.diastolic === 'string'
+            ? parseFloat(vital.bloodPressure.diastolic) || null
+            : null),
+        heartRate: typeof vital.heartRate === 'number'
+          ? vital.heartRate
+          : (typeof vital.heartRate === 'string'
+            ? parseFloat(vital.heartRate) || null
+            : null),
+        temperature: vital.temperature ? parseFloat(String(vital.temperature)) : null,
+        oxygenSaturation: typeof vital.oxygenSaturation === 'number'
+          ? vital.oxygenSaturation
+          : (typeof vital.oxygenSaturation === 'string'
+            ? parseFloat(vital.oxygenSaturation) || null
+            : null),
       }))
       .reverse();
   }, [consentedData.vital_signs]);
@@ -68,7 +101,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
       rows.push(['Patient ID', patientData.patientId]);
       rows.push(['Name', `${demographics.firstName || ''} ${demographics.lastName || ''}`.trim()]);
       rows.push(['Date of Birth', demographics.dateOfBirth || 'N/A']);
-      rows.push(['Age', demographics.age || 'N/A']);
+      rows.push(['Age', String(demographics.age || 'N/A')]);
       rows.push(['Gender', demographics.gender || 'N/A']);
       rows.push(['Phone', demographics.contact?.phone || 'N/A']);
       rows.push(['Email', demographics.contact?.email || 'N/A']);
@@ -79,14 +112,14 @@ export function usePatientData(providerAddress: string, patientId: string) {
       if (consentedData.vital_signs && Array.isArray(consentedData.vital_signs)) {
         rows.push(['VITAL SIGNS']);
         rows.push(['Date', 'Systolic BP', 'Diastolic BP', 'Heart Rate (bpm)', 'Temperature (°C)', 'O2 Saturation (%)']);
-        (consentedData.vital_signs as any[]).forEach((vital: any) => {
+        (consentedData.vital_signs as VitalSign[]).forEach((vital: VitalSign) => {
           rows.push([
             format(new Date(vital.timestamp), 'yyyy-MM-dd HH:mm'),
-            vital.bloodPressure?.systolic || '',
-            vital.bloodPressure?.diastolic || '',
-            vital.heartRate || '',
-            vital.temperature || '',
-            vital.oxygenSaturation || ''
+            String(vital.bloodPressure?.systolic || ''),
+            String(vital.bloodPressure?.diastolic || ''),
+            String(vital.heartRate || ''),
+            String(vital.temperature || ''),
+            String(vital.oxygenSaturation || '')
           ]);
         });
         rows.push([]);
@@ -96,7 +129,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
       if (consentedData.current_medications && Array.isArray(consentedData.current_medications)) {
         rows.push(['CURRENT MEDICATIONS']);
         rows.push(['Name', 'Dosage', 'Frequency', 'Prescriber']);
-        (consentedData.current_medications as any[]).forEach((med: any) => {
+        (consentedData.current_medications as Medication[]).forEach((med: Medication) => {
           rows.push([
             med.name || '',
             med.dosage || '',
@@ -108,11 +141,13 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Conditions
-      const conditions = (consentedData.medical_records as any)?.conditions || (consentedData.treatment_history as any)?.conditions || [];
+      const medicalRecords = consentedData.medical_records as MedicalRecords | undefined;
+      const treatmentHistory = consentedData.treatment_history as TreatmentHistory | undefined;
+      const conditions: MedicalCondition[] = medicalRecords?.conditions || treatmentHistory?.conditions || [];
       if (conditions.length > 0) {
         rows.push(['MEDICAL CONDITIONS']);
         rows.push(['Name', 'Code', 'Category', 'Status', 'Diagnosis Date']);
-        conditions.forEach((condition: any) => {
+        conditions.forEach((condition: MedicalCondition) => {
           rows.push([
             condition.name || '',
             condition.code || '',
@@ -125,11 +160,11 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Allergies
-      const allergies = (consentedData.medical_records as any)?.allergies || [];
+      const allergies: Allergy[] = medicalRecords?.allergies || [];
       if (allergies.length > 0) {
         rows.push(['ALLERGIES']);
         rows.push(['Allergen', 'Severity']);
-        allergies.forEach((allergy: any) => {
+        allergies.forEach((allergy: Allergy) => {
           rows.push([
             allergy.allergen || '',
             allergy.severity || ''
@@ -139,10 +174,11 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Laboratory Results
-      const labResults = (consentedData.laboratory_results || (consentedData.diagnostic_data as any)?.laboratoryResults) as any[] || [];
+      const diagnosticData = consentedData.diagnostic_data as DiagnosticData | undefined;
+      const labResults: LaboratoryResult[] = consentedData.laboratory_results || diagnosticData?.laboratoryResults || [];
       if (labResults.length > 0) {
         rows.push(['LABORATORY RESULTS']);
-        labResults.forEach((lab: any) => {
+        labResults.forEach((lab: LaboratoryResult) => {
           rows.push([`Test: ${lab.testName || 'N/A'}`]);
           rows.push(['Result Date', lab.resultDate ? format(new Date(lab.resultDate), 'yyyy-MM-dd') : 'N/A']);
           rows.push(['Status', lab.status || 'N/A']);
@@ -156,11 +192,11 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Imaging Studies
-      const imagingStudies = (consentedData.imaging_studies || (consentedData.diagnostic_data as any)?.imagingStudies || consentedData.imaging_data) as any[] || [];
+      const imagingStudies: ImagingStudy[] = consentedData.imaging_studies || diagnosticData?.imagingStudies || consentedData.imaging_data || [];
       if (imagingStudies.length > 0) {
         rows.push(['IMAGING STUDIES']);
         rows.push(['Study Type', 'Date', 'Findings', 'Radiologist']);
-        imagingStudies.forEach((study: any) => {
+        imagingStudies.forEach((study: ImagingStudy) => {
           rows.push([
             study.studyType || '',
             study.studyDate ? format(new Date(study.studyDate), 'yyyy-MM-dd') : '',
@@ -172,11 +208,12 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Genetic Data
-      if (consentedData.genetic_data) {
+      const geneticData = consentedData.genetic_data as GeneticData | undefined;
+      if (geneticData) {
         rows.push(['GENETIC DATA']);
-        if ((consentedData.genetic_data as any).geneticMarkers) {
+        if (geneticData.geneticMarkers) {
           rows.push(['Marker', 'Value']);
-          Object.entries((consentedData.genetic_data as any).geneticMarkers).forEach(([key, value]) => {
+          Object.entries(geneticData.geneticMarkers).forEach(([key, value]) => {
             rows.push([key, String(value)]);
           });
         }
@@ -273,7 +310,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
               </thead>
               <tbody>
         `;
-        (consentedData.vital_signs as any[]).forEach((vital: any) => {
+        (consentedData.vital_signs as VitalSign[]).forEach((vital: VitalSign) => {
           htmlContent += `
             <tr>
               <td>${format(new Date(vital.timestamp), 'MMM d, yyyy HH:mm')}</td>
@@ -304,7 +341,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
               </thead>
               <tbody>
         `;
-        (consentedData.current_medications as any[]).forEach((med: any) => {
+        (consentedData.current_medications as Medication[]).forEach((med: Medication) => {
           htmlContent += `
             <tr>
               <td>${med.name || ''}</td>
@@ -317,9 +354,15 @@ export function usePatientData(providerAddress: string, patientId: string) {
         htmlContent += `</tbody></table></div>`;
       }
       
+      // Re-extract typed data for print function
+      const printMedicalRecords = consentedData.medical_records as MedicalRecords | undefined;
+      const printTreatmentHistory = consentedData.treatment_history as TreatmentHistory | undefined;
+      const printDiagnosticData = consentedData.diagnostic_data as DiagnosticData | undefined;
+      const printGeneticData = consentedData.genetic_data as GeneticData | undefined;
+      
       // Conditions
-      const conditions = (consentedData.medical_records as any)?.conditions || (consentedData.treatment_history as any)?.conditions || [];
-      if (conditions.length > 0) {
+      const printConditions: MedicalCondition[] = printMedicalRecords?.conditions || printTreatmentHistory?.conditions || [];
+      if (printConditions.length > 0) {
         htmlContent += `
           <div class="section">
             <div class="section-title">Medical Conditions</div>
@@ -335,7 +378,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
               </thead>
               <tbody>
         `;
-        conditions.forEach((condition: any) => {
+        printConditions.forEach((condition: MedicalCondition) => {
           htmlContent += `
             <tr>
               <td>${condition.name || ''}</td>
@@ -350,8 +393,8 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Allergies
-      const allergies = (consentedData.medical_records as any)?.allergies || [];
-      if (allergies.length > 0) {
+      const printAllergies: Allergy[] = printMedicalRecords?.allergies || [];
+      if (printAllergies.length > 0) {
         htmlContent += `
           <div class="section">
             <div class="section-title">Allergies</div>
@@ -364,7 +407,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
               </thead>
               <tbody>
         `;
-        allergies.forEach((allergy: any) => {
+        printAllergies.forEach((allergy: Allergy) => {
           htmlContent += `
             <tr>
               <td>${allergy.allergen || ''}</td>
@@ -376,10 +419,10 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Laboratory Results
-      const labResults = (consentedData.laboratory_results || (consentedData.diagnostic_data as any)?.laboratoryResults) as any[] || [];
-      if (labResults.length > 0) {
+      const printLabResults: LaboratoryResult[] = consentedData.laboratory_results || printDiagnosticData?.laboratoryResults || [];
+      if (printLabResults.length > 0) {
         htmlContent += `<div class="section"><div class="section-title">Laboratory Results</div>`;
-        labResults.forEach((lab: any) => {
+        printLabResults.forEach((lab: LaboratoryResult) => {
           htmlContent += `<p><strong>${lab.testName || 'Test'}</strong> - ${lab.resultDate ? format(new Date(lab.resultDate), 'MMM d, yyyy') : 'N/A'} - Status: ${lab.status || 'N/A'}</p>`;
           if (lab.results) {
             htmlContent += `<ul>`;
@@ -393,8 +436,8 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Imaging Studies
-      const imagingStudies = (consentedData.imaging_studies || (consentedData.diagnostic_data as any)?.imagingStudies || consentedData.imaging_data) as any[] || [];
-      if (imagingStudies.length > 0) {
+      const printImagingStudies: ImagingStudy[] = consentedData.imaging_studies || printDiagnosticData?.imagingStudies || consentedData.imaging_data || [];
+      if (printImagingStudies.length > 0) {
         htmlContent += `
           <div class="section">
             <div class="section-title">Imaging Studies</div>
@@ -409,7 +452,7 @@ export function usePatientData(providerAddress: string, patientId: string) {
               </thead>
               <tbody>
         `;
-        imagingStudies.forEach((study: any) => {
+        printImagingStudies.forEach((study: ImagingStudy) => {
           htmlContent += `
             <tr>
               <td>${study.studyType || ''}</td>
@@ -423,9 +466,9 @@ export function usePatientData(providerAddress: string, patientId: string) {
       }
       
       // Genetic Data
-      if (consentedData.genetic_data && (consentedData.genetic_data as any).geneticMarkers) {
+      if (printGeneticData && printGeneticData.geneticMarkers) {
         htmlContent += `<div class="section"><div class="section-title">Genetic Data</div><ul>`;
-        Object.entries((consentedData.genetic_data as any).geneticMarkers).forEach(([key, value]) => {
+        Object.entries(printGeneticData.geneticMarkers).forEach(([key, value]) => {
           htmlContent += `<li><strong>${key}:</strong> ${value}</li>`;
         });
         htmlContent += `</ul></div>`;
