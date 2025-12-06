@@ -47,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isHandlingAccountChangeRef = useRef(false);
   // Track if authentication is in progress (using ref to prevent race conditions)
   const isAuthenticatingRef = useRef(false);
+  // Track if we're currently waiting for a signature (global flag to prevent MetaMask duplicates)
+  const isWaitingForSignatureRef = useRef(false);
 
   /**
    * Check for existing valid token on mount and when wallet connects
