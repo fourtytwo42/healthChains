@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ethers } from 'ethers';
+import { getNetworkConfig, getMetaMaskNetworkConfig } from '@/lib/network-config';
 
 /**
  * Wallet Context - Manages MetaMask wallet connection state
@@ -11,7 +12,7 @@ import { ethers } from 'ethers';
  * - Current account address
  * - Network/chain ID
  * - Connect/disconnect functions
- * - Network validation
+ * - Network validation and automatic switching
  */
 
 interface WalletState {
@@ -20,22 +21,24 @@ interface WalletState {
   chainId: number | null;
   isConnecting: boolean;
   error: string | null;
+  isWrongNetwork: boolean;
 }
 
 interface WalletContextType extends WalletState {
   connect: () => Promise<void>;
   disconnect: () => void;
   checkNetwork: () => Promise<boolean>;
-  switchNetwork: (chainId: number) => Promise<void>;
+  switchToCorrectNetwork: () => Promise<void>;
   getSigner: () => Promise<ethers.JsonRpcSigner | null>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 /**
- * Expected chain ID from environment (defaults to 1337 for Hardhat local)
+ * Get network configuration
  */
-const EXPECTED_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10);
+const NETWORK_CONFIG = getNetworkConfig();
+const EXPECTED_CHAIN_ID = NETWORK_CONFIG.chainId;
 
 /**
  * Wallet Provider Component
@@ -47,6 +50,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     chainId: null,
     isConnecting: false,
     error: null,
+    isWrongNetwork: false,
   });
 
   /**
@@ -101,41 +105,41 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Switch to expected network
+   * Switch to the correct network (adds network if it doesn't exist)
    */
-  const switchNetwork = async (chainId: number = EXPECTED_CHAIN_ID): Promise<void> => {
+  const switchToCorrectNetwork = async (): Promise<void> => {
     if (!isMetaMaskInstalled() || !window.ethereum) {
       throw new Error('MetaMask is not installed');
     }
 
+    const networkConfig = getMetaMaskNetworkConfig();
+
     try {
+      // Try to switch to the network
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }],
+        params: [{ chainId: networkConfig.chainId }],
       });
     } catch (switchError: any) {
-      // If chain doesn't exist, try to add it
+      // If chain doesn't exist (error code 4902), add it
       if (switchError.code === 4902) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: `0x${chainId.toString(16)}`,
-                chainName: 'Hardhat Local',
-                nativeCurrency: {
-                  name: 'Ether',
-                  symbol: 'ETH',
-                  decimals: 18,
-                },
-                rpcUrls: ['http://127.0.0.1:8545'],
-                blockExplorerUrls: null,
-              },
-            ],
+            params: [networkConfig],
           });
-        } catch (addError) {
-          throw new Error('Failed to add network to MetaMask');
+          // After adding, try switching again
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: networkConfig.chainId }],
+          });
+        } catch (addError: any) {
+          const errorMessage = addError.message || 'Failed to add network to MetaMask';
+          throw new Error(errorMessage);
         }
+      } else if (switchError.code === 4001) {
+        // User rejected the request
+        throw new Error('Network switch was rejected');
       } else {
         throw switchError;
       }
@@ -174,21 +178,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Check if network matches
       const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
-      if (!networkMatches && chainId !== null) {
-        setState((prev) => ({
-          ...prev,
-          isConnecting: false,
-          error: `Network mismatch. Current: ${chainId}, Expected: ${EXPECTED_CHAIN_ID}. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
-        }));
-        return;
-      }
-
+      
       setState({
         isConnected: true,
         account,
         chainId,
         isConnecting: false,
-        error: null,
+        isWrongNetwork: !networkMatches,
+        error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
       });
     } catch (error: any) {
       setState((prev) => ({
@@ -230,7 +227,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Initialize wallet state on mount
+   * Initialize wallet state on mount and check network
    */
   useEffect(() => {
     const initWallet = async () => {
@@ -238,6 +235,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const account = await getAccount();
       const chainId = await getChainId();
+      const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
 
       if (account && chainId !== null) {
         setState({
@@ -245,12 +243,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           account,
           chainId,
           isConnecting: false,
-          error: null,
+          isWrongNetwork: !networkMatches,
+          error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
         });
       } else if (chainId !== null) {
         setState((prev) => ({
           ...prev,
           chainId,
+          isWrongNetwork: !networkMatches,
+          error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
         }));
       }
     };
@@ -282,7 +283,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({
         ...prev,
         chainId,
-        error: networkMatches ? null : `Network mismatch. Current: ${chainId}, Expected: ${EXPECTED_CHAIN_ID}. Please switch to chain ID ${EXPECTED_CHAIN_ID}`,
+        isWrongNetwork: !networkMatches,
+        error: networkMatches ? null : `Please switch to ${NETWORK_CONFIG.chainName} (Chain ID: ${EXPECTED_CHAIN_ID})`,
       }));
     };
 
@@ -302,7 +304,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     connect,
     disconnect,
     checkNetwork,
-    switchNetwork,
+    switchToCorrectNetwork,
     getSigner,
   };
 

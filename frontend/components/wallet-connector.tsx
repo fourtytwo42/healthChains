@@ -22,13 +22,9 @@ import {
  * Shows network mismatch warnings and allows network switching.
  */
 export function WalletConnector() {
-  const { isConnected, account, chainId, isConnecting, error, connect, disconnect, switchNetwork, checkNetwork } = useWallet();
+  const { isConnected, account, chainId, isConnecting, error, isWrongNetwork, connect, disconnect, switchToCorrectNetwork } = useWallet();
   const { isAuthenticated, isAuthenticating, authenticate } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  const EXPECTED_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10);
-  // Compare chain IDs - must match exactly
-  const networkMatches = chainId !== null && Number(chainId) === EXPECTED_CHAIN_ID;
 
   /**
    * Format address for display (truncate middle)
@@ -42,10 +38,10 @@ export function WalletConnector() {
    * Handle connect with network check
    */
   const handleConnect = async () => {
-    if (!networkMatches && chainId !== null) {
+    if (isWrongNetwork) {
       // Try to switch network first
       try {
-        await switchNetwork(EXPECTED_CHAIN_ID);
+        await switchToCorrectNetwork();
         // Wait a bit for network switch
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (switchError) {
@@ -84,16 +80,16 @@ export function WalletConnector() {
                 <span>{error}</span>
               </div>
             )}
-            {chainId !== null && !networkMatches && (
+            {isWrongNetwork && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 rounded-md bg-yellow-500/10 p-3 text-sm text-yellow-600 dark:text-yellow-400">
                   <AlertCircle className="h-4 w-4" />
-                  <span>Network mismatch. Please switch to chain ID {EXPECTED_CHAIN_ID}</span>
+                  <span>Please switch to the correct network</span>
                 </div>
                 <Button
                   onClick={async () => {
                     try {
-                      await switchNetwork(EXPECTED_CHAIN_ID);
+                      await switchToCorrectNetwork();
                       await connect();
                       setDialogOpen(false);
                     } catch (err) {
@@ -134,7 +130,7 @@ export function WalletConnector() {
 
   return (
     <div className="flex items-center gap-2">
-      {!networkMatches && (
+      {isWrongNetwork && (
         <Badge variant="destructive" className="gap-1">
           <AlertCircle className="h-3 w-3" />
           Wrong Network

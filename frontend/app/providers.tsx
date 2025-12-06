@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/lib/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { WalletProvider } from '@/contexts/wallet-context';
 import { AuthProvider } from '@/contexts/auth-context';
+import { NetworkSwitchPrompt } from '@/components/network-switch-prompt';
 import { useState } from 'react';
 
 /**
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       >
         <WalletProvider>
           <AuthProvider>
+            <NetworkSwitchPrompt />
             {children}
             <Toaster />
           </AuthProvider>
