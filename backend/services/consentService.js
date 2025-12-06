@@ -550,8 +550,8 @@ class ConsentService {
         filtered = uniqueConsents;
       }
 
-      // Cache result (1-2 minutes TTL)
-      const ttl = 90; // 90 seconds
+      // Use shorter TTL for provider consents (they can change when requests are approved)
+      const ttl = 15; // 15 seconds - consents can be added quickly when requests are approved
       await cacheService.set(cacheKey, filtered, ttl);
 
       return filtered;
