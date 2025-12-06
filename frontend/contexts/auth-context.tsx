@@ -157,14 +157,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('[AuthContext] authenticate() - Step 3: Requesting signature from MetaMask');
       console.log('[AuthContext] authenticate() - Message to sign:', message.substring(0, 50) + '...');
-      const signature = await signer.signMessage(message);
-      console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
+      console.log('[AuthContext] authenticate() - About to call signer.signMessage() - this should only happen ONCE');
+      
+      // Store a flag that we're about to sign (to prevent duplicate calls)
+      // This is a final defense against race conditions
+      const signingKey = `signing_${account}_${Date.now()}`;
+      const existingSigning = sessionStorage.getItem('auth_signing');
+      if (existingSigning && existingSigning !== signingKey) {
+        console.log('[AuthContext] authenticate() - Another signature request is in progress, aborting');
+        isAuthenticatingRef.current = false;
+        return;
+      }
+      sessionStorage.setItem('auth_signing', signingKey);
+      
+      try {
+        const signature = await signer.signMessage(message);
+        console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
+        sessionStorage.removeItem('auth_signing');
+        
+        // Continue with rest of authentication...
 
       // Step 3: Login and get JWT token
       const authToken = await login(account, signature, message, timestamp);
 
-      // Step 4: Store token
-      storeToken(authToken.token, authToken.expiresIn);
+        // Step 5: Store token
+        storeToken(authToken.token, authToken.expiresIn);
 
       // Clear ref first, then update state
       isAuthenticatingRef.current = false;
