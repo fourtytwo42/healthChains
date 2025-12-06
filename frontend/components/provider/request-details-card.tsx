@@ -83,11 +83,32 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
     ? `${requestData.patient.firstName} ${requestData.patient.lastName}`
     : null;
   const patientId = requestData.patient?.patientId || null;
+  const patientContact = requestData.patient?.contact || null;
+  const patientAddress = requestData.patient?.address 
+    ? `${requestData.patient.address.street || ''}, ${requestData.patient.address.city || ''}, ${requestData.patient.address.state || ''} ${requestData.patient.address.zipCode || ''}`
+    : null;
+  
+  // Google Maps URL for patient address
+  const googleMapsUrl = patientAddress 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async () => {
+    if (!requestData.patientAddress) return;
+    try {
+      await navigator.clipboard.writeText(requestData.patientAddress);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="pb-3 flex-shrink-0">
+        <DialogHeader className="pb-4 border-b flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileText className="h-4 w-4" />
             Request Details
@@ -95,48 +116,82 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
           <DialogDescription className="text-xs">
             View details of your access request
           </DialogDescription>
+          
+          {/* Patient Info - Consolidated format matching other cards */}
+          {patientName && (
+            <div className="mt-4 text-sm">
+              {/* Patient Name - Full width row */}
+              <div className="mb-3">
+                <p className="font-semibold text-base">{patientName}</p>
+              </div>
+              
+              {/* Two column layout below name */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  {patientId && (
+                    <p className="text-muted-foreground text-xs font-mono mb-2">
+                      <strong>Patient ID:</strong> {patientId}
+                    </p>
+                  )}
+                  {requestData.patientAddress && (
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Wallet:</strong>{' '}
+                        <button
+                          onClick={handleCopyWalletAddress}
+                          className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                          title="Click to copy full wallet address"
+                        >
+                          {requestData.patientAddress.slice(0, 6)}...{requestData.patientAddress.slice(-4)}
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {patientContact?.phone && (
+                    <p>
+                      <strong>Phone:</strong>{' '}
+                      <a 
+                        href={`tel:${patientContact.phone}`}
+                        className="text-primary hover:underline"
+                      >
+                        {patientContact.phone}
+                      </a>
+                    </p>
+                  )}
+                  {patientContact?.email && (
+                    <p>
+                      <strong>Email:</strong>{' '}
+                      <a 
+                        href={`mailto:${patientContact.email}`}
+                        className="text-primary hover:underline"
+                      >
+                        {patientContact.email}
+                      </a>
+                    </p>
+                  )}
+                  {patientAddress && googleMapsUrl && (
+                    <p>
+                      <strong>Address:</strong>{' '}
+                      <a 
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {patientAddress}
+                      </a>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-          {/* Patient Information */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-1.5 text-sm">
-                <Users className="h-3 w-3" />
-                Patient Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-1.5">
-              {patientName ? (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Patient Name</p>
-                  <p className="font-semibold text-xs">{patientName}</p>
-                </div>
-              ) : null}
-              {patientId ? (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Patient ID</p>
-                  <p className="text-xs font-mono">{patientId}</p>
-                </div>
-              ) : null}
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Patient Address</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-mono break-all">{requestData.patientAddress}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 flex-shrink-0"
-                    onClick={() => handleCopyAddress(requestData.patientAddress)}
-                    title="Copy address"
-                    aria-label="Copy patient address to clipboard"
-                  >
-                    <Copy className="h-2.5 w-2.5" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Request Details */}
           <Card>

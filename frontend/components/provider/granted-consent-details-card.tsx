@@ -12,13 +12,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ColoredBadge, ColoredBadgeList } from '@/components/shared/colored-badge';
-import { Calendar, History, Clock, CheckCircle, X, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, History, Clock, CheckCircle, X, Users, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { useProviderPatientData, useProviderConsentHistory } from '@/hooks/use-api';
 import type { ConsentHistoryEvent } from '@/types/consent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { RequestConsentDialog } from '@/components/provider/request-consent-dialog';
 import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
+import { toast } from 'sonner';
 
 interface GrantedConsentDetailsCardProps {
   patientId: string;
@@ -225,65 +226,119 @@ export function GrantedConsentDetailsCard({
   const patientAddress = demographics.address 
     ? `${demographics.address.street || ''}, ${demographics.address.city || ''}, ${demographics.address.state || ''} ${demographics.address.zipCode || ''}`
     : 'N/A';
+  
+  // Google Maps URL for patient address
+  const googleMapsUrl = patientAddress !== 'N/A' 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async () => {
+    if (!actualPatientWalletAddress) return;
+    try {
+      await navigator.clipboard.writeText(actualPatientWalletAddress);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="border-b pb-4 flex-shrink-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <DialogTitle className="text-lg">
-                Consent Details - {patientData.patientId}
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Patient demographics, active consents, and consent history
-              </DialogDescription>
-              
-              {/* Patient Info - Not in scrollable area, matching medical chart */}
-              <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="font-semibold text-base mb-1">
-                    {onOpenMedicalChart ? (
+          <DialogTitle className="text-lg">
+            Consent Details - {patientData.patientId}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Patient demographics, active consents, and consent history
+          </DialogDescription>
+          
+          {/* Patient Info - Consolidated format matching provider info format */}
+          <div className="mt-4 text-sm">
+            {/* Patient Name - Full width row */}
+            <div className="mb-3">
+              {onOpenMedicalChart ? (
+                <button
+                  onClick={() => {
+                    onOpenMedicalChart(patientId);
+                    onClose();
+                  }}
+                  className="text-primary hover:underline cursor-pointer text-left"
+                >
+                  <p className="font-semibold text-base">{patientName}</p>
+                </button>
+              ) : (
+                <p className="font-semibold text-base">{patientName}</p>
+              )}
+              <p className="text-muted-foreground text-xs mt-0.5">
+                {demographics.dateOfBirth ? `DOB: ${format(new Date(demographics.dateOfBirth), 'MMM d, yyyy')}` : ''}
+                {demographics.age ? ` • Age: ${demographics.age}` : ''}
+                {demographics.gender ? ` • ${demographics.gender}` : ''}
+              </p>
+            </div>
+            
+            {/* Two column layout below name */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                {patientData.patientId && (
+                  <p className="text-muted-foreground text-xs font-mono mb-2">
+                    <strong>Patient ID:</strong> {patientData.patientId}
+                  </p>
+                )}
+                {actualPatientWalletAddress && (
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-muted-foreground text-xs font-mono">
+                      <strong>Wallet:</strong>{' '}
                       <button
-                        onClick={() => {
-                          onOpenMedicalChart(patientId);
-                          onClose();
-                        }}
-                        className="text-primary hover:underline cursor-pointer text-left"
+                        onClick={handleCopyWalletAddress}
+                        className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                        title="Click to copy full wallet address"
                       >
-                        {patientName}
+                        {actualPatientWalletAddress.slice(0, 6)}...{actualPatientWalletAddress.slice(-4)}
+                        <Copy className="h-3 w-3" />
                       </button>
-                    ) : (
-                      patientName
-                    )}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {demographics.dateOfBirth ? `DOB: ${format(new Date(demographics.dateOfBirth), 'MMM d, yyyy')}` : ''}
-                    {demographics.age ? ` • Age: ${demographics.age}` : ''}
-                    {demographics.gender ? ` • ${demographics.gender}` : ''}
-                  </p>
-                  {patientData.patientId && (
-                    <p className="text-muted-foreground text-xs font-mono mt-1">
-                      <strong>Patient ID:</strong> {patientData.patientId}
                     </p>
-                  )}
-                  {actualPatientWalletAddress && (
-                    <p className="text-muted-foreground text-xs font-mono mt-1">
-                      <strong>Wallet:</strong> {actualPatientWalletAddress.slice(0, 6)}...{actualPatientWalletAddress.slice(-4)}
-                    </p>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {demographics.contact?.phone && (
-                    <p><strong>Phone:</strong> {demographics.contact.phone}</p>
-                  )}
-                  {demographics.contact?.email && (
-                    <p><strong>Email:</strong> {demographics.contact.email}</p>
-                  )}
-                  {patientAddress !== 'N/A' && (
-                    <p><strong>Address:</strong> {patientAddress}</p>
-                  )}
-                </div>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {demographics.contact?.phone && (
+                  <p>
+                    <strong>Phone:</strong>{' '}
+                    <a 
+                      href={`tel:${demographics.contact.phone}`}
+                      className="text-primary hover:underline"
+                    >
+                      {demographics.contact.phone}
+                    </a>
+                  </p>
+                )}
+                {demographics.contact?.email && (
+                  <p>
+                    <strong>Email:</strong>{' '}
+                    <a 
+                      href={`mailto:${demographics.contact.email}`}
+                      className="text-primary hover:underline"
+                    >
+                      {demographics.contact.email}
+                    </a>
+                  </p>
+                )}
+                {patientAddress !== 'N/A' && googleMapsUrl && (
+                  <p>
+                    <strong>Address:</strong>{' '}
+                    <a 
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {patientAddress}
+                    </a>
+                  </p>
+                )}
               </div>
             </div>
           </div>

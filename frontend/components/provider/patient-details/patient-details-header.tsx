@@ -1,6 +1,8 @@
 'use client';
 
 import { format } from 'date-fns';
+import { Copy } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface PatientDetailsHeaderProps {
   patientId: string;
@@ -17,37 +19,97 @@ export function PatientDetailsHeader({
   const patientAddress = demographics.address 
     ? `${demographics.address.street || ''}, ${demographics.address.city || ''}, ${demographics.address.state || ''} ${demographics.address.zipCode || ''}`
     : 'N/A';
+  
+  // Google Maps URL for patient address
+  const googleMapsUrl = patientAddress !== 'N/A' 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async () => {
+    if (!patientWalletAddress) return;
+    try {
+      await navigator.clipboard.writeText(patientWalletAddress);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
 
   return (
-    <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-      <div>
-        <p className="font-semibold text-base mb-1">{patientName || 'N/A'}</p>
-        <p className="text-muted-foreground text-xs">
+    <div className="mt-4 text-sm">
+      {/* Patient Name - Full width row */}
+      <div className="mb-3">
+        <p className="font-semibold text-base">{patientName || 'N/A'}</p>
+        <p className="text-muted-foreground text-xs mt-0.5">
           {demographics.dateOfBirth ? `DOB: ${format(new Date(demographics.dateOfBirth), 'MMM d, yyyy')}` : ''}
           {demographics.age ? ` • Age: ${demographics.age}` : ''}
           {demographics.gender ? ` • ${demographics.gender}` : ''}
         </p>
-        {patientId && (
-          <p className="text-muted-foreground text-xs font-mono mt-1">
-            <strong>Patient ID:</strong> {patientId}
-          </p>
-        )}
-        {patientWalletAddress && (
-          <p className="text-muted-foreground text-xs font-mono mt-1">
-            <strong>Wallet:</strong> {patientWalletAddress.slice(0, 6)}...{patientWalletAddress.slice(-4)}
-          </p>
-        )}
       </div>
-      <div className="text-xs text-muted-foreground">
-        {demographics.contact?.phone && (
-          <p><strong>Phone:</strong> {demographics.contact.phone}</p>
-        )}
-        {demographics.contact?.email && (
-          <p><strong>Email:</strong> {demographics.contact.email}</p>
-        )}
-        {patientAddress !== 'N/A' && (
-          <p><strong>Address:</strong> {patientAddress}</p>
-        )}
+      
+      {/* Two column layout below name */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          {patientId && (
+            <p className="text-muted-foreground text-xs font-mono mb-2">
+              <strong>Patient ID:</strong> {patientId}
+            </p>
+          )}
+          {patientWalletAddress && (
+            <div className="flex items-center gap-1.5">
+              <p className="text-muted-foreground text-xs font-mono">
+                <strong>Wallet:</strong>{' '}
+                <button
+                  onClick={handleCopyWalletAddress}
+                  className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                  title="Click to copy full wallet address"
+                >
+                  {patientWalletAddress.slice(0, 6)}...{patientWalletAddress.slice(-4)}
+                  <Copy className="h-3 w-3" />
+                </button>
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {demographics.contact?.phone && (
+            <p>
+              <strong>Phone:</strong>{' '}
+              <a 
+                href={`tel:${demographics.contact.phone}`}
+                className="text-primary hover:underline"
+              >
+                {demographics.contact.phone}
+              </a>
+            </p>
+          )}
+          {demographics.contact?.email && (
+            <p>
+              <strong>Email:</strong>{' '}
+              <a 
+                href={`mailto:${demographics.contact.email}`}
+                className="text-primary hover:underline"
+              >
+                {demographics.contact.email}
+              </a>
+            </p>
+          )}
+          {patientAddress !== 'N/A' && googleMapsUrl && (
+            <p>
+              <strong>Address:</strong>{' '}
+              <a 
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                {patientAddress}
+              </a>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
