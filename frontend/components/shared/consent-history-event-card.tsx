@@ -11,45 +11,7 @@ import { format } from 'date-fns';
 import { ProviderInfoSection } from '@/components/shared/provider-info-section';
 import { apiClient } from '@/lib/api-client';
 import { useState, useEffect } from 'react';
-
-interface ConsentHistoryEvent {
-  type: string;
-  blockNumber?: number;
-  transactionHash?: string;
-  consentId?: number;
-  requestId?: number;
-  patient?: string;
-  provider?: string;
-  requester?: string;
-  dataType?: string;
-  dataTypes?: string[];
-  purpose?: string;
-  purposes?: string[];
-  expirationTime?: string | null;
-  timestamp: string;
-  providerInfo?: {
-    organizationName?: string;
-    providerType?: string;
-    specialties?: string[];
-    contact?: {
-      email?: string;
-      website?: string;
-      phone?: string;
-    };
-    address?: {
-      street?: string;
-      city?: string;
-      state?: string;
-      zipCode?: string;
-    };
-  } | null;
-  patientInfo?: {
-    patientId?: string;
-    firstName?: string;
-    lastName?: string;
-  } | null;
-  isExpired?: boolean;
-}
+import type { ConsentHistoryEvent } from '@/types/consent';
 
 interface ConsentHistoryEventCardProps {
   event: ConsentHistoryEvent;
@@ -216,10 +178,59 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
                       <p className="text-sm font-mono">{event.patientInfo.patientId}</p>
                     </div>
                   )}
+                  {event.patientInfo.age !== undefined && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Age</p>
+                      <p className="text-sm">{event.patientInfo.age}</p>
+                    </div>
+                  )}
+                  {event.patientInfo.gender && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Gender</p>
+                      <p className="text-sm capitalize">{event.patientInfo.gender}</p>
+                    </div>
+                  )}
+                  {event.patientInfo.dateOfBirth && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Date of Birth</p>
+                      <p className="text-sm">
+                        {format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                  )}
                   {event.patient && (
                     <div className="col-span-2">
                       <p className="text-xs text-muted-foreground">Patient Address</p>
                       <p className="text-sm font-mono break-all">{event.patient}</p>
+                    </div>
+                  )}
+                  {event.patientInfo.contact && (
+                    <>
+                      {event.patientInfo.contact.phone && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Phone</p>
+                          <p className="text-sm">{event.patientInfo.contact.phone}</p>
+                        </div>
+                      )}
+                      {event.patientInfo.contact.email && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Email</p>
+                          <p className="text-sm break-all">{event.patientInfo.contact.email}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {event.patientInfo.address && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Address</p>
+                      <p className="text-sm">
+                        {[
+                          event.patientInfo.address.street,
+                          event.patientInfo.address.city,
+                          event.patientInfo.address.state,
+                          event.patientInfo.address.zipCode,
+                        ].filter(Boolean).join(', ')}
+                      </p>
                     </div>
                   )}
                 </div>
