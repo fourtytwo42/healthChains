@@ -185,18 +185,15 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
               <FileText className="h-4 w-4" />
               Requested Access
             </CardTitle>
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground">Request Date</p>
+              <p className="text-xs">
+                {format(new Date(requestData.timestamp), 'MMM d, yyyy HH:mm')}
+              </p>
+            </div>
           </CardHeader>
           <CardContent className="pt-0 space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Data Types</p>
-                {requestData.dataTypes && requestData.dataTypes.length > 0 ? (
-                  <ColoredBadgeList type="dataType" values={requestData.dataTypes} size="sm" />
-                ) : (
-                  <p className="text-xs text-muted-foreground">No data types specified</p>
-                )}
-              </div>
-
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Purposes</p>
                 {requestData.purposes && requestData.purposes.length > 0 ? (
@@ -205,28 +202,28 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
                   <p className="text-xs text-muted-foreground">No purposes specified</p>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {requestData.expirationTime && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    Expiration
-                  </p>
-                  <p className="text-xs">
-                    {format(new Date(requestData.expirationTime), 'MMM d, yyyy HH:mm')}
-                  </p>
-                </div>
-              )}
 
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Request Date</p>
-                <p className="text-xs">
-                  {format(new Date(requestData.timestamp), 'MMM d, yyyy HH:mm')}
-                </p>
+                <p className="text-xs text-muted-foreground mb-1">Data Types</p>
+                {requestData.dataTypes && requestData.dataTypes.length > 0 ? (
+                  <ColoredBadgeList type="dataType" values={requestData.dataTypes} size="sm" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No data types specified</p>
+                )}
               </div>
             </div>
+
+            {requestData.expirationTime && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  Expiration
+                </p>
+                <p className="text-xs">
+                  {format(new Date(requestData.expirationTime), 'MMM d, yyyy HH:mm')}
+                </p>
+              </div>
+            )}
 
             {isProcessed && (
               <div>
