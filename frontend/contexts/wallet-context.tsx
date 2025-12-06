@@ -206,6 +206,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       chainId: null,
       isConnecting: false,
       error: null,
+      isWrongNetwork: false,
     });
   };
 
