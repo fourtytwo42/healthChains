@@ -192,7 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[AuthContext] authenticate() - CALLING signer.signMessage() NOW - this is the ONLY call');
         const signature = await signer.signMessage(message);
         console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
-        sessionStorage.removeItem('auth_signing');
+        console.log('[AuthContext] authenticate() - Clearing BOTH flags after successful signature');
+        isWaitingForSignatureRef.current = false; // Clear ref
+        sessionStorage.removeItem('auth_signing'); // Clear sessionStorage
         
         // Step 4: Login and get JWT token
         const authToken = await login(account, signature, message, timestamp);
