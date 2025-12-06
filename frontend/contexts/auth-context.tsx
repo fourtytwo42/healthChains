@@ -101,21 +101,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check ref first (atomic check) - this is the primary guard
     // If ref is set, authenticate() is already running
     if (isAuthenticatingRef.current) {
-      console.log('[AuthContext] Already authenticating (ref check), skipping duplicate call');
+      console.log('[AuthContext] authenticate() BLOCKED - ref already set (duplicate call prevented)');
       return;
     }
     
-    // Also check if we're handling an account change - if so, only proceed if this is the explicit call
-    // The auto-authenticate effect should be blocked by the flag
-    if (isHandlingAccountChangeRef.current && state.isAuthenticating) {
-      // This is the explicit call from account change handler - allow it to proceed
-      // The ref will be set below to prevent duplicate calls
-    } else if (state.isAuthenticating) {
-      // State says authenticating but we're not handling account change
-      // This shouldn't happen, but be safe and skip
-      console.log('[AuthContext] Already authenticating (state check), skipping duplicate call');
+    // If state says authenticating but ref doesn't, we might be in account change flow
+    // Allow it to proceed if we're handling account change (explicit call)
+    // Otherwise, skip to be safe
+    if (state.isAuthenticating && !isHandlingAccountChangeRef.current) {
+      console.log('[AuthContext] authenticate() BLOCKED - state.isAuthenticating=true but not handling account change');
       return;
     }
+    
+    console.log('[AuthContext] authenticate() PROCEEDING - setting ref now');
 
     // CRITICAL: Set ref FIRST (atomically) to prevent any other calls from proceeding
     // Double-check one more time right before setting (defense in depth against race conditions)
