@@ -188,6 +188,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isWaitingForSignatureRef.current = true; // Set ref immediately (in-memory)
       sessionStorage.setItem('auth_signing', signingKey); // Set sessionStorage (persistent)
       
+      // 4. Small delay to ensure flags are set and prevent any race conditions
+      // This gives any concurrent calls time to see the flags
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // 5. Double-check flags one more time after delay (defense in depth)
+      if (!isWaitingForSignatureRef.current || !sessionStorage.getItem('auth_signing')) {
+        console.log('[AuthContext] authenticate() - Flags were cleared during delay, aborting');
+        isAuthenticatingRef.current = false;
+        return;
+      }
+      
       try {
         console.log('[AuthContext] authenticate() - CALLING signer.signMessage() NOW - this is the ONLY call');
         const signature = await signer.signMessage(message);
