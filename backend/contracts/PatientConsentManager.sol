@@ -92,6 +92,7 @@ contract PatientConsentManager is ReentrancyGuard {
     
     /// @notice Maximum value for uint128 (used for expiration time validation)
     uint256 private constant MAX_UINT128 = type(uint128).max;
+    uint256 private constant MAX_UINT112 = type(uint112).max;
 
     // ==================== ENUMS ====================
     
@@ -141,16 +142,18 @@ contract PatientConsentManager is ReentrancyGuard {
     /**
      * @notice Represents a request for access to patient data
      * @dev Enhanced structure with status enum and expiration time
+     * @dev Optimized struct packing: uint128 timestamp + uint112 expirationTime + bool + enum = 32 bytes (perfect fit)
      */
     struct AccessRequest {
-        address requester;           // Address requesting access
-        address patientAddress;      // Address of the patient whose data is requested
-        uint128 timestamp;           // Unix timestamp when request was created (packed)
-        uint128 expirationTime;      // Unix timestamp when request expires, 0 = no expiration (packed)
-        bool isProcessed;            // Whether request has been processed (packed)
-        RequestStatus status;        // Current status of the request (packed)
-        string dataType;             // Type of data being requested
-        string purpose;              // Purpose for which data is needed
+        address requester;           // Address requesting access (slot 1)
+        address patientAddress;      // Address of the patient whose data is requested (slot 2)
+        uint128 timestamp;           // Unix timestamp when request was created (slot 3, 16 bytes)
+        uint112 expirationTime;      // Unix timestamp when request expires, 0 = no expiration (slot 3, 14 bytes)
+        bool isProcessed;            // Whether request has been processed (slot 3, 1 byte)
+        RequestStatus status;        // Current status of the request (slot 3, 1 byte)
+        // Slot 3: 16 + 14 + 1 + 1 = 32 bytes (perfect packing)
+        string dataType;             // Type of data being requested (slot 4+)
+        string purpose;              // Purpose for which data is needed (slot 5+)
     }
 
     // ==================== STORAGE VARIABLES ====================
@@ -682,9 +685,9 @@ contract PatientConsentManager is ReentrancyGuard {
             revert ExpirationInPast();
         }
         
-        // Validate expiration time fits in uint128
-        if (expirationTime > MAX_UINT128) {
-            revert ExpirationTooLarge(expirationTime, MAX_UINT128);
+        // Validate expiration time fits in uint112 (AccessRequest uses uint112 for struct packing optimization)
+        if (expirationTime > MAX_UINT112) {
+            revert ExpirationTooLarge(expirationTime, MAX_UINT112);
         }
         
         // Validate all data types and purposes
@@ -710,7 +713,7 @@ contract PatientConsentManager is ReentrancyGuard {
         request.requester = msg.sender;
         request.patientAddress = patient;
         request.timestamp = uint128(block.timestamp);
-        request.expirationTime = uint128(expirationTime);
+        request.expirationTime = uint112(expirationTime);
         request.isProcessed = false;
         request.status = RequestStatus.Pending;
         request.dataType = dataTypes[0]; // Store first for struct compatibility
@@ -846,8 +849,8 @@ contract PatientConsentManager is ReentrancyGuard {
                 batchConsent.patientAddress = msg.sender;
                 batchConsent.providerAddress = request.requester;
                 batchConsent.timestamp = uint128(block.timestamp);
-                // request.expirationTime is already validated in requestAccess() and fits in uint128
-                batchConsent.expirationTime = uint128(request.expirationTime);
+                // request.expirationTime is already validated in requestAccess() and fits in uint112
+                batchConsent.expirationTime = uint128(uint112(request.expirationTime));
                 batchConsent.isActive = true;
                 
                 // Store arrays directly in the struct (one write per array)
