@@ -142,9 +142,10 @@ const strictLimiter = rateLimit({
 
 // Apply rate limiting to API routes, but exclude lightweight endpoints
 // /api/user/role is a simple Map lookup and should not be rate limited
+// /api/auth/message is needed for authentication and should not be rate limited
 app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for lightweight endpoints
-  if (req.path === '/user/role') {
+  // Skip rate limiting for lightweight/essential endpoints
+  if (req.path === '/user/role' || req.path === '/auth/message') {
     return next();
   }
   return apiLimiter(req, res, next);
