@@ -126,8 +126,8 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto w-full">
       {/* Header with Clear Button */}
-      <div className="flex items-center justify-between mb-4 pb-4 border-b">
-        <h1 className="text-2xl font-bold">Chat with Fred</h1>
+      <div className="flex items-center justify-between mb-4 pb-4 border-b flex-shrink-0">
+        <h1 className="text-2xl font-bold">Chat</h1>
         <Button
           variant="outline"
           size="sm"
@@ -141,13 +141,13 @@ export default function ChatPage() {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+      <div className={`flex-1 min-h-0 space-y-4 mb-4 pr-2 ${messages.length > 0 ? 'overflow-y-auto' : 'overflow-hidden'}`}>
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-center">
             <div className="space-y-2">
-              <p className="text-lg font-semibold">Start a conversation with Fred</p>
+              <p className="text-lg font-semibold">Start a conversation</p>
               <p className="text-sm text-muted-foreground">
-                Ask questions or have a conversation. This is a mock chat interface.
+                Ask questions or have a conversation
               </p>
             </div>
           </div>
@@ -255,8 +255,8 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="border-t pt-4">
+      {/* Input Area - Fixed at bottom */}
+      <div className="border-t pt-4 flex-shrink-0">
         <div className="flex gap-2">
           <Input
             ref={inputRef}
