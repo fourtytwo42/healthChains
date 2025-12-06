@@ -136,35 +136,68 @@ export function ConsentHistoryEventCard({ event, onClose, userRole = 'patient' }
           
           {/* Patient Info - Consolidated format matching granted consent details card */}
           {userRole === 'provider' && event.patientInfo && (
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-semibold text-base mb-1">{patientName}</p>
-                <p className="text-muted-foreground text-xs">
+            <div className="mt-4 text-sm">
+              {/* Patient Name - Full width row */}
+              <div className="mb-3">
+                <p className="font-semibold text-base">{patientName}</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
                   {event.patientInfo.dateOfBirth ? `DOB: ${format(new Date(event.patientInfo.dateOfBirth), 'MMM d, yyyy')}` : ''}
                   {event.patientInfo.age !== undefined ? ` • Age: ${event.patientInfo.age}` : ''}
                   {event.patientInfo.gender ? ` • ${event.patientInfo.gender}` : ''}
                 </p>
-                {event.patientInfo.patientId && (
-                  <p className="text-muted-foreground text-xs font-mono mt-1">
-                    <strong>Patient ID:</strong> {event.patientInfo.patientId}
-                  </p>
-                )}
-                {event.patient && (
-                  <p className="text-muted-foreground text-xs font-mono mt-1">
-                    <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
-                  </p>
-                )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {event.patientInfo.contact?.phone && (
-                  <p><strong>Phone:</strong> {event.patientInfo.contact.phone}</p>
-                )}
-                {event.patientInfo.contact?.email && (
-                  <p><strong>Email:</strong> {event.patientInfo.contact.email}</p>
-                )}
-                {patientAddress !== 'N/A' && (
-                  <p><strong>Address:</strong> {patientAddress}</p>
-                )}
+              
+              {/* Two column layout below name */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  {event.patientInfo.patientId && (
+                    <p className="text-muted-foreground text-xs font-mono mb-2">
+                      <strong>Patient ID:</strong> {event.patientInfo.patientId}
+                    </p>
+                  )}
+                  {event.patient && (
+                    <p className="text-muted-foreground text-xs font-mono">
+                      <strong>Wallet:</strong> {event.patient.slice(0, 6)}...{event.patient.slice(-4)}
+                    </p>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {event.patientInfo.contact?.phone && (
+                    <p>
+                      <strong>Phone:</strong>{' '}
+                      <a 
+                        href={`tel:${event.patientInfo.contact.phone}`}
+                        className="text-primary hover:underline"
+                      >
+                        {event.patientInfo.contact.phone}
+                      </a>
+                    </p>
+                  )}
+                  {event.patientInfo.contact?.email && (
+                    <p>
+                      <strong>Email:</strong>{' '}
+                      <a 
+                        href={`mailto:${event.patientInfo.contact.email}`}
+                        className="text-primary hover:underline"
+                      >
+                        {event.patientInfo.contact.email}
+                      </a>
+                    </p>
+                  )}
+                  {patientAddress !== 'N/A' && (
+                    <p>
+                      <strong>Address:</strong>{' '}
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patientAddress)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {patientAddress}
+                      </a>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
