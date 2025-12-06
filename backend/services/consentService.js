@@ -1377,7 +1377,25 @@ class ConsentService {
             expirationTime: expirationTime,
             timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
           };
-        }),
+        })
+      );
+      
+      const events = [
+        ...requestedEvents.map(event => ({
+          type: 'AccessRequested',
+          blockNumber: event.blockNumber,
+          transactionHash: event.transactionHash,
+          requestId: Number(event.args.requestId),
+          requester: ethers.getAddress(event.args.requester),
+          patient: ethers.getAddress(event.args.patient),
+          dataTypes: Array.isArray(event.args.dataTypes) ? event.args.dataTypes : [],
+          purposes: Array.isArray(event.args.purposes) ? event.args.purposes : [],
+          expirationTime: event.args.expirationTime === 0n 
+            ? null 
+            : new Date(Number(event.args.expirationTime) * 1000).toISOString(),
+          timestamp: new Date(Number(event.args.timestamp) * 1000).toISOString()
+        })),
+        ...approvedEventsTransformed,
         ...deniedEvents.map(event => {
           const requestId = Number(event.args.requestId);
           const requestInfo = requestMap.get(requestId);
