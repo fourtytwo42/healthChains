@@ -5,6 +5,8 @@
  * Currently defaults to localhost, but can be easily changed to production networks.
  */
 
+import { getRpcUrl } from './env-config';
+
 export interface NetworkConfig {
   chainId: number;
   chainName: string;
@@ -17,12 +19,16 @@ export interface NetworkConfig {
 /**
  * Get network configuration from environment variables
  * Defaults to localhost Hardhat network
+ * RPC URL is dynamically determined based on hostname
  */
 export function getNetworkConfig(): NetworkConfig {
+  // Get RPC URL dynamically based on hostname
+  const rpcUrl = typeof window !== 'undefined' ? getRpcUrl() : (process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545');
+  
   return {
     chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1337', 10),
     chainName: process.env.NEXT_PUBLIC_NETWORK_NAME || 'Hardhat Local',
-    rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545',
+    rpcUrl,
     currencySymbol: process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'ETH',
     currencyName: process.env.NEXT_PUBLIC_CURRENCY_NAME || 'Ether',
     blockExplorerUrl: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || null,

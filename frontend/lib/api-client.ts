@@ -6,8 +6,17 @@
  */
 
 import { getToken } from './auth';
+import { getApiBaseUrl } from './env-config';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+// Get API base URL dynamically based on hostname
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    return getApiBaseUrl();
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+};
+
+const API_BASE_URL = getBaseUrl();
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -121,8 +130,9 @@ class ApiClient {
   private baseUrl: string;
   private timeout: number;
 
-  constructor(baseUrl: string = API_BASE_URL, timeout: number = 30000) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string, timeout: number = 30000) {
+    // Use provided baseUrl, or get dynamically based on hostname
+    this.baseUrl = baseUrl || getApiBaseUrl();
     this.timeout = timeout;
   }
 

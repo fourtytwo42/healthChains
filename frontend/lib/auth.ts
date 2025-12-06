@@ -4,7 +4,17 @@
  * Handles authentication flow: get message, sign with MetaMask, get JWT token
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from './env-config';
+
+// Get API base URL dynamically based on hostname
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    return getApiBaseUrl();
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+};
+
+const API_BASE_URL = getBaseUrl();
 const TOKEN_STORAGE_KEY = 'healthchains_jwt_token';
 const TOKEN_EXPIRY_KEY = 'healthchains_jwt_expiry';
 

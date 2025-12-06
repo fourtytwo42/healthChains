@@ -4,6 +4,7 @@ const fsSync = require('fs'); // Keep sync version for existsSync only
 const path = require('path');
 const { ConfigurationError, Web3ConnectionError } = require('../utils/errors');
 const logger = require('../utils/logger');
+const { getRpcUrl } = require('../utils/env-config');
 
 /**
  * Web3 Service - Centralized blockchain connection and contract management
@@ -64,7 +65,8 @@ class Web3Service {
     }
 
     // Load configuration from environment
-    const rpcUrl = process.env.RPC_URL || 'http://127.0.0.1:8545';
+    // Use getRpcUrl() to automatically detect production vs local
+    const rpcUrl = getRpcUrl();
     const networkName = process.env.NETWORK_NAME || 'localhost';
     const requestTimeout = parseInt(process.env.REQUEST_TIMEOUT || '30000', 10);
     const maxRetries = parseInt(process.env.MAX_RETRIES || '3', 10);

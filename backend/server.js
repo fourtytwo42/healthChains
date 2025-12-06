@@ -115,9 +115,30 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const { getApiBaseUrl } = require('./utils/env-config');
 
 // Middleware
-app.use(cors());
+// Configure CORS to allow requests from both localhost and production domain
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost and 127.0.0.1
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+    
+    // Allow production domain
+    if (origin.includes('app.qrmk.us') || origin.includes('.qrmk.us')) {
+      return callback(null, true);
+    }
+    
+    // Default: allow the request
+    callback(null, true);
+  },
+  credentials: true,
+}));
 
 // Add request/response logging (improvement #16 - quick win)
 if (process.env.NODE_ENV !== 'test') {
