@@ -161,13 +161,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Store a flag that we're about to sign (to prevent duplicate calls)
       // This is a final defense against race conditions
-      const signingKey = `signing_${account}_${Date.now()}`;
+      // Use account + message hash to create unique key (not timestamp, as calls might be simultaneous)
+      const messageHash = message.substring(0, 20); // Use first 20 chars of message as part of key
+      const signingKey = `signing_${account.toLowerCase()}_${messageHash}`;
       const existingSigning = sessionStorage.getItem('auth_signing');
-      if (existingSigning && existingSigning !== signingKey) {
-        console.log('[AuthContext] authenticate() - Another signature request is in progress, aborting');
+      console.log('[AuthContext] authenticate() - Checking sessionStorage for existing signing:', existingSigning);
+      console.log('[AuthContext] authenticate() - New signing key:', signingKey);
+      
+      if (existingSigning) {
+        console.log('[AuthContext] authenticate() - BLOCKED: Another signature request is in progress!');
+        console.log('[AuthContext] authenticate() - Existing key:', existingSigning, 'New key:', signingKey);
         isAuthenticatingRef.current = false;
         return;
       }
+      
+      console.log('[AuthContext] authenticate() - Setting sessionStorage flag before signing');
       sessionStorage.setItem('auth_signing', signingKey);
       
       try {
