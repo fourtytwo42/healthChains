@@ -12,7 +12,8 @@ import {
   Building2,
   User,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -64,26 +65,30 @@ export function Sidebar() {
     ? `${currentPatient.demographics.firstName} ${currentPatient.demographics.lastName}`.trim()
     : 'Patient Dashboard';
 
+  // Get user display name for chat
+  const getUserDisplayName = () => {
+    if (role?.role === 'provider' || role?.role === 'both') {
+      return providerName;
+    }
+    if (role?.role === 'patient') {
+      return patientName;
+    }
+    return 'User';
+  };
+
   // Determine navigation based on role
   const getNavigation = () => {
     if (!account || isLoading) {
       return [];
     }
 
-    if (role?.role === 'provider' || role?.role === 'both') {
-      return [
-        { name: providerName, href: '/provider', icon: Building2 },
-      ];
-    }
+    const dashboardHref = role?.role === 'provider' || role?.role === 'both' ? '/provider' : '/patient';
+    const dashboardIcon = role?.role === 'provider' || role?.role === 'both' ? Building2 : User;
 
-    if (role?.role === 'patient') {
-      return [
-        { name: patientName, href: '/patient', icon: User },
-      ];
-    }
-
-    // Unknown role - show nothing or default
-    return [];
+    return [
+      { name: 'Dashboard', href: dashboardHref, icon: dashboardIcon },
+      { name: 'Chat', href: '/chat', icon: MessageSquare },
+    ];
   };
 
   const navigation = getNavigation();
@@ -116,7 +121,10 @@ export function Sidebar() {
           </div>
         ) : navigation.length > 0 ? (
           navigation.map((item) => {
-            const isActive = pathname === item.href || (item.href === '/provider' && pathname.startsWith('/provider')) || (item.href === '/patient' && pathname.startsWith('/patient'));
+            const isActive = pathname === item.href || 
+              (item.href === '/provider' && pathname.startsWith('/provider')) || 
+              (item.href === '/patient' && pathname.startsWith('/patient')) ||
+              (item.href === '/chat' && pathname.startsWith('/chat'));
             return (
               <Link
                 key={item.name}
