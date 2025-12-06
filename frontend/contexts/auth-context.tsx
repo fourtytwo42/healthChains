@@ -241,9 +241,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Clear old token
       clearToken();
+      
+      // Set isAuthenticating immediately to prevent auto-authenticate effect from triggering
       setState({
         isAuthenticated: false,
-        isAuthenticating: false,
+        isAuthenticating: true, // Set to true immediately to block auto-authenticate effect
         token: null,
         error: null,
       });
