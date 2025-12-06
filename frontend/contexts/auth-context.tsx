@@ -226,7 +226,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Don't show toast on automatic authentication
         // Only show on manual authentication attempts
       } catch (signError) {
-        sessionStorage.removeItem('auth_signing');
+        console.error('[AuthContext] authenticate() - Error during signing:', signError);
+        console.log('[AuthContext] authenticate() - Clearing BOTH flags after error');
+        isWaitingForSignatureRef.current = false; // Clear ref
+        sessionStorage.removeItem('auth_signing'); // Clear sessionStorage
         throw signError; // Re-throw to be caught by outer catch
       }
     } catch (error) {
@@ -234,8 +237,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken();
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
       
-      // Clear ref first, then update state
+      // Clear ALL refs and flags
       isAuthenticatingRef.current = false;
+      isWaitingForSignatureRef.current = false; // Also clear signature waiting flag
+      sessionStorage.removeItem('auth_signing'); // Clear sessionStorage flag
       setState({
         isAuthenticated: false,
         isAuthenticating: false,
