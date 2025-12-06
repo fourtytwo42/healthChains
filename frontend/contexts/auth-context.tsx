@@ -94,8 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Don't authenticate if already authenticating
-    // Also check the ref to prevent duplicate requests during account changes
-    if (state.isAuthenticating || isHandlingAccountChangeRef.current) {
+    // Note: We don't check isHandlingAccountChangeRef here because when handling account changes,
+    // we explicitly call authenticate() and want it to proceed
+    if (state.isAuthenticating) {
       return;
     }
 
