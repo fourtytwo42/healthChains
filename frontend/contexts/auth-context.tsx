@@ -301,6 +301,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Account changed to a different address
     if (account && previousAccountRef.current && account.toLowerCase() !== previousAccountRef.current.toLowerCase()) {
+      // Prevent duplicate account change handling (React Strict Mode can cause double renders)
+      if (isHandlingAccountChangeRef.current) {
+        console.log('[AuthContext] Account change already being handled, skipping duplicate');
+        previousAccountRef.current = account; // Update ref but don't process again
+        return;
+      }
+      
       console.log('[AuthContext] Account changed, clearing token and re-authenticating');
       
       // Set flag to prevent auto-authenticate effect from also triggering
@@ -325,10 +332,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Re-authenticate with new account after a short delay
       // This ensures the state is fully updated before authentication
       // Keep the flag set until authentication completes (it will be cleared in authenticate())
+      console.log('[AuthContext] Account change handler - setting up timer to call authenticate()');
       setTimeout(async () => {
+        console.log('[AuthContext] Account change handler - timer fired, calling authenticate()');
         try {
-          // Clear the ref check temporarily so authenticate() can proceed
-          // authenticate() will set it itself when it starts
           await authenticate();
           // Flag is cleared in authenticate() after success
         } catch (error) {
