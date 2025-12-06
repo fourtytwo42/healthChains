@@ -249,14 +249,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Re-authenticate with new account after a short delay
       // This ensures the state is fully updated before authentication
+      // Keep the flag set until authentication completes (it will be cleared in authenticate())
       setTimeout(async () => {
-        // Clear the flag before calling authenticate so it can proceed
-        isHandlingAccountChangeRef.current = false;
         try {
           await authenticate();
+          // Flag is cleared in authenticate() after success
         } catch (error) {
-          // Error handling is done in authenticate() function
-          // Flag will be cleared there too
+          // Flag is cleared in authenticate() after error
         }
       }, 300);
       
