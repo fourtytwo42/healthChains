@@ -121,6 +121,22 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
   const providerAddressFormatted = providerInfo?.address
     ? `${providerInfo.address.street || ''}, ${providerInfo.address.city || ''}, ${providerInfo.address.state || ''} ${providerInfo.address.zipCode || ''}`
     : 'N/A';
+  
+  // Google Maps URL for address
+  const googleMapsUrl = providerAddressFormatted !== 'N/A' 
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerAddressFormatted)}`
+    : null;
+  
+  // Copy wallet address handler
+  const handleCopyWalletAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(providerAddress);
+      toast.success('Wallet address copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy wallet address');
+      console.error('Failed to copy:', error);
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -156,22 +172,65 @@ export function RequestResponseCard({ requestId, onClose }: RequestResponseCardP
                 )}
                 {providerAddress && providerAddress !== 'Unknown' && (
                   <p className="text-muted-foreground text-xs font-mono mt-1">
-                    <strong>Wallet:</strong> {providerAddress.slice(0, 6)}...{providerAddress.slice(-4)}
+                    <strong>Wallet:</strong>{' '}
+                    <button
+                      onClick={handleCopyWalletAddress}
+                      className="text-primary hover:underline cursor-pointer break-all text-left"
+                      title="Click to copy full wallet address"
+                    >
+                      {providerAddress}
+                    </button>
                   </p>
                 )}
               </div>
               <div className="text-xs text-muted-foreground">
                 {providerInfo?.contact?.phone && (
-                  <p><strong>Phone:</strong> {providerInfo.contact.phone}</p>
+                  <p>
+                    <strong>Phone:</strong>{' '}
+                    <a 
+                      href={`tel:${providerInfo.contact.phone}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.phone}
+                    </a>
+                  </p>
                 )}
                 {providerInfo?.contact?.email && (
-                  <p><strong>Email:</strong> {providerInfo.contact.email}</p>
+                  <p>
+                    <strong>Email:</strong>{' '}
+                    <a 
+                      href={`mailto:${providerInfo.contact.email}`}
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.email}
+                    </a>
+                  </p>
                 )}
                 {providerInfo?.contact?.website && (
-                  <p><strong>Website:</strong> {providerInfo.contact.website}</p>
+                  <p>
+                    <strong>Website:</strong>{' '}
+                    <a 
+                      href={providerInfo.contact.website.startsWith('http') ? providerInfo.contact.website : `https://${providerInfo.contact.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerInfo.contact.website}
+                    </a>
+                  </p>
                 )}
-                {providerAddressFormatted !== 'N/A' && (
-                  <p><strong>Address:</strong> {providerAddressFormatted}</p>
+                {providerAddressFormatted !== 'N/A' && googleMapsUrl && (
+                  <p>
+                    <strong>Address:</strong>{' '}
+                    <a 
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {providerAddressFormatted}
+                    </a>
+                  </p>
                 )}
               </div>
             </div>
