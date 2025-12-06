@@ -237,8 +237,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating && !isHandlingAccountChangeRef.current && !isAuthenticatingRef.current) {
       // Small delay to ensure wallet is fully connected
       const timer = setTimeout(() => {
-        // Double-check the flag and ref haven't changed (account change might have happened during delay)
-        if (!isHandlingAccountChangeRef.current && !isAuthenticatingRef.current) {
+        // Triple-check: flag, ref, and state (account change might have happened during delay)
+        if (!isHandlingAccountChangeRef.current && !isAuthenticatingRef.current && !state.isAuthenticating) {
           authenticate();
         } else {
           console.log('[AuthContext] Auto-authenticate skipped - account change in progress or already authenticating');
