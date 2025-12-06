@@ -43,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasBeenConnectedRef = useRef(false);
   // Track previous account to detect account changes
   const previousAccountRef = useRef<string | null>(null);
+  // Track if we're currently handling an account change to prevent duplicate authentication
+  const isHandlingAccountChangeRef = useRef(false);
 
   /**
    * Check for existing valid token on mount and when wallet connects
@@ -182,8 +184,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Automatically authenticate when wallet connects (only if no valid token exists)
+   * This effect is skipped if we're handling an account change (to prevent duplicate requests)
    */
   useEffect(() => {
+    // Skip if we're handling an account change (that effect will handle authentication)
+    if (isHandlingAccountChangeRef.current) {
+      return;
+    }
+
     // Check if we already have a valid token first
     const existingToken = getToken();
     if (existingToken && !isTokenExpired()) {
@@ -215,6 +223,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Account changed to a different address
     if (account && previousAccountRef.current && account.toLowerCase() !== previousAccountRef.current.toLowerCase()) {
       console.log('[AuthContext] Account changed, clearing token and re-authenticating');
+      
+      // Set flag to prevent auto-authenticate effect from also triggering
+      isHandlingAccountChangeRef.current = true;
+      
       // Clear old token
       clearToken();
       setState({
@@ -223,9 +235,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: null,
         error: null,
       });
+      
       // Update previous account
       previousAccountRef.current = account;
-      // Re-authenticate with new account (will be handled by auto-authenticate effect)
+      
+      // Re-authenticate with new account after a short delay
+      // This ensures the state is fully updated before authentication
+      setTimeout(async () => {
+        try {
+          await authenticate();
+        } finally {
+          // Clear the flag after authentication completes (success or failure)
+          isHandlingAccountChangeRef.current = false;
+        }
+      }, 300);
+      
       return;
     }
 
