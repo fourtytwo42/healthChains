@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[AuthContext] authenticate() - Signer address:', await signer.getAddress());
 
       // Double-check ref one more time before signing (defense in depth)
-      if (isAuthenticatingRef.current === false) {
+      if (!isAuthenticatingRef.current) {
         console.log('[AuthContext] authenticate() - Ref was cleared before signing, aborting');
         return;
       }
