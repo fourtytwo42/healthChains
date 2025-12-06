@@ -35,10 +35,15 @@ export function Footer() {
 
           {/* Contact Information */}
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
+            <Link
+              href="https://eric-henderson-portfolio.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+            >
               <User className="h-3.5 w-3.5" />
               <span>Eric Henderson</span>
-            </div>
+            </Link>
             <a
               href="tel:+12178482206"
               className="flex items-center gap-1.5 hover:text-foreground transition-colors"
