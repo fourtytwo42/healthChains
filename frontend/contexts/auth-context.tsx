@@ -45,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const previousAccountRef = useRef<string | null>(null);
   // Track if we're currently handling an account change to prevent duplicate authentication
   const isHandlingAccountChangeRef = useRef(false);
+  // Track if authentication is in progress (using ref to prevent race conditions)
+  const isAuthenticatingRef = useRef(false);
 
   /**
    * Check for existing valid token on mount and when wallet connects
@@ -96,12 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Don't authenticate if already authenticating
-    // This prevents duplicate calls from multiple sources
-    if (state.isAuthenticating) {
+    // Use ref to prevent race conditions where multiple calls happen simultaneously
+    if (state.isAuthenticating || isAuthenticatingRef.current) {
       console.log('[AuthContext] Already authenticating, skipping duplicate call');
       return;
     }
 
+    // Set both state and ref immediately to prevent race conditions
+    isAuthenticatingRef.current = true;
     setState((prev) => ({
       ...prev,
       isAuthenticating: true,
@@ -126,6 +130,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Step 4: Store token
       storeToken(authToken.token, authToken.expiresIn);
 
+      // Clear ref first, then update state
+      isAuthenticatingRef.current = false;
       setState({
         isAuthenticated: true,
         isAuthenticating: false,
@@ -150,6 +156,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken();
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
       
+      // Clear ref first, then update state
+      isAuthenticatingRef.current = false;
       setState({
         isAuthenticated: false,
         isAuthenticating: false,
@@ -210,13 +218,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Only authenticate if wallet is connected and we don't have a valid token
-    // Also check the flag to prevent duplicate authentication during account changes
-    if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating && !isHandlingAccountChangeRef.current) {
+    // Also check the flag and ref to prevent duplicate authentication during account changes
+    if (account && isConnected && !state.isAuthenticated && !state.isAuthenticating && !isHandlingAccountChangeRef.current && !isAuthenticatingRef.current) {
       // Small delay to ensure wallet is fully connected
       const timer = setTimeout(() => {
-        // Double-check the flag hasn't changed (account change might have happened during delay)
-        if (!isHandlingAccountChangeRef.current) {
+        // Double-check the flag and ref haven't changed (account change might have happened during delay)
+        if (!isHandlingAccountChangeRef.current && !isAuthenticatingRef.current) {
           authenticate();
+        } else {
+          console.log('[AuthContext] Auto-authenticate skipped - account change in progress or already authenticating');
         }
       }, 500);
 
@@ -245,6 +255,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken();
       
       // Set isAuthenticating immediately to prevent auto-authenticate effect from triggering
+      // Use both state and ref to prevent race conditions
+      isAuthenticatingRef.current = true;
       setState({
         isAuthenticated: false,
         isAuthenticating: true, // Set to true immediately to block auto-authenticate effect
