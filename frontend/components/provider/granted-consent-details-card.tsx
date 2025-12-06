@@ -17,7 +17,6 @@ import { useProviderPatientData, useProviderConsentHistory } from '@/hooks/use-a
 import type { ConsentHistoryEvent } from '@/types/consent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { RequestConsentDialog } from '@/components/provider/request-consent-dialog';
 import { ConsentHistoryEventCard } from '@/components/shared/consent-history-event-card';
 import { toast } from 'sonner';
 
@@ -582,13 +581,6 @@ export function GrantedConsentDetailsCard({
 
         {/* Fixed Footer */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t flex-shrink-0 mt-2">
-          {actualPatientWalletAddress && (
-            <RequestConsentDialog
-              patientAddress={actualPatientWalletAddress}
-              patientId={patientId}
-              patientName={patientName}
-            />
-          )}
           <Button size="sm" variant="outline" onClick={onClose} aria-label="Close consent details">
             Close
           </Button>
