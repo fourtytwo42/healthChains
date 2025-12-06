@@ -686,8 +686,13 @@ class ConsentService {
             isExpired: requestedEvent.expirationTime && new Date(requestedEvent.expirationTime) < new Date()
           };
 
-          // Cache result (1-2 minutes TTL)
-          const ttl = 90; // 90 seconds
+          // Use shorter TTL for pending requests, longer for processed ones
+          let ttl;
+          if (status === 'pending') {
+            ttl = 10; // 10 seconds for pending - they can be approved/denied quickly
+          } else {
+            ttl = 300; // 5 minutes for approved/denied - they don't change
+          }
           await cacheService.set(cacheKey, result, ttl);
 
           return result;
