@@ -7,6 +7,8 @@
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type Patient, type Provider, type ConsentRecord, type AccessRequest, type ConsentStatus, type ConsentEvent, type AccessRequestEvent } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { handleError, handleTransactionError } from '@/lib/error-handler';
+import { logger } from '@/lib/logger';
 
 // Query keys
 export const queryKeys = {
@@ -451,26 +453,7 @@ export function useGrantConsent() {
       queryClient.invalidateQueries({ queryKey: ['consentEvents'] });
     },
     onError: (error: Error) => {
-      let message = error.message;
-      
-      // Handle specific contract errors
-      if (error.message.includes('ExpirationInPast') || error.message.includes('expiration')) {
-        message = 'Expiration date must be in the future. Please select a future date.';
-      } else if (error.message.includes('user rejected') || error.message.includes('User rejected')) {
-        message = 'Transaction was rejected';
-      } else if (error.message.includes('EmptyBatch') || error.message.includes('Empty')) {
-        message = 'Invalid selection. Please ensure all fields are properly selected.';
-      } else if (error.message.includes('InvalidAddress') || error.message.includes('address')) {
-        message = 'Invalid provider address. Please select a valid provider.';
-      } else if (error.message.includes('CannotGrantConsentToSelf')) {
-        message = 'Cannot grant consent to yourself.';
-      } else if (error.message.includes('require(false)')) {
-        message = 'Transaction failed validation. Please check your selections and try again.';
-      }
-      
-      toast.error('Failed to grant consent', {
-        description: message,
-      });
+      handleTransactionError(error);
     },
   });
 }
@@ -520,12 +503,7 @@ export function useRevokeConsent() {
       queryClient.invalidateQueries({ queryKey: ['consentEvents'] });
     },
     onError: (error: Error) => {
-      const message = error.message.includes('user rejected') || error.message.includes('User rejected')
-        ? 'Transaction was rejected'
-        : error.message;
-      toast.error('Failed to revoke consent', {
-        description: message,
-      });
+      handleTransactionError(error);
     },
   });
 }
@@ -605,12 +583,7 @@ export function useRequestAccess() {
       queryClient.invalidateQueries({ queryKey: ['accessRequestEvents'] });
     },
     onError: (error: Error) => {
-      const message = error.message.includes('user rejected') || error.message.includes('User rejected')
-        ? 'Transaction was rejected'
-        : error.message;
-      toast.error('Failed to create access request', {
-        description: message,
-      });
+      handleTransactionError(error);
     },
   });
 }
@@ -664,12 +637,7 @@ export function useApproveRequest() {
       queryClient.invalidateQueries({ queryKey: ['patientConsentHistory'] }); // Invalidate history to show approval
     },
     onError: (error: Error) => {
-      const message = error.message.includes('user rejected') || error.message.includes('User rejected')
-        ? 'Transaction was rejected'
-        : error.message;
-      toast.error('Failed to approve request', {
-        description: message,
-      });
+      handleTransactionError(error);
     },
   });
 }
@@ -783,11 +751,11 @@ export function useProviderPatients(
     queryFn: async () => {
       // Normalize address to lowercase for consistent API calls
       const normalizedAddress = providerAddress.toLowerCase();
-      console.log('[useProviderPatients] Fetching for provider:', normalizedAddress, 'enabled:', enabled);
+      logger.debug('[useProviderPatients] Fetching for provider:', normalizedAddress, 'enabled:', enabled);
       const response = await apiClient.getProviderPatients(normalizedAddress, page, limit);
-      console.log('[useProviderPatients] Response:', response);
+      logger.debug('[useProviderPatients] Response:', response);
       if (!response.success || !response.data) {
-        console.error('[useProviderPatients] Failed response:', response);
+        logger.error('[useProviderPatients] Failed response:', response);
         throw new Error('Failed to fetch provider patients');
       }
       
@@ -803,7 +771,7 @@ export function useProviderPatients(
         }
       };
       
-      console.log('[useProviderPatients] Returning result:', result);
+      logger.debug('[useProviderPatients] Returning result:', result);
       return result;
     },
     enabled: enabled && !!providerAddress,
@@ -975,18 +943,18 @@ export function useProviderPendingRequests(
     queryFn: async () => {
       // Normalize address to lowercase for consistent API calls
       const normalizedAddress = providerAddress.toLowerCase();
-      console.log('[useProviderPendingRequests] Fetching for provider:', normalizedAddress);
+      logger.debug('[useProviderPendingRequests] Fetching for provider:', normalizedAddress);
       const response = await apiClient.getProviderPendingRequests(normalizedAddress, page, limit);
-      console.log('[useProviderPendingRequests] Full response:', response);
+      logger.debug('[useProviderPendingRequests] Full response:', response);
       
       if (!response.success) {
-        console.error('[useProviderPendingRequests] API returned success: false', response);
+        logger.error('[useProviderPendingRequests] API returned success: false', response);
         throw new Error(response.error?.message || 'Failed to fetch pending requests');
       }
       
       // The API returns {success: true, data: [...], pagination: {...}}
       if (!response.data) {
-        console.error('[useProviderPendingRequests] No data in response:', response);
+        logger.error('[useProviderPendingRequests] No data in response:', response);
         throw new Error('No data returned from API');
       }
       
@@ -1001,7 +969,7 @@ export function useProviderPendingRequests(
         }
       };
       
-      console.log('[useProviderPendingRequests] Returning result:', result);
+      logger.debug('[useProviderPendingRequests] Returning result:', result);
       return result;
     },
     enabled: enabled && !!providerAddress,
@@ -1136,7 +1104,7 @@ export function useProviderConsentHistory(
         }
       } catch (error) {
         // If fetching consents fails, just continue without expired events
-        console.warn('Failed to fetch consents for expired event detection:', error);
+        logger.warn('Failed to fetch consents for expired event detection:', error);
       }
 
       // Sort by timestamp (most recent first)
@@ -1250,7 +1218,7 @@ export function usePatientConsentHistory(
         }
       } catch (error) {
         // If fetching consents fails, just continue without expired events
-        console.warn('Failed to fetch consents for expired event detection:', error);
+        logger.warn('Failed to fetch consents for expired event detection:', error);
       }
 
       // Sort by timestamp (most recent first)

@@ -24,6 +24,9 @@ import { PatientDetailsCard } from '@/components/provider/patient-details-card';
 import { GrantedConsentDetailsCard } from '@/components/provider/granted-consent-details-card';
 import { Pagination } from '@/components/ui/pagination';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useDebounce } from '@/hooks/use-debounce';
+import { sanitizeInput } from '@/lib/validation';
 import type { Patient } from '@/lib/api-client';
 import { matchesDate } from '@/lib/date-utils';
 
@@ -36,6 +39,7 @@ export default function ProviderDashboardPage() {
   const { account } = useWallet();
   const { role, isLoading: roleLoading } = useRole(account);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedGrantedPatient, setSelectedGrantedPatient] = useState<Patient | null>(null);
   const [selectedPendingPatient, setSelectedPendingPatient] = useState<{ patientId: string; patientWalletAddress?: string } | null>(null);
@@ -208,7 +212,7 @@ export default function ProviderDashboardPage() {
           : '';
         
         // Enhanced date search with multiple format support
-        const dateMatches = dob ? matchesDate(searchQuery, dob) : false;
+        const dateMatches = dob ? matchesDate(debouncedSearchQuery, dob) : false;
         
         return name.includes(query) || 
                patientId.includes(query) || 
@@ -284,7 +288,7 @@ export default function ProviderDashboardPage() {
     }
     
     setFilteredPatients(filtered);
-  }, [stablePatients, searchQuery, sortColumn, sortDirection]);
+  }, [stablePatients, debouncedSearchQuery, sortColumn, sortDirection]);
 
   // Simple pagination - direct calculation, no memoization
   const paginatedPatients = filteredPatients.slice((page - 1) * limit, page * limit);
@@ -1021,7 +1025,7 @@ export default function ProviderDashboardPage() {
                       {paginatedPatients.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
-                            {searchQuery ? 'No patients found matching your search' : 'No patients available'}
+                            {debouncedSearchQuery ? 'No patients found matching your search' : 'No patients available'}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1228,7 +1232,7 @@ export default function ProviderDashboardPage() {
                   if (filteredRequests.length === 0) {
                     return (
                       <div className="text-center text-muted-foreground py-8">
-                        {searchQuery ? 'No pending requests found matching your search' : 'No pending requests'}
+                        {debouncedSearchQuery ? 'No pending requests found matching your search' : 'No pending requests'}
                       </div>
                     );
                   }
@@ -1434,7 +1438,7 @@ export default function ProviderDashboardPage() {
                     const dob = String(patient.demographics?.dateOfBirth || '');
                     
                     // Enhanced date search with multiple format support
-                    const dateMatches = dob ? matchesDate(searchQuery, dob) : false;
+                    const dateMatches = dob ? matchesDate(debouncedSearchQuery, dob) : false;
                     
                     // Get all data types and purposes from consents
                     const allDataTypes = new Set<string>();
@@ -1465,7 +1469,7 @@ export default function ProviderDashboardPage() {
                   if (filteredPatients.length === 0) {
                     return (
                       <div className="text-center text-muted-foreground py-8">
-                        {searchQuery ? 'No patients found matching your search' : 'No patients with granted consent'}
+                        {debouncedSearchQuery ? 'No patients found matching your search' : 'No patients with granted consent'}
                       </div>
                     );
                   }
@@ -1717,7 +1721,7 @@ export default function ProviderDashboardPage() {
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                           <History className="h-12 w-12 text-muted-foreground mb-4" />
                           <p className="text-muted-foreground">
-                            {searchQuery ? 'No history events found matching your search' : 'No consent history'}
+                            {debouncedSearchQuery ? 'No history events found matching your search' : 'No consent history'}
                           </p>
                         </div>
                       );
