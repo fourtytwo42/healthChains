@@ -104,10 +104,67 @@ export default function PatientDashboardPage() {
       (c: any) => c.providerAddress.toLowerCase() === consent.providerAddress.toLowerCase()
     ) || [];
     
-    // Use the clicked consent as the base, but include all provider consents
+    // Expand batch consents into individual entries for the breakdown
+    const expandedConsents: Array<{
+      consentId: number;
+      dataType: string;
+      purpose: string;
+      expirationTime: string | null;
+      isActive: boolean;
+      isExpired: boolean;
+      timestamp: string;
+    }> = [];
+    
+    providerConsents.forEach((c: any) => {
+      // Handle batch consents (dataTypes and purposes arrays)
+      if (c.dataTypes && c.dataTypes.length > 0 && c.purposes && c.purposes.length > 0) {
+        // Create a combination for each dataType and purpose pair
+        c.dataTypes.forEach((dataType: string) => {
+          c.purposes.forEach((purpose: string) => {
+            expandedConsents.push({
+              consentId: c.consentId,
+              dataType,
+              purpose,
+              expirationTime: c.expirationTime,
+              isActive: c.isActive,
+              isExpired: c.isExpired,
+              timestamp: c.timestamp,
+            });
+          });
+        });
+      } 
+      // Handle single consents (dataType and purpose strings)
+      else if (c.dataType && c.purpose) {
+        expandedConsents.push({
+          consentId: c.consentId,
+          dataType: c.dataType,
+          purpose: c.purpose,
+          expirationTime: c.expirationTime,
+          isActive: c.isActive,
+          isExpired: c.isExpired,
+          timestamp: c.timestamp,
+        });
+      }
+      // Fallback: if we have arrays but need to show something
+      else if (c.dataTypes && c.dataTypes.length > 0) {
+        c.dataTypes.forEach((dataType: string) => {
+          expandedConsents.push({
+            consentId: c.consentId,
+            dataType,
+            purpose: c.purpose || (c.purposes && c.purposes.length > 0 ? c.purposes[0] : 'Unknown'),
+            expirationTime: c.expirationTime,
+            isActive: c.isActive,
+            isExpired: c.isExpired,
+            timestamp: c.timestamp,
+          });
+        });
+      }
+    });
+    
+    // Use the clicked consent as the base, but include expanded consents for breakdown
     setSelectedConsent({
       ...consent,
-      allConsents: providerConsents // Include all consents for this provider
+      allConsents: expandedConsents.length > 0 ? expandedConsents : undefined
     });
   };
 
