@@ -35,11 +35,37 @@ export function getApiBaseUrl(): string {
 }
 
 /**
- * Get the RPC URL from environment variable
- * Defaults to rpc.qrmk.us but can be set to localhost:8545 or 127.0.0.1:8545 via NEXT_PUBLIC_RPC_URL
+ * Get the RPC URL based on the current hostname
+ * - localhost/127.0.0.1 → http://127.0.0.1:8545 (local Hardhat node)
+ * - app.qrmk.us → https://rpc.qrmk.us (remote RPC via tunnel)
+ * - Can be overridden with NEXT_PUBLIC_RPC_URL environment variable
  */
 export function getRpcUrl(): string {
-  // Use environment variable if set, otherwise default to remote RPC
-  return process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.qrmk.us';
+  // If explicitly set via environment variable, use it
+  if (process.env.NEXT_PUBLIC_RPC_URL) {
+    return process.env.NEXT_PUBLIC_RPC_URL;
+  }
+
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined') {
+    // Server-side: default to remote RPC
+    return 'https://rpc.qrmk.us';
+  }
+
+  // Client-side: detect from hostname
+  const hostname = window.location.hostname.toLowerCase();
+  
+  // Check for localhost or 127.0.0.1 - use local Hardhat node
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:8545';
+  }
+  
+  // Production domain - use remote RPC
+  if (hostname === 'app.qrmk.us' || hostname.endsWith('.qrmk.us')) {
+    return 'https://rpc.qrmk.us';
+  }
+  
+  // Default: use remote RPC
+  return 'https://rpc.qrmk.us';
 }
 
