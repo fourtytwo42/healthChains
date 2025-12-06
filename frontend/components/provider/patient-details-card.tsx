@@ -845,8 +845,8 @@ export function PatientDetailsCard({
           >
             <div className="space-y-4">
               {vitalSignsChartData.length > 0 && (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 min-h-[256px] w-full">
+                  <ResponsiveContainer width="100%" height={256}>
                     <LineChart data={vitalSignsChartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />

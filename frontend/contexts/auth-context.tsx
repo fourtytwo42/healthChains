@@ -85,17 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Check if we already have a valid token
+    // Check if we already have a valid token for this account
     const existingToken = getToken();
     if (existingToken && !isTokenExpired()) {
+      console.log('[AuthContext] authenticate() - Already have valid token, skipping authentication');
       setState((prev) => ({
         ...prev,
         isAuthenticated: true,
         token: existingToken,
         error: null,
       }));
-      // Clear flag if we had a valid token
+      // Clear flags if we had a valid token
       isHandlingAccountChangeRef.current = false;
+      isAuthenticatingRef.current = false;
+      // Clear any stale sessionStorage signing flags
+      sessionStorage.removeItem('auth_signing');
+      isWaitingForSignatureRef.current = false;
       return;
     }
 
@@ -204,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const signature = await signer.signMessage(message);
         console.log('[AuthContext] authenticate() - Step 3 complete, got signature:', signature.substring(0, 20) + '...');
         console.log('[AuthContext] authenticate() - Clearing BOTH flags after successful signature');
+        // Clear flags immediately after signature (before login call)
         isWaitingForSignatureRef.current = false; // Clear ref
         sessionStorage.removeItem('auth_signing'); // Clear sessionStorage
         
@@ -215,24 +221,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Clear ref first, then update state
         isAuthenticatingRef.current = false;
+        
+        // Update state first
         setState({
           isAuthenticated: true,
           isAuthenticating: false,
           token: authToken.token,
           error: null,
         });
+        
+        // Clear the account change flag after state update
+        isHandlingAccountChangeRef.current = false;
 
-        // Invalidate all queries to refetch data with new authentication
+        // Invalidate and reset all queries to refetch data with new authentication
         // This ensures the page updates automatically after authentication
         // Use a small delay to ensure state is fully updated first
+        console.log('[AuthContext] Authentication successful, resetting queries for account:', account);
         setTimeout(() => {
+          // Reset all queries to clear old data and force fresh fetch
+          queryClient.resetQueries();
+          // Invalidate all queries to mark them as stale
           queryClient.invalidateQueries();
-          // Also refetch all active queries to ensure immediate update
-          queryClient.refetchQueries();
-        }, 100);
-        
-        // Clear the account change flag after successful authentication
-        isHandlingAccountChangeRef.current = false;
+          // Refetch all active queries to ensure immediate update
+          queryClient.refetchQueries({ type: 'active' });
+        }, 150);
         
         // Don't show toast on automatic authentication
         // Only show on manual authentication attempts
@@ -380,6 +392,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear old token
       clearToken();
       
+      // Clear any stale sessionStorage signing flags from previous authentication
+      // This prevents the new authentication from being blocked by old flags
+      sessionStorage.removeItem('auth_signing');
+      isWaitingForSignatureRef.current = false;
+      isAuthenticatingRef.current = false;
+      
       // Set isAuthenticating immediately to prevent auto-authenticate effect from triggering
       // Use state to block auto-authenticate effect, but DON'T set the ref yet
       // The ref will be set inside authenticate() when it actually starts
@@ -461,18 +479,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Refetch queries when authentication state changes from false to true
    * This ensures data loads automatically after successful authentication
+   * This is a backup to the query invalidation in authenticate() to catch any edge cases
    */
   useEffect(() => {
-    if (state.isAuthenticated && state.token) {
-      // Authentication just completed, invalidate and refetch all queries
+    if (state.isAuthenticated && state.token && account) {
+      // Authentication just completed, reset and refetch all queries
       // This triggers automatic data loading after account change + authentication
       // Use a small delay to ensure state is fully propagated
-      setTimeout(() => {
+      console.log('[AuthContext] Authentication state changed to true, resetting queries for account:', account);
+      const timer = setTimeout(() => {
+        // Reset all queries to clear old data and force fresh fetch
+        queryClient.resetQueries();
+        // Invalidate all queries to mark them as stale
         queryClient.invalidateQueries();
-        queryClient.refetchQueries();
-      }, 150);
+        // Refetch all active queries with the new account
+        queryClient.refetchQueries({ type: 'active' });
+      }, 250);
+      
+      return () => clearTimeout(timer);
     }
-  }, [state.isAuthenticated, state.token, queryClient]);
+  }, [state.isAuthenticated, state.token, account, queryClient]);
 
   const value: AuthContextType = {
     ...state,

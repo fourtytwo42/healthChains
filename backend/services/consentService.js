@@ -1074,20 +1074,39 @@ class ConsentService {
         toBlockArg = 'latest';
       }
       
-      // If fromBlockArg is beyond toBlockArg (or latest), we already have all events from DB
-      if (usePostgres && historicalEvents.length > 0 && 
-          (fromBlockArg === 'latest' || (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg))) {
-        // Return historical events from DB only
-        const events = historicalEvents;
-        events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+      // If PostgreSQL is enabled and we have historical events, check if we need to query blockchain
+      // Only return early if we have events in DB AND we don't need to query blockchain for new events
+      if (usePostgres && historicalEvents.length > 0) {
+        // Check if fromBlockArg is 'latest' (invalid) or beyond toBlockArg
+        // If so, we already have all events from DB
+        const shouldReturnEarly = 
+          (fromBlockArg === 'latest') || 
+          (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg) ||
+          (typeof fromBlockArg === 'number' && toBlockArg === 'latest' && fromBlockArg > lastProcessedBlock);
         
-        // Cache result
-        const ttl = 15; // 15 seconds for event queries
-        await cacheService.set(cacheKey, events, ttl);
-        
-        return events;
+        if (shouldReturnEarly) {
+          // Return historical events from DB only
+          const events = historicalEvents;
+          events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+          
+          // Cache result
+          const ttl = 15; // 15 seconds for event queries
+          await cacheService.set(cacheKey, events, ttl);
+          
+          return events;
+        }
       }
       
+      // If PostgreSQL is enabled but has no events yet (historicalEvents.length === 0),
+      // or we need to fetch new events (fromBlockArg <= lastProcessedBlock is false),
+      // query from blockchain starting from the appropriate block
+      logger.debug('Querying blockchain for events', {
+        usePostgres,
+        historicalEventsCount: historicalEvents.length,
+        lastProcessedBlock,
+        fromBlockArg,
+        toBlockArg
+      });
       // Build filter
       const filter = {};
       if (patientAddress) {
@@ -1455,19 +1474,38 @@ class ConsentService {
         toBlockArg = 'latest';
       }
       
-      // If fromBlockArg is beyond toBlockArg (or latest), we already have all events from DB
-      if (usePostgres && historicalEvents.length > 0 && 
-          (fromBlockArg === 'latest' || (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg))) {
-        // Return historical events from DB only
-        const events = historicalEvents;
-        events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+      // If PostgreSQL is enabled and we have historical events, check if we need to query blockchain
+      // Only return early if we have events in DB AND we don't need to query blockchain for new events
+      if (usePostgres && historicalEvents.length > 0) {
+        // Check if fromBlockArg is 'latest' (invalid) or beyond toBlockArg
+        // If so, we already have all events from DB
+        const shouldReturnEarly = 
+          (fromBlockArg === 'latest') || 
+          (typeof fromBlockArg === 'number' && typeof toBlockArg === 'number' && fromBlockArg > toBlockArg) ||
+          (typeof fromBlockArg === 'number' && toBlockArg === 'latest' && fromBlockArg > lastProcessedBlock);
         
-        // Cache result
-        const ttl = 15; // 15 seconds for event queries
-        await cacheService.set(cacheKey, events, ttl);
-        
-        return events;
+        if (shouldReturnEarly) {
+          // Return historical events from DB only
+          const events = historicalEvents;
+          events.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+          
+          // Cache result
+          const ttl = 15; // 15 seconds for event queries
+          await cacheService.set(cacheKey, events, ttl);
+          
+          return events;
+        }
       }
+      
+      // If PostgreSQL is enabled but has no events yet, or we need to fetch new events,
+      // query from blockchain starting from the appropriate block
+      logger.debug('Querying blockchain for access request events', {
+        usePostgres,
+        historicalEventsCount: historicalEvents.length,
+        lastProcessedBlock,
+        fromBlockArg,
+        toBlockArg
+      });
       
       // AccessRequested event: (uint256 indexed requestId, address indexed requester, address indexed patient, ...)
       // If patient filter is provided, filter by patient (third indexed parameter), otherwise get all events
@@ -1480,7 +1518,7 @@ class ConsentService {
       let deniedEvents = [];
       
       // Query blockchain for events (always query all events for history, PostgreSQL is just for tracking)
-      if (fromBlockArg !== undefined) {
+      if (fromBlockArg !== undefined && fromBlockArg >= 0) {
         try {
           requestedEvents = await contract.queryFilter(
             requestedFilter,
