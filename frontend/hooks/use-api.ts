@@ -655,8 +655,8 @@ export function useApproveRequest() {
       });
       queryClient.invalidateQueries({ queryKey: ['requests'] });
       queryClient.invalidateQueries({ queryKey: ['consents'] });
-      queryClient.invalidateQueries({ queryKey: ['patientConsents'] }); // Invalidate patient consents - this will show the new consent in granted tab
-      queryClient.invalidateQueries({ queryKey: ['patientConsentsPaginated'] }); // Invalidate paginated patient consents
+      // Invalidate all patient consent queries (both regular and paginated use 'patientConsents' as first key)
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'patientConsents' });
       queryClient.invalidateQueries({ queryKey: ['providerPatients'] }); // Invalidate provider patients list
       queryClient.invalidateQueries({ queryKey: ['providerConsents'] }); // Invalidate provider consents
       queryClient.invalidateQueries({ queryKey: ['patientPendingRequests'] }); // Remove from pending
