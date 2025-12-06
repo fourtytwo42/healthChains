@@ -117,7 +117,7 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
             View details of your access request
           </DialogDescription>
           
-          {/* Patient Info - Consolidated format matching other cards */}
+          {/* Patient Info - Consolidated format matching consent history format */}
           {patientName && (
             <div className="mt-4 text-sm">
               {/* Patient Name - Full width row */}
@@ -125,66 +125,92 @@ export function RequestDetailsCard({ requestId, onClose }: RequestDetailsCardPro
                 <p className="font-semibold text-base">{patientName}</p>
               </div>
               
-              {/* Two column layout below name */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  {patientId && (
-                    <p className="text-muted-foreground text-xs font-mono mb-2">
-                      <strong>Patient ID:</strong> {patientId}
-                    </p>
-                  )}
-                  {requestData.patientAddress && (
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-muted-foreground text-xs font-mono">
-                        <strong>Wallet:</strong>{' '}
-                        <button
-                          onClick={handleCopyWalletAddress}
-                          className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
-                          title="Click to copy full wallet address"
-                        >
-                          {requestData.patientAddress.slice(0, 6)}...{requestData.patientAddress.slice(-4)}
-                          <Copy className="h-3 w-3" />
-                        </button>
+              {/* Row layout: Left item paired with Right item on same row */}
+              <div className="space-y-2">
+                {/* Row 1: DOB/Age/Sex on left, Phone on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {requestData.patient?.dateOfBirth && (
+                      <p className="text-muted-foreground text-xs">
+                        DOB: {format(new Date(requestData.patient.dateOfBirth), 'MMM d, yyyy')}
+                        {requestData.patient.age !== undefined ? ` • Age: ${requestData.patient.age}` : ''}
+                        {requestData.patient.gender ? ` • ${requestData.patient.gender}` : ''}
                       </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {patientContact?.phone && (
+                      <p>
+                        <strong>Phone:</strong>{' '}
+                        <a 
+                          href={`tel:${patientContact.phone}`}
+                          className="text-primary hover:underline"
+                        >
+                          {patientContact.phone}
+                        </a>
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {patientContact?.phone && (
-                    <p>
-                      <strong>Phone:</strong>{' '}
-                      <a 
-                        href={`tel:${patientContact.phone}`}
-                        className="text-primary hover:underline"
-                      >
-                        {patientContact.phone}
-                      </a>
-                    </p>
-                  )}
-                  {patientContact?.email && (
-                    <p>
-                      <strong>Email:</strong>{' '}
-                      <a 
-                        href={`mailto:${patientContact.email}`}
-                        className="text-primary hover:underline"
-                      >
-                        {patientContact.email}
-                      </a>
-                    </p>
-                  )}
-                  {patientAddress && googleMapsUrl && (
-                    <p>
-                      <strong>Address:</strong>{' '}
-                      <a 
-                        href={googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {patientAddress}
-                      </a>
-                    </p>
-                  )}
+                
+                {/* Row 2: Patient ID on left, Email on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {patientId && (
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Patient ID:</strong> {patientId}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {patientContact?.email && (
+                      <p>
+                        <strong>Email:</strong>{' '}
+                        <a 
+                          href={`mailto:${patientContact.email}`}
+                          className="text-primary hover:underline"
+                        >
+                          {patientContact.email}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Row 3: Wallet on left, Address on right */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {requestData.patientAddress && (
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-muted-foreground text-xs font-mono">
+                          <strong>Wallet:</strong>{' '}
+                          <button
+                            onClick={handleCopyWalletAddress}
+                            className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                            title="Click to copy full wallet address"
+                          >
+                            {requestData.patientAddress.slice(0, 6)}...{requestData.patientAddress.slice(-4)}
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {patientAddress && googleMapsUrl && (
+                      <p>
+                        <strong>Address:</strong>{' '}
+                        <a 
+                          href={googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {patientAddress}
+                        </a>
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

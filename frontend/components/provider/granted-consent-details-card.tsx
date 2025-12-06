@@ -254,7 +254,7 @@ export function GrantedConsentDetailsCard({
             Patient demographics, active consents, and consent history
           </DialogDescription>
           
-          {/* Patient Info - Consolidated format matching provider info format */}
+          {/* Patient Info - Consolidated format matching consent history format */}
           <div className="mt-4 text-sm">
             {/* Patient Name - Full width row */}
             <div className="mb-3">
@@ -271,73 +271,92 @@ export function GrantedConsentDetailsCard({
               ) : (
                 <p className="font-semibold text-base">{patientName}</p>
               )}
-              <p className="text-muted-foreground text-xs mt-0.5">
-                {demographics.dateOfBirth ? `DOB: ${format(new Date(demographics.dateOfBirth), 'MMM d, yyyy')}` : ''}
-                {demographics.age ? ` • Age: ${demographics.age}` : ''}
-                {demographics.gender ? ` • ${demographics.gender}` : ''}
-              </p>
             </div>
             
-            {/* Two column layout below name */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                {patientData.patientId && (
-                  <p className="text-muted-foreground text-xs font-mono mb-2">
-                    <strong>Patient ID:</strong> {patientData.patientId}
+            {/* Row layout: Left item paired with Right item on same row */}
+            <div className="space-y-2">
+              {/* Row 1: DOB/Age/Sex on left, Phone on right */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-muted-foreground text-xs">
+                    {demographics.dateOfBirth ? `DOB: ${format(new Date(demographics.dateOfBirth), 'MMM d, yyyy')}` : ''}
+                    {demographics.age ? ` • Age: ${demographics.age}` : ''}
+                    {demographics.gender ? ` • ${demographics.gender}` : ''}
                   </p>
-                )}
-                {actualPatientWalletAddress && (
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-muted-foreground text-xs font-mono">
-                      <strong>Wallet:</strong>{' '}
-                      <button
-                        onClick={handleCopyWalletAddress}
-                        className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
-                        title="Click to copy full wallet address"
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {demographics.contact?.phone && (
+                    <p>
+                      <strong>Phone:</strong>{' '}
+                      <a 
+                        href={`tel:${demographics.contact.phone}`}
+                        className="text-primary hover:underline"
                       >
-                        {actualPatientWalletAddress.slice(0, 6)}...{actualPatientWalletAddress.slice(-4)}
-                        <Copy className="h-3 w-3" />
-                      </button>
+                        {demographics.contact.phone}
+                      </a>
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {demographics.contact?.phone && (
-                  <p>
-                    <strong>Phone:</strong>{' '}
-                    <a 
-                      href={`tel:${demographics.contact.phone}`}
-                      className="text-primary hover:underline"
-                    >
-                      {demographics.contact.phone}
-                    </a>
-                  </p>
-                )}
-                {demographics.contact?.email && (
-                  <p>
-                    <strong>Email:</strong>{' '}
-                    <a 
-                      href={`mailto:${demographics.contact.email}`}
-                      className="text-primary hover:underline"
-                    >
-                      {demographics.contact.email}
-                    </a>
-                  </p>
-                )}
-                {patientAddress !== 'N/A' && googleMapsUrl && (
-                  <p>
-                    <strong>Address:</strong>{' '}
-                    <a 
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {patientAddress}
-                    </a>
-                  </p>
-                )}
+              
+              {/* Row 2: Patient ID on left, Email on right */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  {patientData.patientId && (
+                    <p className="text-muted-foreground text-xs font-mono">
+                      <strong>Patient ID:</strong> {patientData.patientId}
+                    </p>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {demographics.contact?.email && (
+                    <p>
+                      <strong>Email:</strong>{' '}
+                      <a 
+                        href={`mailto:${demographics.contact.email}`}
+                        className="text-primary hover:underline"
+                      >
+                        {demographics.contact.email}
+                      </a>
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Row 3: Wallet on left, Address on right */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  {actualPatientWalletAddress && (
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-muted-foreground text-xs font-mono">
+                        <strong>Wallet:</strong>{' '}
+                        <button
+                          onClick={handleCopyWalletAddress}
+                          className="text-primary hover:underline cursor-pointer text-left flex items-center gap-1"
+                          title="Click to copy full wallet address"
+                        >
+                          {actualPatientWalletAddress.slice(0, 6)}...{actualPatientWalletAddress.slice(-4)}
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {patientAddress !== 'N/A' && googleMapsUrl && (
+                    <p>
+                      <strong>Address:</strong>{' '}
+                      <a 
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {patientAddress}
+                      </a>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
