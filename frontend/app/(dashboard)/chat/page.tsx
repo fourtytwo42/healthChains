@@ -293,16 +293,21 @@ export default function ChatPage() {
       console.groupEnd();
 
       // Update message with tool calls and results
+      // IMPORTANT: Append to existing tool_calls and tool_results, don't replace them
+      // Only add tool calls that don't already exist (by ID) to avoid duplicates
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                tool_calls: toolCalls,
-                tool_results: toolResults,
-              }
-            : msg
-        )
+        prev.map((msg) => {
+          if (msg.id !== aiMessageId) return msg;
+          
+          const existingToolCallIds = new Set((msg.tool_calls || []).map(tc => tc.id));
+          const newToolCalls = toolCalls.filter(tc => !existingToolCallIds.has(tc.id));
+          
+          return {
+            ...msg,
+            tool_calls: [...(msg.tool_calls || []), ...newToolCalls],
+            tool_results: [...(msg.tool_results || []), ...toolResults],
+          };
+        })
       );
 
       // Send tool results back to AI and get follow-up response
@@ -357,6 +362,18 @@ export default function ChatPage() {
           );
         },
         onToolCall: (newToolCalls: unknown[]) => {
+          // Immediately show new tool calls in the UI before execution
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    tool_calls: [...(msg.tool_calls || []), ...(newToolCalls as ToolCall[])],
+                  }
+                : msg
+            )
+          );
+          
           // Handle nested tool calls if needed
           executeToolsAndContinue(newToolCalls as ToolCall[]);
         },
@@ -385,6 +402,19 @@ export default function ChatPage() {
           console.group('[AI Response] Tool calls detected');
           console.log('Raw tool calls:', JSON.stringify(toolCalls, null, 2));
           console.groupEnd();
+          
+          // Immediately show tool calls in the UI before execution
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    tool_calls: [...(msg.tool_calls || []), ...(toolCalls as ToolCall[])],
+                  }
+                : msg
+            )
+          );
+          
           // Execute tools and continue conversation
           executeToolsAndContinue(toolCalls as ToolCall[]);
         },

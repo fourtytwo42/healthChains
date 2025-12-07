@@ -158,7 +158,7 @@ chatRouter.post('/message', authenticate, requireProvider, async (req, res, next
         type: 'function',
         function: {
           name: 'search_patients',
-          description: 'Search for patients by name, patient ID, or wallet address. Returns matching patients.',
+          description: 'Search for patients by name, patient ID, or wallet address. Returns matching patients with their patientId. Use this first when the user asks about a specific patient by name, then use get_patient_data with the patientId from the results.',
           parameters: {
             type: 'object',
             properties: {
@@ -211,11 +211,11 @@ chatRouter.post('/message', authenticate, requireProvider, async (req, res, next
         type: 'function',
         function: {
           name: 'get_patient_data',
-          description: 'Get detailed patient data including demographics and medical information. Only returns data the patient has consented to share with you.',
+          description: 'Get detailed patient data including demographics, vital signs, medical records, medications, labs, imaging, and more. Only returns data the patient has consented to share. Requires patientId (e.g., PAT-000001). If you only have a patient name, first use search_patients to get the patientId, then call this tool.',
           parameters: {
             type: 'object',
             properties: {
-              patientId: { type: 'string', description: 'Patient ID (e.g., PAT-000001)' },
+              patientId: { type: 'string', description: 'Patient ID (e.g., PAT-000001). Get this from search_patients if you only have a name.' },
             },
             required: ['patientId'],
           },
@@ -240,10 +240,17 @@ chatRouter.post('/message', authenticate, requireProvider, async (req, res, next
       },
     ];
 
-    // Build system message - keep it simple and concise
+    // Build system message with clear guidance on tool usage
     const systemMessage = `You are Fred, an AI assistant helping ${userName}, a healthcare provider.
 
-You have tools available to search patients, view consent data, and request access. Use them when needed. When you get tool results, use that data in your response.`;
+IMPORTANT - You can make MULTIPLE tool calls in a single response. Chain them together when needed.
+
+Common workflows:
+- User asks for a patient's data by name: Call search_patients first, then immediately call get_patient_data with the patientId from the search results.
+- User asks for specific data (vitals, labs, etc.): Search for the patient, then get their data, then extract and format the specific information requested.
+- Always use the actual data from tool results in your response. Format it clearly with tables when showing multiple records.
+
+When you receive tool results, immediately use that data to answer the user's question. Be specific and helpful.`;
 
     // Build messages array: system message + conversation history + new user message
     // Format tool_calls properly for Groq API
