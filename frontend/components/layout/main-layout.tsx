@@ -13,8 +13,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-background p-6 flex flex-col">
-          <div className="flex-1">
+        <main className="flex-1 overflow-hidden bg-background p-6 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {children}
           </div>
           <Footer />

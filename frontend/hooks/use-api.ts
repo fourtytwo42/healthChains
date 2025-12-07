@@ -1281,13 +1281,15 @@ export function useChatMessage() {
       message,
       conversationHistory,
       onChunk,
+      onToolCall,
     }: {
       message: string;
-      conversationHistory?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+      conversationHistory?: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; tool_calls?: unknown[]; tool_call_id?: string }>;
       onChunk: (chunk: string) => void;
+      onToolCall?: (toolCalls: unknown[]) => void;
     }) => {
       try {
-        await apiClient.streamChatMessage(message, conversationHistory || [], onChunk);
+        await apiClient.streamChatMessage(message, conversationHistory || [], onChunk, onToolCall);
       } catch (error) {
         logger.error('Chat message error', { error });
         throw error;

@@ -85,10 +85,16 @@ export function Sidebar() {
     const dashboardHref = role?.role === 'provider' || role?.role === 'both' ? '/provider' : '/patient';
     const dashboardIcon = role?.role === 'provider' || role?.role === 'both' ? Building2 : User;
 
-    return [
+    const navItems = [
       { name: 'Dashboard', href: dashboardHref, icon: dashboardIcon },
-      { name: 'Chat', href: '/chat', icon: MessageSquare },
     ];
+
+    // Only show Chat for providers
+    if (role?.role === 'provider' || role?.role === 'both') {
+      navItems.push({ name: 'Chat', href: '/chat', icon: MessageSquare });
+    }
+
+    return navItems;
   };
 
   const navigation = getNavigation();

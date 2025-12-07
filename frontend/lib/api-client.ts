@@ -553,8 +553,9 @@ class ApiClient {
    */
   async streamChatMessage(
     message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [],
-    onChunk: (chunk: string) => void
+    conversationHistory: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; tool_calls?: unknown[]; tool_call_id?: string }> = [],
+    onChunk: (chunk: string) => void,
+    onToolCall?: (toolCalls: unknown[]) => void
   ): Promise<void> {
     const token = getToken();
     if (!token) {
@@ -633,11 +634,25 @@ class ApiClient {
             try {
               const json = JSON.parse(data);
               console.log('Parsed JSON:', json);
+              
+              // Handle content chunks
               if (json.content) {
                 chunkCount++;
-                console.log(`Received chunk ${chunkCount}: "${json.content.substring(0, 50)}"`);
+                console.log(`Received content chunk ${chunkCount}: "${json.content.substring(0, 50)}"`);
                 onChunk(json.content);
-              } else if (json.error) {
+              }
+              // Handle tool calls
+              else if (json.tool_calls && Array.isArray(json.tool_calls)) {
+                console.group('[AI Tool Calls] Received tool calls from AI');
+                console.log('Number of tool calls:', json.tool_calls.length);
+                console.log('Tool calls:', JSON.stringify(json.tool_calls, null, 2));
+                console.groupEnd();
+                if (onToolCall) {
+                  onToolCall(json.tool_calls);
+                }
+              }
+              // Handle errors
+              else if (json.error) {
                 console.error('Chat API error:', json.error);
                 throw new Error(json.error);
               } else {
